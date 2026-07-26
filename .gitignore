@@ -1,0 +1,7 @@
+.agents/
+.claude/
+.windsurf/
+node_modules/
+dist/
+.env
+*.log

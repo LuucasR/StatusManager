@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  ADMIN
+}
+
+enum ActivityStatus {
+  AVAILABLE
+  WORKING
+  BREAK
+  LUNCH
+  MEETING
+  OFFLINE
+}
+
+model Employee {
+  id             Int              @id @default(autoincrement())
+  employeeNumber Int              @unique
+  name           String
+  email          String           @unique
+  password       String
+  role           Role             @default(EMPLOYEE)
+  currentStatus  ActivityStatus   @default(OFFLINE)
+  statusSince    DateTime         @default(now())
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  activities     ActivityHistory[]
+}
+
+model ActivityHistory {
+  id         Int            @id @default(autoincrement())
+  employeeId Int
+  status     ActivityStatus
+  detail     String
+  startedAt  DateTime       @default(now())
+  endedAt    DateTime?
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, startedAt])
+  @@index([startedAt])
+}
