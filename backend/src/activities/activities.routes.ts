@@ -4,7 +4,7 @@ import { z } from "zod";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
-import { emitStatusChanged } from "../realtime";
+import { emitStatusChanged, confirmActivity } from "../realtime";
 import { notifyAdmin } from "../email";
 
 const router = Router();
@@ -37,6 +37,7 @@ router.get("/report.pdf", async (req, res) => {
     where: { employeeId: req.auth!.employeeId, startedAt: { gte: from, lte: to } },
     orderBy: { startedAt: "desc" },
   });
+  
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", 'attachment; filename="mi-actividad.pdf"');
   const doc = new PDFDocument({ margin: 40 });
@@ -49,6 +50,24 @@ router.get("/report.pdf", async (req, res) => {
   }
   doc.end();
 });
+
+
+router.post("/confirm-activity", (req, res) => {
+
+  const confirmed = confirmActivity(req.auth!.employeeId);
+
+  if (!confirmed) {
+    return res.status(400).json({
+      message: "No hay ninguna confirmación pendiente."
+    });
+  }
+
+  res.json({
+    success: true
+  });
+
+});
+
 
 router.post("/status", async (req, res) => {
   const parsed = z.object({ status: z.nativeEnum(ActivityStatus), detail: z.string().trim().min(3).max(500) }).safeParse(req.body);
