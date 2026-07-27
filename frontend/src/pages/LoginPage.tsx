@@ -28,10 +28,10 @@ export default function LoginPage() {
         <Box className="auth-grid">
           <Box className="brand-panel">
             <Box className="brand-mark"><AccessTimeRounded /></Box>
-            <Typography className="eyebrow">STATUS MANAGER</Typography>
+            <Typography className="eyebrow">STATUS MANAGER - Heroic Spirit Games</Typography>
             <Typography variant="h2">Tu jornada,<br />en tiempo real.</Typography>
             <Typography color="text.secondary" className="hero-copy">
-              Registrá tu actividad, mantené al equipo conectado y consultá tu historial desde cualquier dispositivo.
+             Registrá tu actividad, mantenete en contacto con tu equipo y accedé a tu historial desde cualquier dispositivo.
             </Typography>
           </Box>
           <Paper className="auth-card" elevation={0}>
