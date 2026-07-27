@@ -7,7 +7,10 @@ import { sendConfirmationRequest } from "../realtime";
 
 const router = Router();
 
+
+
 router.use(requireAuth, requireAdmin);
+
 
 
 router.get("/employees", async (_req, res) => {
@@ -21,14 +24,38 @@ router.get("/employees", async (_req, res) => {
       currentStatus: true,
       statusSince: true,
       active: true,
+
+      activities: {
+        where: {
+          endedAt: null,
+        },
+        take: 1,
+        select: {
+          detail: true,
+        },
+      },
     },
     orderBy: {
       name: "asc",
     },
   });
 
-  res.json(employees);
+  res.json(
+    employees.map((employee) => ({
+      id: employee.id,
+      employeeNumber: employee.employeeNumber,
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      currentStatus: employee.currentStatus,
+      statusSince: employee.statusSince,
+      active: employee.active,
+      detail: employee.activities[0]?.detail ?? "",
+    }))
+  );
 });
+
+
 
 router.get("/history", async (req, res) => {
   const employeeId = req.query.employeeId
@@ -124,6 +151,50 @@ router.post("/employees/:id/request-confirmation", async (req, res) => {
 
 });
 
+router.post("/employees/:id/status", async (req, res) => {
+  const employeeId = Number(req.params.id);
+
+  if (!Number.isInteger(employeeId)) {
+    return res.status(400).json({
+      message: "Empleado inválido",
+    });
+  }
+
+  const { status, detail } = req.body;
+
+  await prisma.activityHistory.updateMany({
+    where: {
+      employeeId,
+      endedAt: null,
+    },
+    data: {
+      endedAt: new Date(),
+    },
+  });
+
+  await prisma.activityHistory.create({
+    data: {
+      employeeId,
+      status,
+      detail,
+    },
+  });
+
+  await prisma.employee.update({
+    where: {
+      id: employeeId,
+    },
+    data: {
+      currentStatus: status,
+      statusSince: new Date(),
+    },
+  });
+
+  res.json({
+    success: true,
+  });
+});
+
 
 router.delete("/employees/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -151,8 +222,52 @@ router.delete("/employees/:id", async (req, res) => {
   });
 });
 
-router.get("/report.pdf", async (_req, res) => {
+router.get("/report.pdf", async (req, res) => {
+  const employeeId = req.query.employeeId;
+
+  const where: any = {};
+
+  if (employeeId && employeeId !== "all") {
+    where.employeeId = Number(employeeId);
+  }
+
+  const period = req.query.period as string | undefined;
+const from = req.query.from as string | undefined;
+const to = req.query.to as string | undefined;
+
+if (period === "today") {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  where.startedAt = {
+    gte: start,
+  };
+}
+
+if (period === "last7") {
+  const start = new Date();
+  start.setDate(start.getDate() - 7);
+
+  where.startedAt = {
+    gte: start,
+  };
+}
+
+if (from && to) {
+  const start = new Date(from);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(to);
+  end.setHours(23, 59, 59, 999);
+
+  where.startedAt = {
+    gte: start,
+    lte: end,
+  };
+}
+
   const rows = await prisma.activityHistory.findMany({
+    where,
     include: {
       employee: {
         select: {

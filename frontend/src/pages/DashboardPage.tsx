@@ -53,6 +53,7 @@ type Employee = {
   role?: "EMPLOYEE" | "ADMIN";
   currentStatus: Status;
   statusSince: string;
+  detail: string;
   active?: boolean;
 };
 
@@ -121,6 +122,20 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [confirmationDialog, setConfirmationDialog] = useState(false);
 const [confirmationCountdown, setConfirmationCountdown] = useState(120);
+const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+
+const [reportDialog, setReportDialog] = useState(false);
+
+const [reportEmployee, setReportEmployee] = useState("all");
+
+const [reportPeriod, setReportPeriod] = useState<
+  "all" | "today" | "last7" | "custom"
+>("all");
+
+const [reportFrom, setReportFrom] = useState("");
+
+const [reportTo, setReportTo] = useState("");
+
 
   const load = useCallback(async () => {
     const current = await api<Employee>("/activities/me");
@@ -182,7 +197,11 @@ useEffect(() => {
 
   async function changeStatus() {
     try {
-      await api("/activities/status", {
+      await api(
+  selectedEmployee
+    ? `/admin/employees/${selectedEmployee.id}/status`
+    : "/activities/status",
+  {
         method: "POST",
         body: JSON.stringify({
           status,
@@ -190,6 +209,7 @@ useEffect(() => {
         }),
       });
 
+      setSelectedEmployee(null);
       setDialog(false);
       setDetail("");
 
@@ -231,28 +251,54 @@ useEffect(() => {
   return () => clearInterval(timer);
 
 }, [confirmationDialog]);
+
+
   async function downloadReport() {
-    const response = await fetch(
-      `${API_URL}/admin/report.pdf`,
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      }
-    );
 
-    const blob = await response.blob();
+  const params = new URLSearchParams();
 
-    const href = URL.createObjectURL(blob);
+  params.set("employeeId", reportEmployee);
 
-    const a = document.createElement("a");
-
-    a.href = href;
-    a.download = "reporte-actividades.pdf";
-    a.click();
-
-    URL.revokeObjectURL(href);
+  if (reportPeriod === "all") {
+    params.set("period", "all");
   }
+
+  if (reportPeriod === "today") {
+    params.set("period", "today");
+  }
+
+  if (reportPeriod === "last7") {
+    params.set("period", "last7");
+  }
+
+  if (reportPeriod === "custom") {
+    params.set("from", reportFrom);
+    params.set("to", reportTo);
+  }
+
+  const response = await fetch(
+    `${API_URL}/admin/report.pdf?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    }
+  );
+
+  const blob = await response.blob();
+
+  const href = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+
+  a.href = href;
+  a.download = "reporte-actividades.pdf";
+  a.click();
+
+  URL.revokeObjectURL(href);
+
+  setReportDialog(false);
+}
 
   async function downloadPersonalReport() {
     const response = await fetch(
@@ -417,12 +463,12 @@ useEffect(() => {
               </Typography>
             </Box>
 
-            <Button
-              startIcon={<DownloadRounded />}
-              onClick={downloadReport}
-            >
-              Descargar PDF
-            </Button>
+        <Button
+  startIcon={<DownloadRounded />}
+  onClick={() => setReportDialog(true)}
+>
+  Descargar PDF
+</Button>
           </Box>
 
           <Box className="employee-grid">
@@ -467,8 +513,20 @@ useEffect(() => {
                   )}
                 </Stack>
 
-           {employee.active ? (
+{employee.active ? (
   <>
+    <Typography
+      variant="body2"
+      color="text.secondary"
+      sx={{
+        mt: 2,
+        minHeight: 42,
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {employee.detail || "Sin detalle"}
+    </Typography>
+
     <Typography className="mini-timer">
       {elapsed(employee.statusSince, now)}
     </Typography>
@@ -481,8 +539,19 @@ useEffect(() => {
     >
       Solicitar confirmación
     </Button>
+    <Button
+  sx={{ mt: 1 }}
+  fullWidth
+  variant="contained"
+  onClick={() => {
+    setSelectedEmployee(employee);
+    setDialog(true);
+  }}
+>
+  Cambiar estado
+</Button>
   </>
-) : (
+): (
                   <Stack spacing={1} sx={{ mt: 3 }}>
                     <Button
                       fullWidth
@@ -573,13 +642,18 @@ useEffect(() => {
 
     <Dialog
       open={dialog}
-      onClose={() => setDialog(false)}
+      onClose={() => {
+  setDialog(false);
+  setSelectedEmployee(null);
+}}
       fullWidth
       maxWidth="sm"
     >
-      <DialogTitle>
-        Actualizar estado
-      </DialogTitle>
+ <DialogTitle>
+  {selectedEmployee
+    ? `Actualizar estado de ${selectedEmployee.name}`
+    : "Actualizar estado"}
+</DialogTitle>
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
@@ -665,7 +739,119 @@ useEffect(() => {
         </Button>
       </DialogActions>
     </Dialog>
+    <Dialog
+  open={reportDialog}
+  onClose={() => setReportDialog(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle>
+    Descargar reporte PDF
+  </DialogTitle>
 
+  <DialogContent>
+    <Stack spacing={3} sx={{ mt: 1 }}>
+
+      <FormControl fullWidth>
+        <InputLabel>
+          Empleado
+        </InputLabel>
+
+        <Select
+          value={reportEmployee}
+          label="Empleado"
+          onChange={(e) => setReportEmployee(e.target.value)}
+        >
+          <MenuItem value="all">
+            Todos
+          </MenuItem>
+
+          {employees.map((employee) => (
+            <MenuItem
+              key={employee.id}
+              value={String(employee.id)}
+            >
+              #{employee.employeeNumber} - {employee.name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControl fullWidth>
+        <InputLabel>
+          Período
+        </InputLabel>
+
+        <Select
+          value={reportPeriod}
+          label="Período"
+          onChange={(e) =>
+            setReportPeriod(e.target.value as typeof reportPeriod)
+          }
+        >
+          <MenuItem value="all">
+            Todo el historial
+          </MenuItem>
+
+          <MenuItem value="today">
+            Hoy
+          </MenuItem>
+
+          <MenuItem value="last7">
+            Últimos 7 días
+          </MenuItem>
+
+          <MenuItem value="custom">
+            Rango personalizado
+          </MenuItem>
+        </Select>
+      </FormControl>
+
+      {reportPeriod === "custom" && (
+        <Stack direction="row" spacing={2}>
+          <TextField
+            label="Desde"
+            type="date"
+            value={reportFrom}
+            onChange={(e) => setReportFrom(e.target.value)}
+           slotProps={{
+  inputLabel: {
+    shrink: true,
+  },
+}}
+            fullWidth
+          />
+
+          <TextField
+            label="Hasta"
+            type="date"
+            value={reportTo}
+            onChange={(e) => setReportTo(e.target.value)}
+            slotProps={{
+  inputLabel: {
+    shrink: true,
+  },
+}}
+            fullWidth
+          />
+        </Stack>
+      )}
+    </Stack>
+  </DialogContent>
+
+  <DialogActions>
+    <Button onClick={() => setReportDialog(false)}>
+      Cancelar
+    </Button>
+
+    <Button
+      variant="contained"
+      onClick={downloadReport}
+    >
+      Descargar
+    </Button>
+  </DialogActions>
+</Dialog>
   </Box>
 );
 }
