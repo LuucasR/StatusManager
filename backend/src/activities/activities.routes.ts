@@ -6,6 +6,7 @@ import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
 import { emitStatusChanged, confirmActivity } from "../realtime";
 import { notifyAdmin } from "../email";
+import { renderActivityReport } from "../reports/activity-report";
 
 const router = Router();
 router.use(requireAuth);
@@ -40,15 +41,24 @@ router.get("/report.pdf", async (req, res) => {
   
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", 'attachment; filename="mi-actividad.pdf"');
-  const doc = new PDFDocument({ margin: 40 });
+  const doc = new PDFDocument({ margin: 0, size: "A4" });
   doc.pipe(res);
-  doc.fontSize(20).text("Mi registro de actividades");
-  doc.fontSize(10).fillColor("#555").text(`#${employee.employeeNumber} · ${employee.name}`).moveDown();
-  for (const row of rows) {
-    doc.fillColor("#111").fontSize(10).text(`${row.status} — ${row.startedAt.toLocaleString("es-AR")}`);
-    doc.fillColor("#555").fontSize(9).text(row.detail).moveDown(0.5);
-  }
-  doc.end();
+  const periodLabel = from || to
+    ? `${from ? from.toLocaleDateString("es-AR") : "Inicio"} al ${to ? to.toLocaleDateString("es-AR") : "presente"}`
+    : "Historial completo";
+
+  renderActivityReport(doc, {
+    title: "Mi registro de actividades",
+    subtitle: `Empleado #${employee.employeeNumber} - ${employee.name}`,
+    periodLabel,
+    rows: rows.map((row) => ({
+      ...row,
+      employee: {
+        employeeNumber: employee.employeeNumber,
+        name: employee.name,
+      },
+    })),
+  });
 });
 
 

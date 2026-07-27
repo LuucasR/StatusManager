@@ -2,6 +2,7 @@ import { Router } from "express";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth } from "../auth/auth.middleware";
+import { renderActivityReport } from "../reports/activity-report";
 import { sendConfirmationRequest } from "../realtime";
 
 
@@ -292,39 +293,31 @@ if (from && to) {
   );
 
   const doc = new PDFDocument({
-    margin: 40,
+    margin: 0,
+    size: "A4",
   });
 
   doc.pipe(res);
 
-  doc
-    .fontSize(20)
-    .text("Reporte de actividades");
-
-  doc
-    .fontSize(9)
-    .fillColor("#666")
-    .text(`Generado: ${new Date().toLocaleString("es-AR")}`)
-    .moveDown();
-
-  for (const row of rows) {
-    doc
-      .fillColor("#111")
-      .fontSize(10)
-      .text(
-        `#${row.employee.employeeNumber} ${row.employee.name} — ${row.status}`
-      );
-
-    doc
-      .fillColor("#555")
-      .fontSize(9)
-      .text(
-        `${row.startedAt.toLocaleString("es-AR")} · ${row.detail}`
-      )
-      .moveDown(0.5);
+  let periodLabel = "Historial completo";
+  if (period === "today") periodLabel = "Hoy";
+  if (period === "last7") periodLabel = "Ultimos 7 dias";
+  if (from && to) {
+    periodLabel = `${new Date(from).toLocaleDateString("es-AR")} al ${new Date(to).toLocaleDateString("es-AR")}`;
   }
 
-  doc.end();
+  const selectedEmployee = employeeId && employeeId !== "all"
+    ? rows[0]?.employee
+    : undefined;
+
+  renderActivityReport(doc, {
+    title: "Reporte de actividades",
+    subtitle: selectedEmployee
+      ? `Empleado #${selectedEmployee.employeeNumber} - ${selectedEmployee.name}`
+      : "Resumen general del equipo",
+    periodLabel,
+    rows,
+  });
 });
 
 export default router;
