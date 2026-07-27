@@ -170,7 +170,9 @@ useEffect(() => {
     load();
   });
 
-  return () => socket.disconnect();
+  return () => {
+    socket.disconnect();
+  };
 }, [load]);
 
   const duration = useMemo(
@@ -430,15 +432,17 @@ useEffect(() => {
                 className="employee-card"
                 elevation={0}
               >
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
+     <Stack
+  direction="row"
+  sx={{
+    justifyContent: "space-between",
+    alignItems: "center",
+  }}
+>
                   <Box>
-                    <Typography fontWeight={700}>
-                      {employee.name}
-                    </Typography>
+                   <Typography sx={{ fontWeight: 700 }}>
+  {employee.name}
+</Typography>
 
                     <Typography
                       variant="caption"
