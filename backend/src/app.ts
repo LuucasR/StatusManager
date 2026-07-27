@@ -9,6 +9,7 @@ import activitiesRoutes from "./activities/activities.routes";
 import adminRoutes from "./admin/admin.routes";
 
 const app = express();
+app.set("trust proxy", 1);
 
 const allowedOrigins = [
   "http://localhost:5173",
