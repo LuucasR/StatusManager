@@ -37,7 +37,7 @@ export async function requestPasswordReset(email: string) {
     where: { email: email.toLowerCase() },
   });
 
-  if (!employee?.active) return;
+  if (!employee?.active) return false;
 
   const token = generatePasswordResetToken(employee.id, employee.password);
   const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(
@@ -46,7 +46,7 @@ export async function requestPasswordReset(email: string) {
   );
   const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(token)}`;
 
-  await sendMail(employee.email, {
+  const sent = await sendMail(employee.email, {
     subject: "Recuperá tu contraseña de Status Manager",
     text: `Usá este enlace para crear una nueva contraseña. Vence en 15 minutos: ${resetUrl}`,
     html: `
@@ -56,6 +56,12 @@ export async function requestPasswordReset(email: string) {
       <p>El enlace vence en 15 minutos. Si no solicitaste el cambio, ignorá este correo.</p>
     `,
   });
+
+  if (!sent) {
+    throw new Error("SMTP configuration is incomplete");
+  }
+
+  return true;
 }
 
 export async function resetPassword(token: string, newPassword: string) {

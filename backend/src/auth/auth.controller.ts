@@ -54,8 +54,17 @@ export async function forgotPasswordController(req: Request, res: Response) {
   }
 
   try {
-    await requestPasswordReset(parsed.data.email);
-  } catch {
+    const sent = await requestPasswordReset(parsed.data.email);
+    if (!sent) {
+      console.warn(
+        "[password-reset] No se encontró una cuenta activa para la solicitud"
+      );
+    }
+  } catch (error) {
+    console.error(
+      "[password-reset] No se pudo enviar el correo:",
+      error instanceof Error ? error.message : error
+    );
     // La respuesta es deliberadamente igual para no revelar cuentas existentes.
   }
   res.json({
