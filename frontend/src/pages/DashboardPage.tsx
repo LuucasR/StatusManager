@@ -4,6 +4,7 @@ import {
   DownloadRounded,
   LogoutRounded,
   UpdateRounded,
+  VisibilityRounded,
 } from "@mui/icons-material";
 
 import {
@@ -12,6 +13,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Container,
   Dialog,
   DialogActions,
@@ -71,7 +73,7 @@ const labels: Record<Status, string> = {
   BREAK: "Descanso",
   LUNCH: "Almuerzo",
   MEETING: "Reunión",
-  OFFLINE: "Desconectado",
+  OFFLINE: "Ausente",
 };
 
 const colors: Record<
@@ -135,6 +137,9 @@ const [reportPeriod, setReportPeriod] = useState<
 const [reportFrom, setReportFrom] = useState("");
 
 const [reportTo, setReportTo] = useState("");
+const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+const [pdfPreviewName, setPdfPreviewName] = useState("");
+const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
 
 
   const load = useCallback(async () => {
@@ -146,11 +151,13 @@ const [reportTo, setReportTo] = useState("");
       await api<History[]>("/activities/history")
     );
 
-    if (current.role === "ADMIN") {
-      setEmployees(
-        await api<Employee[]>("/admin/employees")
-      );
-    }
+    setEmployees(
+      await api<Employee[]>(
+        current.role === "ADMIN"
+          ? "/admin/employees"
+          : "/activities/team"
+      )
+    );
   }, []);
 
   useEffect(() => {
@@ -253,74 +260,75 @@ useEffect(() => {
 }, [confirmationDialog]);
 
 
-  async function downloadReport() {
+  function buildReportParams() {
+    const params = new URLSearchParams();
+    params.set("employeeId", reportEmployee);
 
-  const params = new URLSearchParams();
-
-  params.set("employeeId", reportEmployee);
-
-  if (reportPeriod === "all") {
-    params.set("period", "all");
-  }
-
-  if (reportPeriod === "today") {
-    params.set("period", "today");
-  }
-
-  if (reportPeriod === "last7") {
-    params.set("period", "last7");
-  }
-
-  if (reportPeriod === "custom") {
-    params.set("from", reportFrom);
-    params.set("to", reportTo);
-  }
-
-  const response = await fetch(
-    `${API_URL}/admin/report.pdf?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
+    if (reportPeriod === "all") params.set("period", "all");
+    if (reportPeriod === "today") params.set("period", "today");
+    if (reportPeriod === "last7") params.set("period", "last7");
+    if (reportPeriod === "custom") {
+      params.set("from", reportFrom);
+      params.set("to", reportTo);
     }
-  );
 
-  const blob = await response.blob();
+    return params;
+  }
 
-  const href = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-
-  a.href = href;
-  a.download = "reporte-actividades.pdf";
-  a.click();
-
-  URL.revokeObjectURL(href);
-
-  setReportDialog(false);
-}
-
-  async function downloadPersonalReport() {
-    const response = await fetch(
-      `${API_URL}/activities/report.pdf`,
-      {
+  async function openPdfPreview(url: string, filename: string) {
+    try {
+      setPdfPreviewLoading(true);
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message ?? "No se pudo generar el PDF");
       }
+
+      const blob = await response.blob();
+      const href = URL.createObjectURL(blob);
+
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(href);
+      setPdfPreviewName(filename);
+      setReportDialog(false);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPdfPreviewLoading(false);
+    }
+  }
+
+  function closePdfPreview() {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    setPdfPreviewUrl("");
+    setPdfPreviewName("");
+  }
+
+  function downloadPreviewedPdf() {
+    if (!pdfPreviewUrl) return;
+    const anchor = document.createElement("a");
+    anchor.href = pdfPreviewUrl;
+    anchor.download = pdfPreviewName;
+    anchor.click();
+  }
+
+  async function previewReport() {
+    await openPdfPreview(
+      `${API_URL}/admin/report.pdf?${buildReportParams().toString()}`,
+      "reporte-actividades.pdf"
     );
+  }
 
-    const blob = await response.blob();
-
-    const href = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-
-    a.href = href;
-    a.download = "mi-registro-de-actividades.pdf";
-    a.click();
-
-    URL.revokeObjectURL(href);
+  async function previewPersonalReport() {
+    await openPdfPreview(
+      `${API_URL}/activities/report.pdf`,
+      "mi-registro-de-actividades.pdf"
+    );
   }
 
   async function approve(id: number) {
@@ -450,12 +458,11 @@ useEffect(() => {
         </Paper>
       </Box>
 
-      {me?.role === "ADMIN" && (
-        <>
+      <>
           <Box className="section-title">
             <Box>
               <Typography className="eyebrow">
-                PANEL ADMINISTRADOR
+                {me?.role === "ADMIN" ? "PANEL ADMINISTRADOR" : "EQUIPO"}
               </Typography>
 
               <Typography variant="h4">
@@ -463,12 +470,14 @@ useEffect(() => {
               </Typography>
             </Box>
 
-        <Button
-  startIcon={<DownloadRounded />}
-  onClick={() => setReportDialog(true)}
->
-  Descargar PDF
-</Button>
+            {me?.role === "ADMIN" && (
+              <Button
+                startIcon={<VisibilityRounded />}
+                onClick={() => setReportDialog(true)}
+              >
+                Ver reporte PDF
+              </Button>
+            )}
           </Box>
 
           <Box className="employee-grid">
@@ -531,6 +540,8 @@ useEffect(() => {
       {elapsed(employee.statusSince, now)}
     </Typography>
 
+    {me?.role === "ADMIN" && (
+      <>
     <Button
       sx={{ mt: 2 }}
       fullWidth
@@ -550,6 +561,8 @@ useEffect(() => {
 >
   Cambiar estado
 </Button>
+      </>
+    )}
   </>
 ): (
                   <Stack spacing={1} sx={{ mt: 3 }}>
@@ -576,7 +589,6 @@ useEffect(() => {
             ))}
           </Box>
         </>
-      )}
 
       <Box className="section-title">
         <Box>
@@ -590,10 +602,10 @@ useEffect(() => {
         </Box>
 
         <Button
-          startIcon={<DownloadRounded />}
-          onClick={downloadPersonalReport}
+          startIcon={<VisibilityRounded />}
+          onClick={previewPersonalReport}
         >
-          Mi registro PDF
+          Previsualizar PDF
         </Button>
       </Box>
 
@@ -619,7 +631,7 @@ useEffect(() => {
                   />
                 </TableCell>
 
-                <TableCell>{item.detail}</TableCell>
+                <TableCell>{item.detail || "Sin comentario"}</TableCell>
 
                 <TableCell>
                   {new Date(item.startedAt).toLocaleString("es-AR")}
@@ -679,8 +691,16 @@ useEffect(() => {
           </FormControl>
 
           <TextField
-            label="¿Qué estás haciendo?"
-            placeholder="El detalle es obligatorio"
+            label={
+              status === "WORKING" || status === "OFFLINE"
+                ? "Comentario obligatorio"
+                : "Comentario opcional"
+            }
+            placeholder={
+              status === "WORKING" || status === "OFFLINE"
+                ? "Escribí al menos 3 caracteres"
+                : "Podés agregar un comentario"
+            }
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
             multiline
@@ -696,7 +716,10 @@ useEffect(() => {
 
         <Button
           variant="contained"
-          disabled={detail.trim().length < 3}
+          disabled={
+            (status === "WORKING" || status === "OFFLINE") &&
+            detail.trim().length < 3
+          }
           onClick={changeStatus}
         >
           Guardar cambio
@@ -746,7 +769,7 @@ useEffect(() => {
   maxWidth="sm"
 >
   <DialogTitle>
-    Descargar reporte PDF
+    Configurar reporte PDF
   </DialogTitle>
 
   <DialogContent>
@@ -846,9 +869,53 @@ useEffect(() => {
 
     <Button
       variant="contained"
-      onClick={downloadReport}
+      startIcon={
+        pdfPreviewLoading
+          ? <CircularProgress size={18} color="inherit" />
+          : <VisibilityRounded />
+      }
+      disabled={
+        pdfPreviewLoading ||
+        (reportPeriod === "custom" && (!reportFrom || !reportTo))
+      }
+      onClick={previewReport}
     >
-      Descargar
+      Previsualizar
+    </Button>
+  </DialogActions>
+</Dialog>
+
+<Dialog
+  open={Boolean(pdfPreviewUrl)}
+  onClose={closePdfPreview}
+  fullWidth
+  maxWidth="lg"
+>
+  <DialogTitle>Previsualización del reporte</DialogTitle>
+  <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
+    {pdfPreviewUrl && (
+      <Box
+        component="iframe"
+        title="Previsualización del reporte PDF"
+        src={pdfPreviewUrl}
+        sx={{
+          width: "100%",
+          height: { xs: "68vh", md: "76vh" },
+          border: 0,
+          borderRadius: 1,
+          bgcolor: "grey.100",
+        }}
+      />
+    )}
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={closePdfPreview}>Cerrar</Button>
+    <Button
+      variant="contained"
+      startIcon={<DownloadRounded />}
+      onClick={downloadPreviewedPdf}
+    >
+      Descargar PDF
     </Button>
   </DialogActions>
 </Dialog>

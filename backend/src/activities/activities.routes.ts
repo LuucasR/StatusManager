@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { ActivityStatus } from "@prisma/client";
-import { z } from "zod";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
 import { emitStatusChanged, confirmActivity } from "../realtime";
 import { notifyAdmin } from "../email";
 import { renderActivityReport } from "../reports/activity-report";
+import { changeStatusSchema } from "./activity-validation";
 
 const router = Router();
 router.use(requireAuth);
@@ -17,6 +16,39 @@ router.get("/me", async (req, res) => {
     select: { id: true, employeeNumber: true, name: true, email: true, role: true, currentStatus: true, statusSince: true },
   });
   res.json(employee);
+});
+
+router.get("/team", async (_req, res) => {
+  const employees = await prisma.employee.findMany({
+    where: { active: true },
+    select: {
+      id: true,
+      employeeNumber: true,
+      name: true,
+      role: true,
+      currentStatus: true,
+      statusSince: true,
+      activities: {
+        where: { endedAt: null },
+        take: 1,
+        select: { detail: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  res.json(
+    employees.map((employee) => ({
+      id: employee.id,
+      employeeNumber: employee.employeeNumber,
+      name: employee.name,
+      role: employee.role,
+      currentStatus: employee.currentStatus,
+      statusSince: employee.statusSince,
+      active: true,
+      detail: employee.activities[0]?.detail ?? "",
+    }))
+  );
 });
 
 router.get("/history", async (req, res) => {
@@ -40,7 +72,7 @@ router.get("/report.pdf", async (req, res) => {
   });
   
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", 'attachment; filename="mi-actividad.pdf"');
+  res.setHeader("Content-Disposition", 'inline; filename="mi-actividad.pdf"');
   const doc = new PDFDocument({ margin: 0, size: "A4" });
   doc.pipe(res);
   const periodLabel = from || to
@@ -80,8 +112,14 @@ router.post("/confirm-activity", (req, res) => {
 
 
 router.post("/status", async (req, res) => {
-  const parsed = z.object({ status: z.nativeEnum(ActivityStatus), detail: z.string().trim().min(3).max(500) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ message: "El estado y un detalle de al menos 3 caracteres son obligatorios" });
+  const parsed = changeStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      message:
+        parsed.error.issues[0]?.message ??
+        "No se pudo validar el cambio de estado",
+    });
+  }
   const now = new Date();
   const result = await prisma.$transaction(async (tx) => {
     await tx.activityHistory.updateMany({

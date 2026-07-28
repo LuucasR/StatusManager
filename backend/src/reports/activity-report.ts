@@ -41,7 +41,7 @@ const STATUS: Record<ActivityStatus, { label: string; color: string; pale: strin
   BREAK: { label: "Descanso", color: "#A66A00", pale: "#FFF2D8" },
   LUNCH: { label: "Almuerzo", color: "#8C4EA3", pale: "#F5E9FA" },
   MEETING: { label: "Reunion", color: "#16738B", pale: "#E2F5F8" },
-  OFFLINE: { label: "Desconectado", color: "#666A7D", pale: "#ECEEF2" },
+  OFFLINE: { label: "Ausente", color: "#666A7D", pale: "#ECEEF2" },
 };
 
 function formatDate(date: Date) {

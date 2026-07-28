@@ -3,7 +3,8 @@ import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
-import { sendConfirmationRequest } from "../realtime";
+import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
+import { changeStatusSchema } from "../activities/activity-validation";
 
 
 const router = Router();
@@ -161,39 +162,49 @@ router.post("/employees/:id/status", async (req, res) => {
     });
   }
 
-  const { status, detail } = req.body;
+  const parsed = changeStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      message:
+        parsed.error.issues[0]?.message ??
+        "No se pudo validar el cambio de estado",
+    });
+  }
 
-  await prisma.activityHistory.updateMany({
-    where: {
-      employeeId,
-      endedAt: null,
-    },
-    data: {
-      endedAt: new Date(),
-    },
+  const now = new Date();
+  const employee = await prisma.$transaction(async (tx) => {
+    await tx.activityHistory.updateMany({
+      where: { employeeId, endedAt: null },
+      data: { endedAt: now },
+    });
+
+    await tx.activityHistory.create({
+      data: {
+        employeeId,
+        status: parsed.data.status,
+        detail: parsed.data.detail,
+        startedAt: now,
+      },
+    });
+
+    return tx.employee.update({
+      where: { id: employeeId },
+      data: {
+        currentStatus: parsed.data.status,
+        statusSince: now,
+      },
+      select: {
+        id: true,
+        employeeNumber: true,
+        name: true,
+        currentStatus: true,
+        statusSince: true,
+      },
+    });
   });
 
-  await prisma.activityHistory.create({
-    data: {
-      employeeId,
-      status,
-      detail,
-    },
-  });
-
-  await prisma.employee.update({
-    where: {
-      id: employeeId,
-    },
-    data: {
-      currentStatus: status,
-      statusSince: new Date(),
-    },
-  });
-
-  res.json({
-    success: true,
-  });
+  emitStatusChanged(employee);
+  res.json({ success: true, employee });
 });
 
 
@@ -287,7 +298,7 @@ if (from && to) {
 
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="reporte-actividades-${new Date()
+    `inline; filename="reporte-actividades-${new Date()
       .toISOString()
       .slice(0, 10)}.pdf"`
   );
