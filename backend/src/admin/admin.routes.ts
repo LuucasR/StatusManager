@@ -217,6 +217,23 @@ router.delete("/employees/:id", async (req, res) => {
     });
   }
 
+  if (id === req.auth!.employeeId) {
+    return res.status(400).json({
+      message: "No podés eliminar tu propia cuenta de administrador",
+    });
+  }
+
+  const employee = await prisma.employee.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    return res.status(404).json({
+      message: "Empleado no encontrado",
+    });
+  }
+
   await prisma.activityHistory.deleteMany({
     where: {
       employeeId: id,

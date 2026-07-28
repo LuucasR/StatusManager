@@ -1,6 +1,7 @@
 import {
   AccessTimeRounded,
   AdminPanelSettingsRounded,
+  DeleteForeverRounded,
   DownloadRounded,
   LogoutRounded,
   UpdateRounded,
@@ -351,6 +352,23 @@ useEffect(() => {
     await load();
   }
 
+  async function deleteAccount(employee: Employee) {
+    const confirmed = window.confirm(
+      `¿Eliminar definitivamente la cuenta de ${employee.name}? También se eliminará todo su historial de actividades.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await api(`/admin/employees/${employee.id}`, {
+        method: "DELETE",
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   function logout() {
     localStorage.removeItem("token");
     window.location.replace("/");
@@ -561,6 +579,18 @@ useEffect(() => {
 >
   Cambiar estado
 </Button>
+        {employee.id !== me?.id && (
+          <Button
+            sx={{ mt: 1 }}
+            fullWidth
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteForeverRounded />}
+            onClick={() => deleteAccount(employee)}
+          >
+            Eliminar cuenta
+          </Button>
+        )}
       </>
     )}
   </>
