@@ -41,6 +41,9 @@ export default function LoginPage() {
               {error && <Alert severity="error">{error}</Alert>}
               <TextField label="Número de empleado" inputMode="numeric" value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} required />
               <TextField label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Typography align="right" variant="body2">
+                <Link to="/recuperar-clave">¿Olvidaste tu contraseña?</Link>
+              </Typography>
               <Button type="submit" size="large" variant="contained" endIcon={<ArrowForwardRounded />} disabled={loading}>
                 {loading ? "Ingresando…" : "Iniciar sesión"}
               </Button>

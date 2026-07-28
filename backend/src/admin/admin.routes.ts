@@ -234,16 +234,13 @@ router.delete("/employees/:id", async (req, res) => {
     });
   }
 
-  await prisma.activityHistory.deleteMany({
-    where: {
-      employeeId: id,
-    },
-  });
-
-  await prisma.employee.delete({
-    where: {
-      id,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.activityHistory.deleteMany({
+      where: { employeeId: id },
+    });
+    await tx.employee.delete({
+      where: { id },
+    });
   });
 
   res.json({

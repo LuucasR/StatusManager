@@ -5,7 +5,8 @@ Aplicación responsive para registrar y supervisar actividades de empleados en t
 ## Funcionalidades incluidas
 
 - Solicitud de registro con número de empleado automático y aprobación administrativa.
-- Login JWT. Por decisión del proyecto, las contraseñas se guardan en texto plano en SQLite.
+- Login JWT con contraseñas protegidas mediante bcrypt.
+- Recuperación de contraseña por email mediante enlaces temporales de 15 minutos.
 - Cambio de estado con detalle obligatorio.
 - Historial personal y panel administrador.
 - Contadores de duración en vivo y actualizaciones con Socket.IO.
@@ -28,7 +29,7 @@ pnpm dev
 
 El seed crea el administrador `#1000`. Cambiá `ADMIN_EMAIL` y `ADMIN_PASSWORD` en `.env`; si no se indican, la contraseña inicial de desarrollo es `Admin123!`.
 
-> Advertencia: las contraseñas almacenadas en texto plano pueden ser leídas por cualquiera que tenga acceso a `dev.db`. Esta configuración no es adecuada para producción.
+Para habilitar la recuperación de contraseña, configurá SMTP y `RESET_PASSWORD_SECRET` en el entorno del backend.
 
 ### Frontend
 
@@ -43,5 +44,5 @@ La API se configura con `VITE_API_URL` y por defecto usa `http://localhost:3000`
 ## Próximos pasos
 
 - Filtros por fecha para reportes personales y administrativos.
-- Recuperación de contraseña y auditoría administrativa.
+- Auditoría administrativa.
 - Integración con WhatsApp.

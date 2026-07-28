@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { login, register } from "./auth.service";
+import {
+  login,
+  register,
+  requestPasswordReset,
+  resetPassword,
+} from "./auth.service";
 import { generateToken } from "./auth.token";
 import { notifyAdmin } from "../email";
 import { toEmployeeDto } from "./auth.dto";
@@ -9,6 +14,13 @@ const loginSchema = z.object({ employeeNumber: z.coerce.number().int().positive(
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: z.string().email(),
+  password: z.string().min(8).max(72),
+});
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().email(),
+});
+const resetPasswordSchema = z.object({
+  token: z.string().min(20),
   password: z.string().min(8).max(72),
 });
 
@@ -33,4 +45,39 @@ export async function registerController(req: Request, res: Response) {
   } catch {
     res.status(409).json({ message: "El email ya está registrado" });
   }
+}
+
+export async function forgotPasswordController(req: Request, res: Response) {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Ingresá un email válido" });
+  }
+
+  try {
+    await requestPasswordReset(parsed.data.email);
+  } catch {
+    // La respuesta es deliberadamente igual para no revelar cuentas existentes.
+  }
+  res.json({
+    message:
+      "Si existe una cuenta activa con ese email, recibirás un enlace para recuperar la contraseña.",
+  });
+}
+
+export async function resetPasswordController(req: Request, res: Response) {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      message: "El enlace o la nueva contraseña no son válidos",
+    });
+  }
+
+  const updated = await resetPassword(parsed.data.token, parsed.data.password);
+  if (!updated) {
+    return res.status(400).json({
+      message: "El enlace venció, ya fue utilizado o no es válido",
+    });
+  }
+
+  res.json({ message: "Contraseña actualizada correctamente" });
 }
