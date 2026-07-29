@@ -58,8 +58,9 @@ export async function requestPasswordReset(email: string) {
   });
 
   if (!sent) {
-    throw new Error("SMTP configuration is incomplete");
+    throw new Error("SMTP configuration is incompleteeeee");
   }
+
 
   return true;
 }
