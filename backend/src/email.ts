@@ -40,6 +40,9 @@ export async function sendMail(to: string, mail: Mail) {
     port,
     secure: port === 465,
     auth: { user, pass: password },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   });
   await transport.sendMail({
     from: process.env.EMAIL_FROM?.trim() || user,
