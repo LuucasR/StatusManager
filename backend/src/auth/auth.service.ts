@@ -8,18 +8,25 @@ import {
 } from "./auth.reset";
 
 export async function login(employeeNumber: number, password: string) {
-  const employee = await prisma.employee.findUnique({ where: { employeeNumber } });
- if (!employee || !employee.active) return null;
+  const employee = await prisma.employee.findUnique({
+    where: { employeeNumber },
+  });
 
-const valid = await verifyPassword(password, employee.password);
+  if (!employee || !employee.active) return null;
 
-if (!valid) return null;
+  const valid = await verifyPassword(password, employee.password);
+
+  if (!valid) return null;
+
   return employee;
 }
 
 export async function register(name: string, email: string, password: string) {
   return prisma.$transaction(async (tx) => {
-    const last = await tx.employee.findFirst({ orderBy: { employeeNumber: "desc" } });
+    const last = await tx.employee.findFirst({
+      orderBy: { employeeNumber: "desc" },
+    });
+
     return tx.employee.create({
       data: {
         employeeNumber: (last?.employeeNumber ?? 999) + 1,
@@ -40,27 +47,14 @@ export async function requestPasswordReset(email: string) {
   if (!employee?.active) return false;
 
   const token = generatePasswordResetToken(employee.id, employee.password);
-  const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(
-    /\/$/,
-    ""
-  );
-  const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(token)}`;
 
-export async function requestPasswordReset(email: string) {
-  const employee = await prisma.employee.findUnique({
-    where: { email: email.toLowerCase() },
-  });
+  const frontendUrl = (
+    process.env.FRONTEND_URL ?? "http://localhost:5173"
+  ).replace(/\/$/, "");
 
-  if (!employee?.active) return false;
-
-  const token = generatePasswordResetToken(employee.id, employee.password);
-
-  const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(
-    /\/$/,
-    ""
-  );
-
-  const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(token)}`;
+  const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(
+    token
+  )}`;
 
   console.log("========== SMTP DEBUG ==========");
   console.log("SMTP_HOST:", process.env.SMTP_HOST);
@@ -101,6 +95,7 @@ export async function requestPasswordReset(email: string) {
 export async function resetPassword(token: string, newPassword: string) {
   try {
     const payload = verifyPasswordResetToken(token);
+
     const employee = await prisma.employee.findUnique({
       where: { id: payload.employeeId },
     });
@@ -114,7 +109,9 @@ export async function resetPassword(token: string, newPassword: string) {
 
     await prisma.employee.update({
       where: { id: employee.id },
-      data: { password: await hashPassword(newPassword) },
+      data: {
+        password: await hashPassword(newPassword),
+      },
     });
 
     return true;
