@@ -55,7 +55,13 @@ export async function requestPasswordReset(email: string) {
   const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(
     token
   )}`;
-
+  
+console.log(
+  "ENV KEYS:",
+  Object.keys(process.env)
+    .filter((k) => k.startsWith("SMTP"))
+    .sort()
+);
   console.log("========== SMTP DEBUG ==========");
   console.log("SMTP_HOST:", process.env.SMTP_HOST);
   console.log("SMTP_PORT:", process.env.SMTP_PORT);
