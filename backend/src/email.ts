@@ -14,15 +14,15 @@ export async function sendMail(to: string, mail: Mail) {
     return false;
   }
 
-  const transport = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT ?? 587),
-    secure: Number(SMTP_PORT) === 465,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASSWORD,
-    },
-  });
+ const transport = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASSWORD,
+  },
+  connectionTimeout: 10000,
+  socketTimeout: 10000,
+});
 
   try {
     console.log("Intentando enviar correo...");
