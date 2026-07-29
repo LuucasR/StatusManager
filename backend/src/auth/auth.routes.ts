@@ -4,7 +4,6 @@ import {
   forgotPasswordController,
   loginController,
   registerController,
-  resetPasswordController,
 } from "./auth.controller";
 
 const router = Router();
@@ -21,6 +20,5 @@ const passwordResetLimiter = rateLimit({
 router.post("/login", loginController);
 router.post("/register", registerController);
 router.post("/forgot-password", passwordResetLimiter, forgotPasswordController);
-router.post("/reset-password", resetPasswordController);
 
 export default router;

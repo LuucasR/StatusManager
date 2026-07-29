@@ -21,6 +21,12 @@ enum ActivityStatus {
   OFFLINE
 }
 
+enum PasswordChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Employee {
   id             Int              @id @default(autoincrement())
   employeeNumber Int              @unique
@@ -34,6 +40,20 @@ model Employee {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   activities     ActivityHistory[]
+  passwordChangeRequests PasswordChangeRequest[]
+}
+
+model PasswordChangeRequest {
+  id                Int                         @id @default(autoincrement())
+  employeeId        Int
+  requestedPassword String
+  status            PasswordChangeRequestStatus @default(PENDING)
+  createdAt         DateTime                    @default(now())
+  resolvedAt        DateTime?
+  employee          Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([employeeId, status])
 }
 
 model ActivityHistory {

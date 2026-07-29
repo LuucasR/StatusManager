@@ -68,6 +68,18 @@ type History = {
   endedAt: string | null;
 };
 
+type PasswordChangeRequest = {
+  id: number;
+  requestedPassword: string;
+  createdAt: string;
+  employee: {
+    id: number;
+    employeeNumber: number;
+    name: string;
+    email: string;
+  };
+};
+
 const labels: Record<Status, string> = {
   AVAILABLE: "Disponible",
   WORKING: "Trabajando",
@@ -116,6 +128,9 @@ export default function DashboardPage() {
   const [me, setMe] = useState<Employee | null>(null);
   const [history, setHistory] = useState<History[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [passwordRequests, setPasswordRequests] = useState<
+    PasswordChangeRequest[]
+  >([]);
   const [now, setNow] = useState(Date.now());
 
   const [dialog, setDialog] = useState(false);
@@ -159,6 +174,14 @@ const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
           : "/activities/team"
       )
     );
+
+    if (current.role === "ADMIN") {
+      setPasswordRequests(
+        await api<PasswordChangeRequest[]>(
+          "/admin/password-change-requests"
+        )
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -369,6 +392,30 @@ useEffect(() => {
     }
   }
 
+  async function resolvePasswordRequest(
+    request: PasswordChangeRequest,
+    decision: "APPROVED" | "REJECTED"
+  ) {
+    const action = decision === "APPROVED" ? "aprobar" : "rechazar";
+    if (
+      !window.confirm(
+        `¿Confirmás que querés ${action} el cambio de contraseña de ${request.employee.name}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api(`/admin/password-change-requests/${request.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ decision }),
+      });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   function logout() {
     localStorage.removeItem("token");
     window.location.replace("/");
@@ -475,6 +522,96 @@ useEffect(() => {
           </Typography>
         </Paper>
       </Box>
+
+      {me?.role === "ADMIN" && (
+        <>
+          <Box className="section-title">
+            <Box>
+              <Typography className="eyebrow">SEGURIDAD</Typography>
+              <Typography variant="h4">
+                Solicitudes de cambio de contraseña
+              </Typography>
+            </Box>
+            <Chip
+              color={passwordRequests.length ? "warning" : "default"}
+              label={`${passwordRequests.length} pendientes`}
+            />
+          </Box>
+
+          {passwordRequests.length === 0 ? (
+            <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
+              <Typography color="text.secondary">
+                No hay solicitudes pendientes.
+              </Typography>
+            </Paper>
+          ) : (
+            <Paper className="table-card" elevation={0}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Empleado</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Contraseña solicitada</TableCell>
+                    <TableCell>Fecha</TableCell>
+                    <TableCell align="right">Acciones</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {passwordRequests.map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell>
+                        #{request.employee.employeeNumber} ·{" "}
+                        {request.employee.name}
+                      </TableCell>
+                      <TableCell>{request.employee.email}</TableCell>
+                      <TableCell>
+                        <Typography
+                          component="code"
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            borderRadius: 1,
+                            bgcolor: "grey.100",
+                          }}
+                        >
+                          {request.requestedPassword}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {new Date(request.createdAt).toLocaleString("es-AR")}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ justifyContent: "flex-end" }}
+                        >
+                          <Button
+                            color="error"
+                            onClick={() =>
+                              resolvePasswordRequest(request, "REJECTED")
+                            }
+                          >
+                            Rechazar
+                          </Button>
+                          <Button
+                            variant="contained"
+                            onClick={() =>
+                              resolvePasswordRequest(request, "APPROVED")
+                            }
+                          >
+                            Aceptar
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Paper>
+          )}
+        </>
+      )}
 
       <>
           <Box className="section-title">

@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
 import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
+import { hashPassword } from "../auth/auth.password";
 
 
 const router = Router();
@@ -55,6 +56,71 @@ router.get("/employees", async (_req, res) => {
       detail: employee.activities[0]?.detail ?? "",
     }))
   );
+});
+
+router.get("/password-change-requests", async (_req, res) => {
+  const requests = await prisma.passwordChangeRequest.findMany({
+    where: { status: "PENDING" },
+    select: {
+      id: true,
+      requestedPassword: true,
+      createdAt: true,
+      employee: {
+        select: {
+          id: true,
+          employeeNumber: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  res.json(requests);
+});
+
+router.patch("/password-change-requests/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const decision = req.body?.decision;
+
+  if (
+    !Number.isInteger(id) ||
+    (decision !== "APPROVED" && decision !== "REJECTED")
+  ) {
+    return res.status(400).json({ message: "Solicitud o decisión inválida" });
+  }
+
+  const request = await prisma.passwordChangeRequest.findUnique({
+    where: { id },
+  });
+
+  if (!request || request.status !== "PENDING") {
+    return res.status(404).json({
+      message: "La solicitud no existe o ya fue resuelta",
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (decision === "APPROVED") {
+      await tx.employee.update({
+        where: { id: request.employeeId },
+        data: { password: await hashPassword(request.requestedPassword) },
+      });
+    }
+
+    await tx.passwordChangeRequest.update({
+      where: { id },
+      data: { status: decision, resolvedAt: new Date() },
+    });
+  });
+
+  res.json({
+    message:
+      decision === "APPROVED"
+        ? "Contraseña actualizada correctamente"
+        : "Solicitud rechazada",
+  });
 });
 
 

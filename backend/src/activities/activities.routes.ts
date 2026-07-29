@@ -3,7 +3,6 @@ import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
 import { emitStatusChanged, confirmActivity } from "../realtime";
-import { notifyAdmin } from "../email";
 import { renderActivityReport } from "../reports/activity-report";
 import { changeStatusSchema } from "./activity-validation";
 
@@ -137,10 +136,6 @@ router.post("/status", async (req, res) => {
     return { activity, employee };
   });
   emitStatusChanged(result.employee);
-  void notifyAdmin({
-    subject: `${result.employee.name} cambió su estado`,
-    text: `Nuevo estado: ${result.employee.currentStatus}. Detalle: ${parsed.data.detail}`,
-  });
   res.status(201).json(result);
 });
 
