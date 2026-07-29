@@ -3,11 +3,18 @@ import nodemailer from "nodemailer";
 type Mail = { subject: string; text: string; html?: string };
 
 export async function sendMail(to: string, mail: Mail) {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD } = process.env;
+  const {
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+    GMAIL_APP_PASSWORD,
+  } = process.env;
+  const configuredPassword = SMTP_PASSWORD || GMAIL_APP_PASSWORD;
   const missing = [
     ["SMTP_HOST", SMTP_HOST],
     ["SMTP_USER", SMTP_USER],
-    ["SMTP_PASSWORD", SMTP_PASSWORD],
+    ["SMTP_PASSWORD or GMAIL_APP_PASSWORD", configuredPassword],
   ]
     .filter(([, value]) => !value?.trim())
     .map(([name]) => name);
@@ -20,8 +27,8 @@ export async function sendMail(to: string, mail: Mail) {
   const user = SMTP_USER!.trim();
   const password =
     host.toLowerCase() === "smtp.gmail.com"
-      ? SMTP_PASSWORD!.replace(/\s/g, "")
-      : SMTP_PASSWORD!;
+      ? configuredPassword!.replace(/\s/g, "")
+      : configuredPassword!;
   const port = Number(SMTP_PORT ?? 587);
 
   if (!Number.isInteger(port) || port <= 0) {
