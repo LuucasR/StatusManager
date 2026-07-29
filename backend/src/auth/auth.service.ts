@@ -46,23 +46,56 @@ export async function requestPasswordReset(email: string) {
   );
   const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(token)}`;
 
-  const sent = await sendMail(employee.email, {
-    subject: "Recuperá tu contraseña de Status Manager",
-    text: `Usá este enlace para crear una nueva contraseña. Vence en 15 minutos: ${resetUrl}`,
-    html: `
-      <p>Hola,</p>
-      <p>Recibimos una solicitud para cambiar tu contraseña de Status Manager.</p>
-      <p><a href="${resetUrl}">Crear una nueva contraseña</a></p>
-      <p>El enlace vence en 15 minutos. Si no solicitaste el cambio, ignorá este correo.</p>
-    `,
+export async function requestPasswordReset(email: string) {
+  const employee = await prisma.employee.findUnique({
+    where: { email: email.toLowerCase() },
   });
 
-  if (!sent) {
-    throw new Error("SMTP configuration is incompleteeeee");
+  if (!employee?.active) return false;
+
+  const token = generatePasswordResetToken(employee.id, employee.password);
+
+  const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(
+    /\/$/,
+    ""
+  );
+
+  const resetUrl = `${frontendUrl}/restablecer-clave?token=${encodeURIComponent(token)}`;
+
+  console.log("========== SMTP DEBUG ==========");
+  console.log("SMTP_HOST:", process.env.SMTP_HOST);
+  console.log("SMTP_PORT:", process.env.SMTP_PORT);
+  console.log("SMTP_USER:", process.env.SMTP_USER);
+  console.log(
+    "SMTP_PASSWORD:",
+    process.env.SMTP_PASSWORD ? "SET" : "MISSING"
+  );
+  console.log("EMAIL_FROM:", process.env.EMAIL_FROM);
+  console.log("===============================");
+
+  try {
+    const sent = await sendMail(employee.email, {
+      subject: "Recuperá tu contraseña de Status Manager",
+      text: `Usá este enlace para crear una nueva contraseña. Vence en 15 minutos: ${resetUrl}`,
+      html: `
+        <p>Hola,</p>
+        <p>Recibimos una solicitud para cambiar tu contraseña de Status Manager.</p>
+        <p><a href="${resetUrl}">Crear una nueva contraseña</a></p>
+        <p>El enlace vence en 15 minutos. Si no solicitaste el cambio, ignorá este correo.</p>
+      `,
+    });
+
+    console.log("sendMail() devolvió:", sent);
+
+    if (!sent) {
+      throw new Error("SMTP configuration is incompleteeeee");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("ERROR COMPLETO:", error);
+    throw error;
   }
-
-
-  return true;
 }
 
 export async function resetPassword(token: string, newPassword: string) {
