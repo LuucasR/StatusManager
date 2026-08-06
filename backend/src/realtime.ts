@@ -46,6 +46,15 @@ export function emitStatusChanged(payload: unknown) {
   io?.emit("status:changed", payload);
 }
 
+/**
+ * Un solo canal para toda la pizarra. El payload lleva `type` (created,
+ * updated, moved, deleted, commented) y el frontend decide si refresca el
+ * tablero, el detalle abierto, o ambos.
+ */
+export function emitTaskChanged(payload: unknown) {
+  io?.emit("task:changed", payload);
+}
+
 
 export function sendConfirmationRequest(employeeId: number) {
 

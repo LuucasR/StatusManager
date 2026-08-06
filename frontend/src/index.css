@@ -19,9 +19,18 @@ a { color: #5b5ce2; font-weight: 700; text-decoration: none; }
 .status-dot.working { background: #5b5ce2; box-shadow: 0 0 0 6px #e7e7ff; }
 .status-dot.available { background: #2eae70; box-shadow: 0 0 0 6px #e2f6eb; }
 .status-dot.break, .status-dot.lunch { background: #e3a22b; box-shadow: 0 0 0 6px #fff3dc; }
+.status-dot.meeting { background: #16738b; box-shadow: 0 0 0 6px #e2f5f8; }
+.status-dot.offline { background: #8a8da0; box-shadow: 0 0 0 6px #edeef3; }
+.status-dot.disconnected { background: #b23c4a; box-shadow: 0 0 0 6px #fbe7ea; }
 .employee-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0 56px; }
 .employee-card { padding: 20px; border-radius: 16px !important; }
 .mini-timer { font: 700 24px ui-monospace, monospace; margin-top: 24px !important; color: #474861; }
 .section-title { margin: 10px 0 22px; }
 .table-card { overflow-x: auto; border-radius: 18px !important; }
-@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } }
+.task-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; margin-top: 28px; }
+.task-column { background: #fff; border-radius: 18px !important; padding: 18px; min-height: 240px; }
+.task-column.over { outline: 2px dashed #5b5ce2; outline-offset: -4px; }
+.task-card { padding: 14px 16px; border-radius: 14px !important; border: 1px solid #e8e9f1; touch-action: none; }
+.task-card-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px !important; }
+.task-comment { background: #f6f7fb; border-radius: 14px !important; padding: 12px 14px; }
+@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } }

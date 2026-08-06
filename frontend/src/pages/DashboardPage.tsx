@@ -1,16 +1,13 @@
 import {
-  AccessTimeRounded,
   AdminPanelSettingsRounded,
   DeleteForeverRounded,
   DownloadRounded,
-  LogoutRounded,
   UpdateRounded,
   VisibilityRounded,
 } from "@mui/icons-material";
 
 import {
   Alert,
-  AppBar,
   Box,
   Button,
   Chip,
@@ -32,7 +29,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Toolbar,
   Typography,
 } from "@mui/material";
 
@@ -46,7 +42,8 @@ type Status =
   | "BREAK"
   | "LUNCH"
   | "MEETING"
-  | "OFFLINE";
+  | "OFFLINE"
+  | "DISCONNECTED";
 
 type Employee = {
   id: number;
@@ -87,11 +84,12 @@ const labels: Record<Status, string> = {
   LUNCH: "Almuerzo",
   MEETING: "Reunión",
   OFFLINE: "Ausente",
+  DISCONNECTED: "Desconectado",
 };
 
 const colors: Record<
   Status,
-  "success" | "primary" | "warning" | "secondary" | "info" | "default"
+  "success" | "primary" | "warning" | "secondary" | "info" | "default" | "error"
 > = {
   AVAILABLE: "success",
   WORKING: "primary",
@@ -99,7 +97,12 @@ const colors: Record<
   LUNCH: "secondary",
   MEETING: "info",
   OFFLINE: "default",
+  DISCONNECTED: "error",
 };
+
+// Estados que exigen comentario. Espeja statusesRequiringDetail del backend
+// (backend/src/activities/activity-status.ts).
+const requiresDetail = new Set<Status>(["WORKING", "OFFLINE"]);
 
 
 function elapsed(since: string, now: number) {
@@ -416,37 +419,8 @@ useEffect(() => {
     }
   }
 
-  function logout() {
-    localStorage.removeItem("token");
-    window.location.replace("/");
-  }
-
   return (
   <Box>
-    <AppBar color="inherit" elevation={0} position="sticky">
-      <Toolbar>
-        <Box className="brand-mark small">
-          <AccessTimeRounded />
-        </Box>
-
-        <Typography variant="h6" sx={{ flex: 1 }}>
-          Status Manager
-        </Typography>
-
-        <Typography variant="body2" color="text.secondary">
-          {me?.name} · #{me?.employeeNumber}
-        </Typography>
-
-        <Button
-          color="inherit"
-          startIcon={<LogoutRounded />}
-          onClick={logout}
-        >
-          Salir
-        </Button>
-      </Toolbar>
-    </AppBar>
-
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {error && (
         <Alert
@@ -859,12 +833,12 @@ useEffect(() => {
 
           <TextField
             label={
-              status === "WORKING" || status === "OFFLINE"
+              requiresDetail.has(status)
                 ? "Comentario obligatorio"
                 : "Comentario opcional"
             }
             placeholder={
-              status === "WORKING" || status === "OFFLINE"
+              requiresDetail.has(status)
                 ? "Escribí al menos 3 caracteres"
                 : "Podés agregar un comentario"
             }
@@ -883,10 +857,7 @@ useEffect(() => {
 
         <Button
           variant="contained"
-          disabled={
-            (status === "WORKING" || status === "OFFLINE") &&
-            detail.trim().length < 3
-          }
+          disabled={requiresDetail.has(status) && detail.trim().length < 3}
           onClick={changeStatus}
         >
           Guardar cambio

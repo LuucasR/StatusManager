@@ -5,6 +5,7 @@ import { requireAuth } from "../auth/auth.middleware";
 import { emitStatusChanged, confirmActivity } from "../realtime";
 import { renderActivityReport } from "../reports/activity-report";
 import { changeStatusSchema } from "./activity-validation";
+import { visibleHistoryWhere } from "./activity-status";
 
 const router = Router();
 router.use(requireAuth);
@@ -54,7 +55,11 @@ router.get("/history", async (req, res) => {
   const from = req.query.from ? new Date(String(req.query.from)) : undefined;
   const to = req.query.to ? new Date(String(req.query.to)) : undefined;
   const rows = await prisma.activityHistory.findMany({
-    where: { employeeId: req.auth!.employeeId, startedAt: { gte: from, lte: to } },
+    where: {
+      employeeId: req.auth!.employeeId,
+      startedAt: { gte: from, lte: to },
+      ...visibleHistoryWhere,
+    },
     orderBy: { startedAt: "desc" },
     take: 100,
   });
@@ -66,7 +71,11 @@ router.get("/report.pdf", async (req, res) => {
   const to = req.query.to ? new Date(String(req.query.to)) : undefined;
   const employee = await prisma.employee.findUniqueOrThrow({ where: { id: req.auth!.employeeId } });
   const rows = await prisma.activityHistory.findMany({
-    where: { employeeId: req.auth!.employeeId, startedAt: { gte: from, lte: to } },
+    where: {
+      employeeId: req.auth!.employeeId,
+      startedAt: { gte: from, lte: to },
+      ...visibleHistoryWhere,
+    },
     orderBy: { startedAt: "desc" },
   });
   

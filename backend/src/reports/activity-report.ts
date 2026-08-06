@@ -1,10 +1,5 @@
-type ActivityStatus =
-  | "AVAILABLE"
-  | "WORKING"
-  | "BREAK"
-  | "LUNCH"
-  | "MEETING"
-  | "OFFLINE";
+import type { ActivityStatus } from "@prisma/client";
+import { STATUS_META } from "../activities/activity-status";
 
 export type ReportActivity = {
   status: ActivityStatus;
@@ -35,14 +30,7 @@ const COLORS = {
   white: "#FFFFFF",
 };
 
-const STATUS: Record<ActivityStatus, { label: string; color: string; pale: string }> = {
-  AVAILABLE: { label: "Disponible", color: "#208454", pale: "#E5F6ED" },
-  WORKING: { label: "Trabajando", color: "#4C4DC9", pale: "#ECECFF" },
-  BREAK: { label: "Descanso", color: "#A66A00", pale: "#FFF2D8" },
-  LUNCH: { label: "Almuerzo", color: "#8C4EA3", pale: "#F5E9FA" },
-  MEETING: { label: "Reunion", color: "#16738B", pale: "#E2F5F8" },
-  OFFLINE: { label: "Ausente", color: "#666A7D", pale: "#ECEEF2" },
-};
+const STATUS = STATUS_META;
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("es-AR", {
@@ -175,7 +163,12 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   doc.fillColor(COLORS.ink).font("Helvetica-Bold").fontSize(14);
   doc.text("Detalle de actividades", margin, y);
   doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8);
-  doc.text("Los estados abiertos se calculan hasta el momento de generacion del reporte.", margin, y + 19);
+  doc.text(
+    "Los estados abiertos se calculan hasta la generacion del reporte. No se incluyen los periodos Desconectado.",
+    margin,
+    y + 19,
+    { width: contentWidth }
+  );
   y += 42;
   drawTableHeader();
 

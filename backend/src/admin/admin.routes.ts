@@ -6,6 +6,7 @@ import { renderActivityReport } from "../reports/activity-report";
 import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
+import { visibleHistoryWhere } from "../activities/activity-status";
 
 
 const router = Router();
@@ -131,9 +132,10 @@ router.get("/history", async (req, res) => {
     : undefined;
 
   const rows = await prisma.activityHistory.findMany({
-    where: Number.isFinite(employeeId)
-      ? { employeeId }
-      : undefined,
+    where: {
+      ...visibleHistoryWhere,
+      ...(Number.isFinite(employeeId) ? { employeeId } : {}),
+    },
     include: {
       employee: {
         select: {
@@ -317,7 +319,7 @@ router.delete("/employees/:id", async (req, res) => {
 router.get("/report.pdf", async (req, res) => {
   const employeeId = req.query.employeeId;
 
-  const where: any = {};
+  const where: any = { ...visibleHistoryWhere };
 
   if (employeeId && employeeId !== "all") {
     where.employeeId = Number(employeeId);
@@ -397,8 +399,14 @@ if (from && to) {
     periodLabel = `${new Date(from).toLocaleDateString("es-AR")} al ${new Date(to).toLocaleDateString("es-AR")}`;
   }
 
+  // Se busca el empleado aparte y no en rows[0]: si en el periodo solo tuvo
+  // registros ocultos (Desconectado), rows queda vacio y el subtitulo caeria
+  // a "Resumen general del equipo" aunque haya un empleado filtrado.
   const selectedEmployee = employeeId && employeeId !== "all"
-    ? rows[0]?.employee
+    ? await prisma.employee.findUnique({
+        where: { id: Number(employeeId) },
+        select: { employeeNumber: true, name: true },
+      })
     : undefined;
 
   renderActivityReport(doc, {

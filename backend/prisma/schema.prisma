@@ -19,6 +19,13 @@ enum ActivityStatus {
   LUNCH
   MEETING
   OFFLINE
+  DISCONNECTED
+}
+
+enum TaskState {
+  PENDING
+  IN_PROGRESS
+  DONE
 }
 
 enum PasswordChangeRequestStatus {
@@ -41,6 +48,10 @@ model Employee {
   updatedAt      DateTime         @updatedAt
   activities     ActivityHistory[]
   passwordChangeRequests PasswordChangeRequest[]
+
+  createdTasks       Task[]            @relation("TaskCreator")
+  taskParticipations TaskParticipant[]
+  taskComments       TaskComment[]
 }
 
 model PasswordChangeRequest {
@@ -67,4 +78,46 @@ model ActivityHistory {
 
   @@index([employeeId, startedAt])
   @@index([startedAt])
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String
+  state       TaskState @default(PENDING)
+  startsAt    DateTime
+  endsAt      DateTime
+  createdById Int?
+  createdBy   Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  participants TaskParticipant[]
+  comments     TaskComment[]
+
+  @@index([state, startsAt])
+  @@index([startsAt])
+}
+
+model TaskParticipant {
+  taskId     Int
+  employeeId Int
+  addedAt    DateTime @default(now())
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, employeeId])
+  @@index([employeeId])
+}
+
+model TaskComment {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    Employee @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }

@@ -1,10 +1,8 @@
 import { ActivityStatus } from "@prisma/client";
 import { z } from "zod";
+import { statusesRequiringDetail } from "./activity-status";
 
-export const statusesRequiringDetail = new Set<ActivityStatus>([
-  ActivityStatus.WORKING,
-  ActivityStatus.OFFLINE,
-]);
+export { statusesRequiringDetail };
 
 export const changeStatusSchema = z
   .object({
