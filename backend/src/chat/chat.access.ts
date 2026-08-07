@@ -1,6 +1,7 @@
 import type { ConversationKind } from "@prisma/client";
 import prisma from "../prisma/client";
 import type { AuthPayload } from "../auth/auth.token";
+import { isStaff } from "../auth/roles";
 
 export type ConversationAcl = {
   id: number;
@@ -52,10 +53,10 @@ export async function conversationAccess(
       break;
 
     case "DIRECT":
-      // A PROPOSITO sin `|| auth.role === "ADMIN"`. Un mensaje directo es
-      // privado entre dos personas y el admin no es una de ellas. Si alguna vez
-      // hiciera falta auditoria, que sea una funcion explicita y visible para
-      // el usuario, no una condicion colada en esta linea.
+      // A PROPOSITO sin excepcion para ADMIN ni SUPERVISOR. Un mensaje directo
+      // es privado entre dos personas y ninguno de los dos roles es una de
+      // ellas. Si alguna vez hiciera falta auditoria, que sea una funcion
+      // explicita y visible para el usuario, no una condicion colada aca.
       canRead = isMember;
       break;
 
@@ -63,7 +64,7 @@ export async function conversationAccess(
       // Se mira ConversationMember y no TaskParticipant porque TaskParticipant
       // es Cascade y desaparece con la tarea; el historial tiene que seguir
       // siendo legible despues de que la borren.
-      canRead = isMember || auth.role === "ADMIN";
+      canRead = isMember || isStaff(auth.role);
       break;
   }
 

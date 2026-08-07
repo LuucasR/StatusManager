@@ -36,10 +36,12 @@ import {
   type TaskState,
 } from "../components/tasks/types";
 import type { AppOutletContext } from "../layouts/AppLayout";
+import { isStaff } from "../components/roles";
 
 export default function TasksPage() {
   const { me } = useOutletContext<AppOutletContext>();
-  const isAdmin = me?.role === "ADMIN";
+  // Gestionar tareas es de staff (admin o supervisor), no solo del admin.
+  const isAdmin = isStaff(me?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tasks, setTasks] = useState<Task[]>([]);

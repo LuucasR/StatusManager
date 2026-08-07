@@ -1,23 +1,40 @@
 import { Router } from "express";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
-import { requireAdmin, requireAuth } from "../auth/auth.middleware";
+import { requireAdmin, requireAuth, requireStaff } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
 import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { visibleHistoryWhere } from "../activities/activity-status";
+import { z } from "zod";
+import { Role } from "@prisma/client";
+
+
+const createEmployeeSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  email: z.string().trim().email(),
+  password: z.string().min(8).max(72),
+  role: z.nativeEnum(Role),
+});
+
+const changeRoleSchema = z.object({
+  role: z.nativeEnum(Role),
+});
 
 
 const router = Router();
 
+/**
+ * requireAuth global, pero el nivel se decide POR RUTA: el supervisor ve al
+ * equipo y sus reportes, y el admin es el unico que toca cuentas, roles y
+ * estados ajenos. Antes todo el router era requireAdmin.
+ */
+router.use(requireAuth);
 
 
-router.use(requireAuth, requireAdmin);
 
-
-
-router.get("/employees", async (_req, res) => {
+router.get("/employees", requireStaff, async (_req, res) => {
   const employees = await prisma.employee.findMany({
     select: {
       id: true,
@@ -59,7 +76,7 @@ router.get("/employees", async (_req, res) => {
   );
 });
 
-router.get("/password-change-requests", async (_req, res) => {
+router.get("/password-change-requests", requireAdmin, async (_req, res) => {
   const requests = await prisma.passwordChangeRequest.findMany({
     where: { status: "PENDING" },
     select: {
@@ -81,7 +98,7 @@ router.get("/password-change-requests", async (_req, res) => {
   res.json(requests);
 });
 
-router.patch("/password-change-requests/:id", async (req, res) => {
+router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const decision = req.body?.decision;
 
@@ -126,7 +143,7 @@ router.patch("/password-change-requests/:id", async (req, res) => {
 
 
 
-router.get("/history", async (req, res) => {
+router.get("/history", requireStaff, async (req, res) => {
   const employeeId = req.query.employeeId
     ? Number(req.query.employeeId)
     : undefined;
@@ -153,7 +170,105 @@ router.get("/history", async (req, res) => {
   res.json(rows);
 });
 
-router.patch("/employees/:id/approve", async (req, res) => {
+/**
+ * Alta de cuenta hecha por el admin. A diferencia de POST /auth/register, la
+ * cuenta nace ACTIVA (no hay nada que aprobar: la creo el admin) y con el rol
+ * que él elija. El legajo es automático, el siguiente disponible.
+ */
+router.post("/employees", requireAdmin, async (req, res) => {
+  const parsed = createEmployeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      message: parsed.error.issues[0]?.message ?? "Revisá los datos ingresados",
+    });
+  }
+
+  const email = parsed.data.email.toLowerCase();
+  const taken = await prisma.employee.findUnique({ where: { email }, select: { id: true } });
+  if (taken) {
+    return res.status(409).json({ message: "Ya existe una cuenta con ese email" });
+  }
+
+  try {
+    const employee = await prisma.$transaction(async (tx) => {
+      const last = await tx.employee.findFirst({
+        orderBy: { employeeNumber: "desc" },
+        select: { employeeNumber: true },
+      });
+      return tx.employee.create({
+        data: {
+          employeeNumber: (last?.employeeNumber ?? 999) + 1,
+          name: parsed.data.name,
+          email,
+          password: await hashPassword(parsed.data.password),
+          role: parsed.data.role,
+          active: true,
+        },
+        select: {
+          id: true,
+          employeeNumber: true,
+          name: true,
+          email: true,
+          role: true,
+          active: true,
+        },
+      });
+    });
+
+    res.status(201).json(employee);
+  } catch {
+    // Carrera con otra alta simultánea sobre el mismo email o legajo.
+    res.status(409).json({ message: "No se pudo crear la cuenta: datos duplicados" });
+  }
+});
+
+/** Cambio de rol de una cuenta existente. */
+router.patch("/employees/:id/role", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: "Empleado inválido" });
+  }
+
+  const parsed = changeRoleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Rol inválido" });
+  }
+
+  // Cambiarse el rol a uno mismo es la forma más rápida de quedarse afuera:
+  // el token vigente sigue diciendo ADMIN, pero el siguiente login ya no.
+  if (id === req.auth!.employeeId) {
+    return res.status(400).json({ message: "No podés cambiar tu propio rol" });
+  }
+
+  const employee = await prisma.employee.findUnique({
+    where: { id },
+    select: { id: true, role: true },
+  });
+  if (!employee) {
+    return res.status(404).json({ message: "Empleado no encontrado" });
+  }
+
+  // Nadie puede dejar el sistema sin administradores: sin admin no hay forma de
+  // volver a crear uno desde la app.
+  if (employee.role === Role.ADMIN && parsed.data.role !== Role.ADMIN) {
+    const admins = await prisma.employee.count({ where: { role: Role.ADMIN, active: true } });
+    if (admins <= 1) {
+      return res
+        .status(400)
+        .json({ message: "No podés quitar el último administrador activo" });
+    }
+  }
+
+  const updated = await prisma.employee.update({
+    where: { id },
+    data: { role: parsed.data.role },
+    select: { id: true, employeeNumber: true, name: true, email: true, role: true, active: true },
+  });
+
+  res.json(updated);
+});
+
+router.patch("/employees/:id/approve", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -181,7 +296,7 @@ router.patch("/employees/:id/approve", async (req, res) => {
   res.json(employee);
 });
 
-router.post("/employees/:id/request-confirmation", async (req, res) => {
+router.post("/employees/:id/request-confirmation", requireStaff, async (req, res) => {
 
   const employeeId = Number(req.params.id);
 
@@ -221,7 +336,7 @@ router.post("/employees/:id/request-confirmation", async (req, res) => {
 
 });
 
-router.post("/employees/:id/status", async (req, res) => {
+router.post("/employees/:id/status", requireAdmin, async (req, res) => {
   const employeeId = Number(req.params.id);
 
   if (!Number.isInteger(employeeId)) {
@@ -276,7 +391,7 @@ router.post("/employees/:id/status", async (req, res) => {
 });
 
 
-router.delete("/employees/:id", async (req, res) => {
+router.delete("/employees/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -293,13 +408,24 @@ router.delete("/employees/:id", async (req, res) => {
 
   const employee = await prisma.employee.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, role: true },
   });
 
   if (!employee) {
     return res.status(404).json({
       message: "Empleado no encontrado",
     });
+  }
+
+  // Misma razón que en el cambio de rol: sin admins no hay forma de recuperar
+  // la administración desde la app.
+  if (employee.role === Role.ADMIN) {
+    const admins = await prisma.employee.count({ where: { role: Role.ADMIN, active: true } });
+    if (admins <= 1) {
+      return res
+        .status(400)
+        .json({ message: "No podés eliminar el último administrador activo" });
+    }
   }
 
   await prisma.$transaction(async (tx) => {
@@ -316,7 +442,7 @@ router.delete("/employees/:id", async (req, res) => {
   });
 });
 
-router.get("/report.pdf", async (req, res) => {
+router.get("/report.pdf", requireStaff, async (req, res) => {
   const employeeId = req.query.employeeId;
 
   const where: any = { ...visibleHistoryWhere };

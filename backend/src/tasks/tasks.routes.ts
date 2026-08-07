@@ -3,7 +3,8 @@ import { Prisma, TaskState } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { renderTaskReport } from "../reports/task-report";
-import { requireAdmin, requireAuth } from "../auth/auth.middleware";
+import { requireAuth, requireStaff } from "../auth/auth.middleware";
+import { isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
 import { emitTaskChanged } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
@@ -37,7 +38,7 @@ function parseId(value: unknown) {
  * resolver con requireAdmin a nivel router porque la regla depende de la fila.
  */
 async function isTaskMember(auth: AuthPayload, taskId: number) {
-  if (auth.role === "ADMIN") return true;
+  if (isStaff(auth.role)) return true;
   const link = await prisma.taskParticipant.findUnique({
     where: { taskId_employeeId: { taskId, employeeId: auth.employeeId } },
     select: { taskId: true },
@@ -174,7 +175,7 @@ router.get("/:id", async (req, res) => {
   res.json(toTaskDto(task));
 });
 
-router.post("/", requireAdmin, async (req, res) => {
+router.post("/", requireStaff, async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
@@ -225,7 +226,7 @@ router.post("/", requireAdmin, async (req, res) => {
   res.status(201).json(toTaskDto(task));
 });
 
-router.patch("/:id", requireAdmin, async (req, res) => {
+router.patch("/:id", requireStaff, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Identificador inválido" });
 
@@ -429,7 +430,7 @@ router.patch("/:id/pin", async (req, res) => {
   res.json(toTaskDto(task));
 });
 
-router.delete("/:id", requireAdmin, async (req, res) => {
+router.delete("/:id", requireStaff, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Identificador inválido" });
 
@@ -540,7 +541,7 @@ router.delete("/:id/comments/:commentId", async (req, res) => {
   }
 
   const isAuthor = message.authorId === req.auth!.employeeId;
-  if (!isAuthor && req.auth!.role !== "ADMIN") {
+  if (!isAuthor && !isStaff(req.auth!.role)) {
     return res
       .status(403)
       .json({ message: "Solo el autor o un administrador pueden borrar el comentario" });

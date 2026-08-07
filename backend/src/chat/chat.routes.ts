@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
+import { isStaff } from "../auth/roles";
 import { emitToEmployees } from "../realtime";
 import { CONVERSATION_ACL_SELECT, conversationAccess } from "./chat.access";
 import { MESSAGE_SELECT, toMessageDto } from "./chat.dto";
@@ -271,7 +272,7 @@ router.delete("/conversations/:id/messages/:messageId", async (req, res) => {
     return res.status(404).json({ message: "Mensaje no encontrado" });
   }
 
-  if (message.authorId !== req.auth!.employeeId && req.auth!.role !== "ADMIN") {
+  if (message.authorId !== req.auth!.employeeId && !isStaff(req.auth!.role)) {
     return res
       .status(403)
       .json({ message: "Solo el autor o un administrador pueden borrar el mensaje" });

@@ -14,7 +14,7 @@ export type SessionEmployee = {
   employeeNumber: number;
   name: string;
   email?: string;
-  role?: "EMPLOYEE" | "ADMIN";
+  role?: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
 };
 
 /** Contexto que reciben las páginas anidadas vía useOutletContext(). */

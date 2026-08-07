@@ -10,6 +10,9 @@ datasource db {
 enum Role {
   EMPLOYEE
   ADMIN
+  // Va ultimo: ALTER TYPE ... ADD VALUE appendea al final del orden fisico en
+  // Postgres, y ponerlo en el medio haria divergir el orden logico del fisico.
+  SUPERVISOR
 }
 
 enum ActivityStatus {

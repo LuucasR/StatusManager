@@ -1,7 +1,9 @@
 import {
   AdminPanelSettingsRounded,
+  BadgeRounded,
   DeleteForeverRounded,
   DownloadRounded,
+  PersonAddAlt1Rounded,
   UpdateRounded,
   VisibilityRounded,
 } from "@mui/icons-material";
@@ -35,6 +37,9 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, API_URL } from "../api";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
+import { ROLE_META, isAdminRole, isStaff, type Role } from "../components/roles";
+import NewAccountDialog from "../components/admin/NewAccountDialog";
+import ChangeRoleDialog from "../components/admin/ChangeRoleDialog";
 
 type Status =
   | "AVAILABLE"
@@ -50,7 +55,7 @@ type Employee = {
   employeeNumber: number;
   name: string;
   email?: string;
-  role?: "EMPLOYEE" | "ADMIN";
+  role?: Role;
   currentStatus: Status;
   statusSince: string;
   detail: string;
@@ -159,7 +164,14 @@ const [reportTo, setReportTo] = useState("");
 const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
 const [pdfPreviewName, setPdfPreviewName] = useState("");
 const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+const [newAccountOpen, setNewAccountOpen] = useState(false);
+const [roleTarget, setRoleTarget] = useState<Employee | null>(null);
+const [notice, setNotice] = useState("");
 
+  // Dos niveles: staff (admin o supervisor) ve al equipo y sus reportes; admin
+  // es el unico que toca cuentas, roles y estados ajenos.
+  const staff = isStaff(me?.role);
+  const admin = isAdminRole(me?.role);
 
   const load = useCallback(async () => {
     const current = await api<Employee>("/activities/me");
@@ -172,13 +184,13 @@ const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
 
     setEmployees(
       await api<Employee[]>(
-        current.role === "ADMIN"
+        isStaff(current.role)
           ? "/admin/employees"
           : "/activities/team"
       )
     );
 
-    if (current.role === "ADMIN") {
+    if (isAdminRole(current.role)) {
       setPasswordRequests(
         await api<PasswordChangeRequest[]>(
           "/admin/password-change-requests"
@@ -420,6 +432,12 @@ useEffect(() => {
         </Alert>
       )}
 
+      {notice && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setNotice("")}>
+          {notice}
+        </Alert>
+      )}
+
       <Box className="page-heading">
         <Box>
           <Typography className="eyebrow">
@@ -485,7 +503,7 @@ useEffect(() => {
         </Paper>
       </Box>
 
-      {me?.role === "ADMIN" && (
+      {admin && (
         <>
           <Box className="section-title">
             <Box>
@@ -579,7 +597,7 @@ useEffect(() => {
           <Box className="section-title">
             <Box>
               <Typography className="eyebrow">
-                {me?.role === "ADMIN" ? "PANEL ADMINISTRADOR" : "EQUIPO"}
+                {admin ? "PANEL ADMINISTRADOR" : staff ? "PANEL SUPERVISOR" : "EQUIPO"}
               </Typography>
 
               <Typography variant="h4">
@@ -587,14 +605,25 @@ useEffect(() => {
               </Typography>
             </Box>
 
-            {me?.role === "ADMIN" && (
-              <Button
-                startIcon={<VisibilityRounded />}
-                onClick={() => setReportDialog(true)}
-              >
-                Ver reporte PDF
-              </Button>
-            )}
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+              {staff && (
+                <Button
+                  startIcon={<VisibilityRounded />}
+                  onClick={() => setReportDialog(true)}
+                >
+                  Ver reporte PDF
+                </Button>
+              )}
+              {admin && (
+                <Button
+                  variant="contained"
+                  startIcon={<PersonAddAlt1Rounded />}
+                  onClick={() => setNewAccountOpen(true)}
+                >
+                  Nueva cuenta
+                </Button>
+              )}
+            </Stack>
           </Box>
 
           <Box className="employee-grid">
@@ -616,12 +645,24 @@ useEffect(() => {
   {employee.name}
 </Typography>
 
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                    >
-                      #{employee.employeeNumber}
-                    </Typography>
+                    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption" color="text.secondary">
+                        #{employee.employeeNumber}
+                      </Typography>
+                      {employee.role && employee.role !== "EMPLOYEE" && (
+                        <Chip
+                          size="small"
+                          label={ROLE_META[employee.role].label}
+                          sx={{
+                            height: 18,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            bgcolor: ROLE_META[employee.role].soft,
+                            color: ROLE_META[employee.role].color,
+                          }}
+                        />
+                      )}
+                    </Stack>
                   </Box>
 
                   {employee.active ? (
@@ -657,16 +698,18 @@ useEffect(() => {
       {elapsed(employee.statusSince, now)}
     </Typography>
 
-    {me?.role === "ADMIN" && (
+    {staff && (
+      <Button
+        sx={{ mt: 2 }}
+        fullWidth
+        variant="outlined"
+        onClick={() => requestConfirmation(employee.id)}
+      >
+        Solicitar confirmación
+      </Button>
+    )}
+    {admin && (
       <>
-    <Button
-      sx={{ mt: 2 }}
-      fullWidth
-      variant="outlined"
-      onClick={() => requestConfirmation(employee.id)}
-    >
-      Solicitar confirmación
-    </Button>
     <Button
   sx={{ mt: 1 }}
   fullWidth
@@ -679,16 +722,27 @@ useEffect(() => {
   Cambiar estado
 </Button>
         {employee.id !== me?.id && (
-          <Button
-            sx={{ mt: 1 }}
-            fullWidth
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteForeverRounded />}
-            onClick={() => deleteAccount(employee)}
-          >
-            Eliminar cuenta
-          </Button>
+          <>
+            <Button
+              sx={{ mt: 1 }}
+              fullWidth
+              variant="outlined"
+              startIcon={<BadgeRounded />}
+              onClick={() => setRoleTarget(employee)}
+            >
+              Cambiar rol
+            </Button>
+            <Button
+              sx={{ mt: 1 }}
+              fullWidth
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteForeverRounded />}
+              onClick={() => deleteAccount(employee)}
+            >
+              Eliminar cuenta
+            </Button>
+          </>
         )}
       </>
     )}
@@ -1045,6 +1099,24 @@ useEffect(() => {
     </Button>
   </DialogActions>
 </Dialog>
+
+<NewAccountDialog
+  open={newAccountOpen}
+  onClose={() => setNewAccountOpen(false)}
+  onCreated={(message) => {
+    setNotice(message);
+    void load();
+  }}
+/>
+
+<ChangeRoleDialog
+  employee={roleTarget}
+  onClose={() => setRoleTarget(null)}
+  onChanged={(message) => {
+    setNotice(message);
+    void load();
+  }}
+/>
   </Box>
 );
 }

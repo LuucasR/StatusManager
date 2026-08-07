@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { verifyToken, type AuthPayload } from "./auth.token";
+import { isAdmin, isStaff } from "./roles";
 
 declare global {
   namespace Express {
@@ -19,6 +20,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.auth?.role !== "ADMIN") return res.status(403).json({ message: "Acceso exclusivo para administradores" });
+  if (!isAdmin(req.auth?.role)) return res.status(403).json({ message: "Acceso exclusivo para administradores" });
+  next();
+}
+
+/** Admin o supervisor: gestion de tareas y visibilidad del equipo. */
+export function requireStaff(req: Request, res: Response, next: NextFunction) {
+  if (!isStaff(req.auth?.role)) {
+    return res
+      .status(403)
+      .json({ message: "Acceso exclusivo para supervisores y administradores" });
+  }
   next();
 }

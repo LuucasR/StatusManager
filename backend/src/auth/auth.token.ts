@@ -1,6 +1,10 @@
 import jwt from "jsonwebtoken";
 
-export type AuthPayload = { employeeId: number; role: "EMPLOYEE" | "ADMIN" };
+import type { Role } from "@prisma/client";
+
+// El rol sale del enum de Prisma y no de una union escrita a mano: agregar un
+// rol nuevo al schema obliga a revisar los chequeos, en vez de pasar en silencio.
+export type AuthPayload = { employeeId: number; role: Role };
 
 function secret() {
   const value = process.env.JWT_SECRET;
