@@ -10,8 +10,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import { io } from "socket.io-client";
 import { API_URL, api } from "../api";
+import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 import PdfPreviewDialog from "../components/pdf/PdfPreviewDialog";
 import { usePdfPreview } from "../components/pdf/usePdfPreview";
 import TaskBoard from "../components/tasks/TaskBoard";
@@ -19,7 +19,6 @@ import TaskDetailDialog from "../components/tasks/TaskDetailDialog";
 import TaskFormDialog from "../components/tasks/TaskFormDialog";
 import TaskReportDialog from "../components/tasks/TaskReportDialog";
 import {
-  addComment,
   createTask,
   deleteTask,
   getTask,
@@ -62,15 +61,9 @@ export default function TasksPage() {
   const detailIdRef = useRef<number | null>(null);
   detailIdRef.current = detailId;
 
+  // El 401 lo maneja api() de forma centralizada; acá solo se muestra el error.
   const handleError = useCallback((err: unknown) => {
-    const message = (err as Error).message;
-    // No hay interceptor de 401 en api(): sin esto la página queda trabada.
-    if (/Sesión (inválida|requerida)/i.test(message)) {
-      localStorage.removeItem("token");
-      window.location.replace("/");
-      return;
-    }
-    setError(message);
+    setError((err as Error).message);
   }, []);
 
   const load = useCallback(async () => {
@@ -121,20 +114,18 @@ export default function TasksPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const socket = io(API_URL, { auth: { token: localStorage.getItem("token") } });
+  useSocketEvent<{ taskId?: number }>("task:changed", (payload) => {
+    void load();
+    if (payload?.taskId && detailIdRef.current === payload.taskId) {
+      void reloadDetail(payload.taskId);
+    }
+  });
 
-    socket.on("task:changed", (payload: { taskId?: number }) => {
-      void load();
-      if (payload?.taskId && detailIdRef.current === payload.taskId) {
-        void reloadDetail(payload.taskId);
-      }
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [load, reloadDetail]);
+  // El socket no guarda lo emitido mientras estuvo caído: al volver, re-sincronizar.
+  useOnReconnect(() => {
+    void load();
+    if (detailIdRef.current) void reloadDetail(detailIdRef.current);
+  });
 
   /**
    * Deep link desde el reporte: una tarea archivada ya no está en la pizarra,
@@ -201,13 +192,6 @@ export default function TasksPage() {
     } catch (err) {
       handleError(err);
     }
-  }
-
-  async function handleComment(body: string) {
-    if (!detailId) return;
-    await addComment(detailId, body);
-    await reloadDetail(detailId);
-    await load();
   }
 
   async function handlePreviewReport(params: URLSearchParams) {
@@ -304,11 +288,11 @@ export default function TasksPage() {
         loading={detailLoading}
         canComment={canComment}
         canPin={canPinDetail}
+        me={me ? { id: me.id, name: me.name } : null}
         onClose={() => {
           setDetailId(null);
           setDetail(null);
         }}
-        onComment={handleComment}
         onPin={handlePin}
       />
 

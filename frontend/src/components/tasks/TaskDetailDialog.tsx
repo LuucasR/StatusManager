@@ -1,4 +1,4 @@
-import { PushPinOutlined, PushPinRounded, SendRounded } from "@mui/icons-material";
+import { PushPinOutlined, PushPinRounded } from "@mui/icons-material";
 import {
   Alert,
   Avatar,
@@ -12,15 +12,15 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  Paper,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { useState } from "react";
-import { formatCommentDate, formatDuration, formatRange } from "./datetime";
+import MessageComposer from "../chat/MessageComposer";
+import MessageThread from "../chat/MessageThread";
+import { useConversation } from "../chat/useConversation";
+import { formatDuration, formatRange } from "./datetime";
 import { STATE_META, participantColor, type Task } from "./types";
 
 type Props = {
@@ -30,8 +30,8 @@ type Props = {
   canComment: boolean;
   /** Fijar usa el mismo permiso que mover: admin o participante. */
   canPin: boolean;
+  me: { id: number; name: string } | null;
   onClose: () => void;
-  onComment: (body: string) => Promise<void>;
   onPin: (task: Task, pinned: boolean) => void;
 };
 
@@ -41,27 +41,23 @@ export default function TaskDetailDialog({
   loading,
   canComment,
   canPin,
+  me,
   onClose,
-  onComment,
   onPin,
 }: Props) {
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
+  // El hilo sale del mismo store que la ventana flotante: lo que se escribe en
+  // un lado aparece en el otro sin round-trip.
+  const thread = useConversation(task?.conversationId ?? null);
 
-  async function submit() {
-    if (!body.trim()) return;
-    setSending(true);
-    setError("");
-    try {
-      await onComment(body.trim());
-      setBody("");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSending(false);
-    }
-  }
+  const blockedReason = !task
+    ? null
+    : task.chatClosed
+      ? task.state === "DONE"
+        ? "El chat se cerró cuando la tarea pasó a Terminada. Movela a otro estado para volver a escribir."
+        : "La tarea fue eliminada. El historial queda como solo lectura."
+      : !canComment
+        ? "Solo los participantes pueden escribir en esta tarea."
+        : null;
 
   return (
     <Dialog
@@ -192,73 +188,40 @@ export default function TaskDetailDialog({
 
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Comentarios ({task.comments?.length ?? 0})
+                  Conversación ({task.commentsCount})
                 </Typography>
 
-                <Stack spacing={1.5} sx={{ mt: 1 }}>
-                  {(task.comments?.length ?? 0) === 0 && (
-                    <Typography variant="body2" color="text.disabled">
-                      Todavía no hay comentarios.
-                    </Typography>
-                  )}
-
-                  {task.comments?.map((comment) => (
-                    <Paper key={comment.id} elevation={0} className="task-comment">
-                      <Stack direction="row" spacing={1.5}>
-                        <Avatar
-                          sx={{
-                            width: 30,
-                            height: 30,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            bgcolor: participantColor(comment.author.id),
-                            color: "#fff",
-                          }}
-                        >
-                          {comment.author.name.slice(0, 2).toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ flex: 1 }}>
-                          <Stack direction="row" spacing={1} sx={{ alignItems: "baseline" }}>
-                            <Typography variant="subtitle2">{comment.author.name}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {formatCommentDate(comment.createdAt)}
-                            </Typography>
-                          </Stack>
-                          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                            {comment.body}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
+                <Box
+                  sx={{
+                    mt: 1,
+                    border: "1px solid #e8e9f1",
+                    borderRadius: "14px",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <MessageThread
+                    messages={thread.messages}
+                    meId={me?.id}
+                    hasMore={thread.hasMore}
+                    loading={thread.loading}
+                    loadingMore={thread.loadingMore}
+                    onLoadMore={thread.loadMore}
+                    height={280}
+                  />
+                  <MessageComposer
+                    blockedReason={blockedReason}
+                    disabled={!me}
+                    onSend={(body) => thread.send(body, { id: me!.id, name: me!.name })}
+                  />
+                </Box>
               </Box>
 
-              {error && <Alert severity="error">{error}</Alert>}
-
-              {canComment ? (
-                <Stack direction="row" spacing={1} sx={{ alignItems: "flex-end" }}>
-                  <TextField
-                    label="Agregar un comentario"
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    multiline
-                    minRows={2}
-                  />
-                  <Button
-                    variant="contained"
-                    startIcon={<SendRounded />}
-                    onClick={submit}
-                    disabled={sending || !body.trim()}
-                    sx={{ whiteSpace: "nowrap" }}
-                  >
-                    Enviar
-                  </Button>
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.disabled">
-                  Solo los participantes pueden comentar esta tarea.
-                </Typography>
+              {thread.error && (
+                <Alert severity="error" onClose={thread.clearError}>
+                  {thread.error}
+                </Alert>
               )}
             </Stack>
           </DialogContent>

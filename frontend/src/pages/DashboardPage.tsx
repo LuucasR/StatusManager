@@ -33,8 +33,8 @@ import {
 } from "@mui/material";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
 import { api, API_URL } from "../api";
+import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 
 type Status =
   | "AVAILABLE"
@@ -197,32 +197,20 @@ const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
     return () => clearInterval(timer);
   }, [load]);
 
-useEffect(() => {
-  const socket = io(API_URL, {
-    auth: {
-      token: localStorage.getItem("token"),
-    },
-  });
+// Socket compartido del layout: antes esta página abría el suyo propio y los
+// listeners morían al navegar a /tareas.
+useSocketEvent("status:changed", () => load());
 
-  socket.on("status:changed", () => load());
+useSocketEvent("confirmation:request", () => {
+  setConfirmationDialog(true);
+  setConfirmationCountdown(120);
+});
 
-  socket.on("confirmation:request", () => {
-    setConfirmationDialog(true);
-    setConfirmationCountdown(120);
-  });
+useSocketEvent("confirmation:confirmed", () => load());
 
-  socket.on("confirmation:confirmed", () => {
-    load();
-  });
+useSocketEvent("confirmation:timeout", () => load());
 
-  socket.on("confirmation:timeout", () => {
-    load();
-  });
-
-  return () => {
-    socket.disconnect();
-  };
-}, [load]);
+useOnReconnect(() => load());
 
   const duration = useMemo(
     () => (me ? elapsed(me.statusSince, now) : "00:00:00"),

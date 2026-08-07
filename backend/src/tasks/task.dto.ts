@@ -5,27 +5,45 @@ const EMPLOYEE_SUMMARY = {
   select: { id: true, employeeNumber: true, name: true },
 } satisfies Prisma.EmployeeDefaultArgs;
 
-/** Forma que devuelve el listado del tablero: sin comentarios, solo el conteo. */
+/**
+ * Forma que devuelve el listado del tablero. El hilo de la tarea vive en
+ * Conversation/Message desde la fusion con el chat, pero el DTO sigue
+ * exponiendo `commentsCount` y `comments` con la misma forma de antes para no
+ * romper al frontend.
+ */
 export const TASK_INCLUDE = {
   createdBy: EMPLOYEE_SUMMARY,
   participants: {
     select: { employee: EMPLOYEE_SUMMARY },
     orderBy: { addedAt: "asc" },
   },
-  _count: { select: { comments: true } },
+  conversation: {
+    select: { id: true, closed: true, _count: { select: { messages: true } } },
+  },
 } satisfies Prisma.TaskInclude;
 
-/** Forma del detalle: agrega el hilo completo de comentarios. */
+/** Forma del detalle: agrega el hilo de mensajes. */
 export const TASK_DETAIL_INCLUDE = {
   ...TASK_INCLUDE,
-  comments: {
+  conversation: {
     select: {
       id: true,
-      body: true,
-      createdAt: true,
-      author: EMPLOYEE_SUMMARY,
+      closed: true,
+      _count: { select: { messages: true } },
+      messages: {
+        // Se corta a 100: lo anterior se pagina desde la ventana de chat, y
+        // commentsCount sigue mostrando el total real.
+        take: 100,
+        orderBy: { id: "desc" },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          authorName: true,
+          author: EMPLOYEE_SUMMARY,
+        },
+      },
     },
-    orderBy: { createdAt: "asc" },
   },
 } satisfies Prisma.TaskInclude;
 
@@ -50,14 +68,22 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     updatedAt: task.updatedAt,
     createdBy: task.createdBy,
     participants: task.participants.map((link) => link.employee),
-    commentsCount: task._count.comments,
+    conversationId: task.conversation?.id ?? null,
+    chatClosed: task.conversation?.closed ?? false,
+    commentsCount: task.conversation?._count.messages ?? 0,
     comments:
-      "comments" in task
-        ? task.comments.map((comment) => ({
-            id: comment.id,
-            body: comment.body,
-            createdAt: comment.createdAt,
-            author: comment.author,
+      task.conversation && "messages" in task.conversation
+        ? [...task.conversation.messages].reverse().map((message) => ({
+            id: message.id,
+            body: message.body,
+            createdAt: message.createdAt,
+            // El autor puede haber sido eliminado (authorId es SetNull); el
+            // nombre sale del snapshot para que el historial siga siendo legible.
+            author: message.author ?? {
+              id: 0,
+              employeeNumber: 0,
+              name: message.authorName,
+            },
           }))
         : undefined,
   };

@@ -15,6 +15,14 @@ import {
   updateTaskSchema,
 } from "./task-validation";
 import { TASK_STATE_META, taskArchiveCutoff, visibleTasksWhere } from "./task-state";
+import {
+  ensureTaskConversation,
+  postMessage,
+  syncTaskConversationMembers,
+  syncTaskConversationState,
+  syncTaskConversationTitle,
+} from "../chat/chat.service";
+import { notify } from "../notifications/notification.service";
 
 const router = Router();
 router.use(requireAuth);
@@ -180,24 +188,40 @@ router.post("/", requireAdmin, async (req, res) => {
       .json({ message: "Algún participante no existe o está inactivo" });
   }
 
-  const task = await prisma.task.create({
-    data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
-      state: parsed.data.state,
-      startsAt: parsed.data.startsAt,
-      endsAt: parsed.data.endsAt,
-      createdById: req.auth!.employeeId,
-      participants: {
-        create: [...new Set(parsed.data.participantIds)].map((employeeId) => ({
-          employeeId,
-        })),
+  const participantIds = [...new Set(parsed.data.participantIds)];
+
+  // Transaccion porque la conversacion necesita el id de la tarea para su key.
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        title: parsed.data.title,
+        description: parsed.data.description,
+        state: parsed.data.state,
+        startsAt: parsed.data.startsAt,
+        endsAt: parsed.data.endsAt,
+        createdById: req.auth!.employeeId,
+        participants: {
+          create: participantIds.map((employeeId) => ({ employeeId })),
+        },
       },
-    },
-    include: TASK_INCLUDE,
+      select: { id: true, title: true, state: true },
+    });
+
+    await ensureTaskConversation(tx, created, participantIds);
+
+    return tx.task.findUniqueOrThrow({ where: { id: created.id }, include: TASK_INCLUDE });
   });
 
   emitTaskChanged({ type: "created", taskId: task.id });
+  await notify({
+    recipientIds: participantIds,
+    actorId: req.auth!.employeeId,
+    type: "TASK_ADDED",
+    title: task.title,
+    body: `Te agregaron a la tarea "${task.title}"`,
+    taskId: task.id,
+  });
+
   res.status(201).json(toTaskDto(task));
 });
 
@@ -214,7 +238,15 @@ router.patch("/:id", requireAdmin, async (req, res) => {
 
   const current = await prisma.task.findUnique({
     where: { id },
-    select: { startsAt: true, endsAt: true },
+    select: {
+      title: true,
+      state: true,
+      startsAt: true,
+      endsAt: true,
+      // El set previo, para poder calcular altas y bajas en vez de reemplazar
+      // a ciegas.
+      participants: { select: { employeeId: true } },
+    },
   });
   if (!current) return res.status(404).json({ message: "Tarea no encontrada" });
 
@@ -235,6 +267,18 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       .json({ message: "Algún participante no existe o está inactivo" });
   }
 
+  // Diff de participantes. Ademas de permitir notificar solo a los que
+  // cambiaron, arregla un bug visible: el deleteMany+createMany ciego reescribia
+  // el addedAt de todos, y TASK_INCLUDE ordena por addedAt, asi que los avatares
+  // de la tarjeta se reordenaban solos cada vez que el admin tocaba el titulo.
+  const previous = new Set(current.participants.map((p) => p.employeeId));
+  const next = parsed.data.participantIds
+    ? new Set([...new Set(parsed.data.participantIds)])
+    : null;
+  const added = next ? [...next].filter((employeeId) => !previous.has(employeeId)) : [];
+  const removed = next ? [...previous].filter((employeeId) => !next.has(employeeId)) : [];
+  const stateChanged = Boolean(parsed.data.state && parsed.data.state !== current.state);
+
   const task = await prisma.$transaction(async (tx) => {
     await tx.task.update({
       where: { id },
@@ -247,21 +291,61 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       },
     });
 
-    if (parsed.data.participantIds) {
-      await tx.taskParticipant.deleteMany({ where: { taskId: id } });
+    if (removed.length) {
+      await tx.taskParticipant.deleteMany({
+        where: { taskId: id, employeeId: { in: removed } },
+      });
+    }
+    if (added.length) {
       await tx.taskParticipant.createMany({
-        data: [...new Set(parsed.data.participantIds)].map((employeeId) => ({
-          taskId: id,
-          employeeId,
-        })),
+        data: added.map((employeeId) => ({ taskId: id, employeeId })),
         skipDuplicates: true,
       });
+    }
+    await syncTaskConversationMembers(tx, id, added, removed);
+
+    // El titulo se snapshotea antes de que puedan borrar la tarea.
+    if (parsed.data.title && parsed.data.title !== current.title) {
+      await syncTaskConversationTitle(tx, id, parsed.data.title);
+    }
+    // Esta ruta tambien puede cambiar el estado, no solo PATCH /:id/state.
+    if (parsed.data.state) {
+      await syncTaskConversationState(tx, id, parsed.data.state);
     }
 
     return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
   });
 
   emitTaskChanged({ type: "updated", taskId: id });
+
+  const actorId = req.auth!.employeeId;
+  await notify({
+    recipientIds: added,
+    actorId,
+    type: "TASK_ADDED",
+    title: task.title,
+    body: `Te agregaron a la tarea "${task.title}"`,
+    taskId: id,
+  });
+  await notify({
+    recipientIds: removed,
+    actorId,
+    type: "TASK_REMOVED",
+    title: task.title,
+    body: `Te sacaron de la tarea "${task.title}"`,
+    taskId: id,
+  });
+  if (stateChanged) {
+    await notify({
+      recipientIds: task.participants.map((link) => link.employee.id),
+      actorId,
+      type: "TASK_STATE",
+      title: task.title,
+      body: `"${task.title}" pasó a ${TASK_STATE_META[task.state].label}`,
+      taskId: id,
+    });
+  }
+
   res.json(toTaskDto(task));
 });
 
@@ -288,13 +372,24 @@ router.patch("/:id/state", async (req, res) => {
       .json({ message: "Solo los participantes pueden mover esta tarea" });
   }
 
-  const task = await prisma.task.update({
-    where: { id },
-    data: { state: parsed.data.state },
-    include: TASK_INCLUDE,
+  const task = await prisma.$transaction(async (tx) => {
+    await tx.task.update({ where: { id }, data: { state: parsed.data.state } });
+    // El chat de la tarea se cierra en DONE y se reabre al volver atras.
+    await syncTaskConversationState(tx, id, parsed.data.state);
+    // Se relee DESPUES del sync: si no, el DTO devuelve el chatClosed viejo.
+    return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
   });
 
   emitTaskChanged({ type: "moved", taskId: id, state: task.state });
+  await notify({
+    recipientIds: task.participants.map((link) => link.employee.id),
+    actorId: req.auth!.employeeId,
+    type: "TASK_STATE",
+    title: task.title,
+    body: `"${task.title}" pasó a ${TASK_STATE_META[task.state].label}`,
+    taskId: id,
+  });
+
   res.json(toTaskDto(task));
 });
 
@@ -344,12 +439,24 @@ router.delete("/:id", requireAdmin, async (req, res) => {
   });
   if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
 
-  await prisma.task.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    // Cerrar la conversacion ANTES de borrar: el SetNull del FK se encarga del
+    // taskId, pero no del closed, y una conversacion huerfana y escribible
+    // seria un agujero. El titulo ya viene snapshoteado.
+    await tx.conversation.updateMany({ where: { taskId: id }, data: { closed: true } });
+    await tx.task.delete({ where: { id } });
+  });
 
   emitTaskChanged({ type: "deleted", taskId: id });
   res.json({ success: true });
 });
 
+/**
+ * Alias historico: el hilo de comentarios de la tarea ES el chat de la tarea.
+ * Se conserva la ruta y la forma de la respuesta ({id, body, createdAt, author})
+ * para que el frontend actual siga andando sin cambios mientras se construye la
+ * ventana de chat. Escribe en Message, igual que POST /chat/.../messages.
+ */
 router.post("/:id/comments", async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Identificador inválido" });
@@ -361,11 +468,17 @@ router.post("/:id/comments", async (req, res) => {
     });
   }
 
-  const exists = await prisma.task.findUnique({
+  const task = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: {
+      id: true,
+      title: true,
+      state: true,
+      conversation: { select: { id: true, closed: true } },
+      participants: { select: { employeeId: true } },
+    },
   });
-  if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
 
   if (!(await isTaskMember(req.auth!, id))) {
     return res
@@ -373,18 +486,42 @@ router.post("/:id/comments", async (req, res) => {
       .json({ message: "Solo los participantes pueden comentar esta tarea" });
   }
 
-  const comment = await prisma.taskComment.create({
-    data: { taskId: id, authorId: req.auth!.employeeId, body: parsed.data.body },
-    select: {
-      id: true,
-      body: true,
-      createdAt: true,
-      author: { select: { id: true, employeeNumber: true, name: true } },
-    },
+  // Tareas creadas antes de la migracion o por codigo viejo: idempotente.
+  const conversation =
+    task.conversation ??
+    (await prisma.$transaction((tx) =>
+      ensureTaskConversation(
+        tx,
+        task,
+        task.participants.map((p) => p.employeeId)
+      )
+    ));
+
+  if ("closed" in conversation && conversation.closed) {
+    return res
+      .status(409)
+      .json({ message: "El chat está cerrado porque la tarea está terminada" });
+  }
+
+  const author = await prisma.employee.findUniqueOrThrow({
+    where: { id: req.auth!.employeeId },
+    select: { id: true, employeeNumber: true, name: true },
+  });
+
+  const message = await postMessage({
+    conversationId: conversation.id,
+    authorId: author.id,
+    authorName: author.name,
+    body: parsed.data.body,
   });
 
   emitTaskChanged({ type: "commented", taskId: id });
-  res.status(201).json(comment);
+  res.status(201).json({
+    id: message.id,
+    body: message.body,
+    createdAt: message.createdAt,
+    author,
+  });
 });
 
 router.delete("/:id/comments/:commentId", async (req, res) => {
@@ -394,22 +531,22 @@ router.delete("/:id/comments/:commentId", async (req, res) => {
     return res.status(400).json({ message: "Identificador inválido" });
   }
 
-  const comment = await prisma.taskComment.findUnique({
+  const message = await prisma.message.findUnique({
     where: { id: commentId },
-    select: { id: true, taskId: true, authorId: true },
+    select: { id: true, authorId: true, conversation: { select: { id: true, taskId: true } } },
   });
-  if (!comment || comment.taskId !== id) {
+  if (!message || message.conversation.taskId !== id) {
     return res.status(404).json({ message: "Comentario no encontrado" });
   }
 
-  const isAuthor = comment.authorId === req.auth!.employeeId;
+  const isAuthor = message.authorId === req.auth!.employeeId;
   if (!isAuthor && req.auth!.role !== "ADMIN") {
     return res
       .status(403)
       .json({ message: "Solo el autor o un administrador pueden borrar el comentario" });
   }
 
-  await prisma.taskComment.delete({ where: { id: commentId } });
+  await prisma.message.delete({ where: { id: commentId } });
 
   emitTaskChanged({ type: "commented", taskId: id });
   res.json({ success: true });

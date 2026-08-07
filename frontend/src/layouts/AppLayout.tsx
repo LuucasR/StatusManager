@@ -3,6 +3,11 @@ import { AppBar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
+import SocketProvider from "../realtime/SocketProvider";
+import { closeSocket } from "../realtime/socket";
+import NotificationBell from "../components/notifications/NotificationBell";
+import ChatProvider from "../components/chat/ChatProvider";
+import ChatLauncher from "../components/chat/ChatLauncher";
 
 export type SessionEmployee = {
   id: number;
@@ -33,11 +38,14 @@ export default function AppLayout() {
   }, []);
 
   function logout() {
+    closeSocket();
     localStorage.removeItem("token");
     window.location.replace("/");
   }
 
   return (
+    <SocketProvider>
+    <ChatProvider>
     <Box>
       <AppBar color="inherit" elevation={0} position="sticky">
         <Toolbar>
@@ -64,7 +72,9 @@ export default function AppLayout() {
             })}
           </Stack>
 
-          <Typography variant="body2" color="text.secondary">
+          <NotificationBell />
+
+          <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
             {me?.name} · #{me?.employeeNumber}
           </Typography>
 
@@ -75,6 +85,10 @@ export default function AppLayout() {
       </AppBar>
 
       <Outlet context={{ me } satisfies AppOutletContext} />
+
+      <ChatLauncher me={me ? { id: me.id, name: me.name } : null} />
     </Box>
+    </ChatProvider>
+    </SocketProvider>
   );
 }

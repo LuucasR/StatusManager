@@ -8,6 +8,8 @@ import authRoutes from "./auth/auth.routes";
 import activitiesRoutes from "./activities/activities.routes";
 import adminRoutes from "./admin/admin.routes";
 import tasksRoutes from "./tasks/tasks.routes";
+import chatRoutes from "./chat/chat.routes";
+import notificationsRoutes from "./notifications/notifications.routes";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -29,10 +31,23 @@ app.use(helmet());
 app.use(compression());
 
 if (process.env.NODE_ENV === "production") {
+  // Acotado a las rutas de siempre: 100 req / 15 min es razonable para el
+  // dashboard, pero un chat abierto lo agota en un par de minutos (cada
+  // mensaje enviado, cada marca de leido, cada paginacion cuenta).
   app.use(
+    ["/auth", "/activities", "/admin", "/tasks"],
     rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 100,
+      standardHeaders: true,
+    })
+  );
+
+  app.use(
+    ["/chat", "/notifications"],
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 900,
       standardHeaders: true,
     })
   );
@@ -44,6 +59,8 @@ app.use("/auth", authRoutes);
 app.use("/activities", activitiesRoutes);
 app.use("/admin", adminRoutes);
 app.use("/tasks", tasksRoutes);
+app.use("/chat", chatRoutes);
+app.use("/notifications", notificationsRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "OK" });

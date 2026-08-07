@@ -1,0 +1,38 @@
+import { ChatRounded } from "@mui/icons-material";
+import { Badge, Fab, Tooltip } from "@mui/material";
+import { useChat } from "./ChatProvider";
+import ChatWindow from "./ChatWindow";
+
+type Props = {
+  me: { id: number; name: string } | null;
+};
+
+export default function ChatLauncher({ me }: Props) {
+  const chat = useChat();
+
+  if (chat.open) {
+    return <ChatWindow me={me} onMinimize={() => chat.setOpen(false)} />;
+  }
+
+  return (
+    <Tooltip title="Mensajes" placement="left">
+      <Badge
+        className="chat-launcher"
+        badgeContent={chat.unreadTotal}
+        max={99}
+        slotProps={{ badge: { "aria-hidden": true } as never }}
+        sx={{ "& .MuiBadge-badge": { bgcolor: "#b23c4a", color: "#fff", fontWeight: 700 } }}
+      >
+        <Fab
+          color="primary"
+          onClick={() => chat.setOpen(true)}
+          aria-label={
+            chat.unreadTotal ? `Mensajes, ${chat.unreadTotal} sin leer` : "Mensajes"
+          }
+        >
+          <ChatRounded />
+        </Fab>
+      </Badge>
+    </Tooltip>
+  );
+}

@@ -58,8 +58,35 @@ a { color: #5b5ce2; font-weight: 700; text-decoration: none; }
 .task-card-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px !important; }
 .task-comment { background: #f6f7fb; border-radius: 14px !important; padding: 12px 14px; }
 
+/* Chat flotante. Misma convencion que el bloque de tareas: doble clase para
+   ganarle al override global de MuiPaper sin !important. z-index 1200 a
+   proposito: por encima del AppBar sticky pero por DEBAJO de los Dialog de MUI
+   (1300), asi la ventana nunca tapa el detalle de tarea ni el dialogo
+   bloqueante de confirmacion de actividad. */
+/* Doble clase: MuiBadge-root trae position:relative y Emotion inyecta despues
+   que este archivo, asi que con una sola clase el FAB queda en el flujo. */
+.chat-launcher.chat-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 1200; }
+.chat-window.chat-window { position: fixed; right: 24px; bottom: 24px; z-index: 1200; width: 360px; height: 520px; max-height: calc(100dvh - 120px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid #e8e9f1; background: #fff; box-shadow: 0 24px 80px rgba(36,38,84,.18); }
+.chat-head { align-items: center; padding: 12px 14px; background: #f7f8fc; border-bottom: 1px solid #e8e9f1; flex: none; }
+.chat-body { flex: 1; min-height: 0; overflow-y: auto; }
+.chat-section-title { padding: 10px 14px 6px; font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: #6d7087; text-transform: uppercase; background: #fff; }
+.chat-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 10px 14px; border: 0; background: #fff; cursor: pointer; text-align: left; }
+.chat-row:hover { background: #f7f8fc; }
+.chat-row:focus-visible { outline: 3px solid #5b5ce2; outline-offset: -3px; }
+.chat-row.closed { opacity: .65; }
+.chat-badge { min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 10px; background: #b23c4a; color: #fff; font: 700 11px "Inter", "Segoe UI", sans-serif; }
+.chat-scroller { overflow-y: auto; padding: 12px 14px; }
+.chat-day { margin: 14px 0 6px; text-align: center; font: 700 11px "Inter", "Segoe UI", sans-serif; color: #9296ab; }
+.chat-bubble.chat-bubble { max-width: 78%; padding: 8px 11px; border-radius: 14px 14px 14px 4px; background: #f1f2f8; border: 0; }
+.chat-bubble.chat-bubble.mine { background: #5b5ce2; color: #fff; border-radius: 14px 14px 4px 14px; }
+.chat-bubble-time { margin-top: 2px; font: 500 10px "Inter", "Segoe UI", sans-serif; color: #8a8da0; text-align: right; }
+.chat-bubble.mine .chat-bubble-time { color: rgba(255,255,255,.85); }
+.chat-composer { flex: none; padding: 10px 12px; border-top: 1px solid #e8e9f1; background: #fff; }
+.chat-blocked { flex: none; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid #e8e9f1; background: #fff3dc; }
+.chat-newpill { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; border-radius: 999px !important; }
+
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 1100px) { .task-board { gap: 12px; } .task-column-body { padding: 12px; } }
-@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } .task-column.task-column { min-height: 0; } .task-column-head { position: sticky; top: 0; z-index: 2; } }
-@media (prefers-reduced-motion: reduce) { .task-card.task-card, .task-column.task-column, .task-column-body { transition: none; } .task-card.task-card:hover, .task-card.task-card:active, .task-card.task-card-overlay { transform: none; } }
+@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } .task-column.task-column { min-height: 0; } .task-column-head { position: sticky; top: 0; z-index: 2; } .chat-window.chat-window { inset: 0; width: 100%; height: 100dvh; max-height: none; border-radius: 0; } }
+@media (prefers-reduced-motion: reduce) { .task-card.task-card, .task-column.task-column, .task-column-body, .chat-window.chat-window, .chat-launcher, .chat-row { transition: none; animation: none; } .task-card.task-card:hover, .task-card.task-card:active, .task-card.task-card-overlay { transform: none; } }

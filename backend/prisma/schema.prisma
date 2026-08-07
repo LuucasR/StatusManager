@@ -34,6 +34,19 @@ enum PasswordChangeRequestStatus {
   REJECTED
 }
 
+enum ConversationKind {
+  DIRECT
+  GENERAL
+  TASK
+}
+
+enum NotificationType {
+  TASK_ADDED
+  TASK_REMOVED
+  TASK_STATE
+  TASK_MESSAGE
+}
+
 model Employee {
   id             Int              @id @default(autoincrement())
   employeeNumber Int              @unique
@@ -51,7 +64,10 @@ model Employee {
 
   createdTasks       Task[]            @relation("TaskCreator")
   taskParticipations TaskParticipant[]
-  taskComments       TaskComment[]
+
+  conversations ConversationMember[]
+  messages      Message[]
+  notifications Notification[]
 }
 
 model PasswordChangeRequest {
@@ -94,7 +110,9 @@ model Task {
   updatedAt   DateTime  @updatedAt
 
   participants TaskParticipant[]
-  comments     TaskComment[]
+
+  conversation  Conversation?
+  notifications Notification[]
 
   @@index([state, startsAt])
   @@index([startsAt])
@@ -112,14 +130,68 @@ model TaskParticipant {
   @@index([employeeId])
 }
 
-model TaskComment {
-  id        Int      @id @default(autoincrement())
-  taskId    Int
-  authorId  Int
-  body      String
-  createdAt DateTime @default(now())
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author    Employee @relation(fields: [authorId], references: [id], onDelete: Cascade)
+model Conversation {
+  id   Int              @id @default(autoincrement())
+  kind ConversationKind
+  /// Idempotencia del get-or-create: "general" | "d:<minId>:<maxId>" | "t:<taskId>"
+  key  String           @unique
+  /// Snapshot del titulo: sobrevive al borrado de la tarea
+  title  String?
+  closed Boolean @default(false)
+  taskId Int?    @unique
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
-  @@index([taskId, createdAt])
+  createdAt     DateTime  @default(now())
+  lastMessageAt DateTime?
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationMember {
+  conversationId Int
+  employeeId     Int
+  joinedAt       DateTime  @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, employeeId])
+  @@index([employeeId])
+}
+
+model Message {
+  id             Int  @id @default(autoincrement())
+  conversationId Int
+  authorId       Int?
+  /// Snapshot: el historial tiene que seguir diciendo QUIEN hablo aunque
+  /// borren la cuenta. Por eso authorId es SetNull y no Cascade.
+  authorName     String
+  body           String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       Employee?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, id])
+}
+
+model Notification {
+  id         Int              @id @default(autoincrement())
+  employeeId Int
+  type       NotificationType
+  title      String
+  body       String
+  taskId     Int?
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, createdAt])
+  @@index([employeeId, readAt])
 }

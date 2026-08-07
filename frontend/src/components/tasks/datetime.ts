@@ -60,3 +60,18 @@ export function formatCommentDate(iso: string) {
   const date = new Date(iso);
   return `${dayFormatter.format(date)} · ${timeFormatter.format(date)}`;
 }
+
+export function formatClock(iso: string) {
+  return timeFormatter.format(new Date(iso));
+}
+
+/** "Hoy" / "Ayer" / "6 ago" — para agrupar listas por día. */
+export function relativeDay(iso: string) {
+  const date = new Date(iso);
+  const startOfDay = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+  if (days <= 0) return "Hoy";
+  if (days === 1) return "Ayer";
+  return dayFormatter.format(date);
+}

@@ -38,6 +38,10 @@ export type Task = {
   pinned: boolean;
   /** endsAt + 14 días. El backend es dueño de la constante. */
   archivesAt: string;
+  /** Chat de la tarea: el hilo de comentarios y el del widget son el mismo. */
+  conversationId: number | null;
+  /** true cuando la tarea está Terminada o fue eliminada: solo lectura. */
+  chatClosed: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: TaskParticipant | null;

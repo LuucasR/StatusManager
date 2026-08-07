@@ -2,8 +2,16 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { verifyToken } from "./auth/auth.token";
 
-
-const employeeSockets = new Map<number, string>();
+/**
+ * Cada socket se une a la room `emp:<employeeId>` al conectarse. Se usa una
+ * room y no un Map<employeeId, socketId> porque una room admite N sockets por
+ * empleado (varias pestañas) y Socket.IO la limpia sola en `disconnect`.
+ *
+ * La version anterior guardaba UN socket por empleado y en `disconnect` hacia
+ * `delete` sin comparar el socket.id: con dos pestañas, la segunda pisaba a la
+ * primera y cerrar cualquiera dejaba al empleado sin socket registrado.
+ */
+const employeeRoom = (employeeId: number) => `emp:${employeeId}`;
 
 type PendingConfirmation = {
   employeeId: number;
@@ -16,29 +24,24 @@ let io: Server;
 
 export function initializeRealtime(server: HttpServer) {
   io = new Server(server, { cors: { origin: process.env.FRONTEND_URL ?? "http://localhost:5173" } });
- io.use((socket, next) => {
-  try {
-    const payload = verifyToken(String(socket.handshake.auth.token ?? ""));
 
-    socket.data.employeeId = payload.employeeId;
-    socket.data.role = payload.role;
+  io.use((socket, next) => {
+    try {
+      const payload = verifyToken(String(socket.handshake.auth.token ?? ""));
 
-    next();
-  } catch {
-    next(new Error("unauthorized"));
-  }
-});
-io.on("connection", (socket) => {
+      socket.data.employeeId = payload.employeeId;
+      socket.data.role = payload.role;
 
-  const employeeId = socket.data.employeeId;
-
-  employeeSockets.set(employeeId, socket.id);
-
-  socket.on("disconnect", () => {
-    employeeSockets.delete(employeeId);
+      next();
+    } catch {
+      next(new Error("unauthorized"));
+    }
   });
 
-});
+  io.on("connection", (socket) => {
+    socket.join(employeeRoom(socket.data.employeeId));
+  });
+
   return io;
 }
 
@@ -55,12 +58,26 @@ export function emitTaskChanged(payload: unknown) {
   io?.emit("task:changed", payload);
 }
 
+/**
+ * Emite solo a los empleados indicados, a todas sus pestañas abiertas. Se
+ * emite a rooms de empleado y no a rooms por conversacion para no tener que
+ * mantener join/leave sincronizados con cada alta y baja de participante: la
+ * membresia se consulta en la base al momento de emitir, que es la unica
+ * fuente de verdad.
+ */
+export function emitToEmployees(employeeIds: number[], event: string, payload: unknown) {
+  const rooms = [...new Set(employeeIds)].map(employeeRoom);
+  if (rooms.length === 0) return;
+  io?.to(rooms).emit(event, payload);
+}
+
+/** true si el empleado tiene al menos una pestaña conectada. */
+export function isEmployeeOnline(employeeId: number) {
+  return (io?.sockets.adapter.rooms.get(employeeRoom(employeeId))?.size ?? 0) > 0;
+}
 
 export function sendConfirmationRequest(employeeId: number) {
-
-  const socketId = employeeSockets.get(employeeId);
-
-  if (!socketId) {
+  if (!isEmployeeOnline(employeeId)) {
     return false;
   }
 
@@ -70,28 +87,25 @@ export function sendConfirmationRequest(employeeId: number) {
     clearTimeout(old.timeout);
   }
 
-  io.to(socketId).emit("confirmation:request");
+  io.to(employeeRoom(employeeId)).emit("confirmation:request");
 
   const timeout = setTimeout(() => {
-
     io.emit("confirmation:timeout", {
-      employeeId
+      employeeId,
     });
 
     pendingConfirmations.delete(employeeId);
-
   }, 120000);
 
   pendingConfirmations.set(employeeId, {
     employeeId,
-    timeout
+    timeout,
   });
 
   return true;
 }
 
 export function confirmActivity(employeeId: number) {
-
   const pending = pendingConfirmations.get(employeeId);
 
   if (!pending) {
@@ -103,7 +117,7 @@ export function confirmActivity(employeeId: number) {
   pendingConfirmations.delete(employeeId);
 
   io.emit("confirmation:confirmed", {
-    employeeId
+    employeeId,
   });
 
   return true;
