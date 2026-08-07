@@ -1,39 +1,53 @@
 import { useDroppable } from "@dnd-kit/core";
-import { Chip, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
-import { STATE_LABELS, type TaskState } from "./types";
+import { STATE_META, stateVars, type TaskState } from "./types";
 
 type Props = {
   state: TaskState;
   count: number;
+  /** true cuando se está arrastrando una tarjeta que viene de otra columna. */
+  dropHint: boolean;
   children: ReactNode;
 };
 
-export default function TaskColumn({ state, count, children }: Props) {
+export default function TaskColumn({ state, count, dropHint, children }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: state });
+  const meta = STATE_META[state];
 
   return (
     <Paper
       ref={setNodeRef}
       elevation={0}
+      style={stateVars(state)}
       className={`task-column${isOver ? " over" : ""}`}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: ".04em" }}>
-          {STATE_LABELS[state].toUpperCase()}
-        </Typography>
-        <Chip size="small" label={count} />
-      </Stack>
+      <Box className="task-column-head">
+        <Box className="task-column-dot" />
+        <Box component="span" className="task-column-title">
+          {meta.label.toUpperCase()}
+        </Box>
+        <Box component="span" className="task-column-count">
+          {count}
+        </Box>
+      </Box>
 
-      <Stack spacing={1.5}>
-        {count === 0 ? (
-          <Typography variant="body2" color="text.disabled" sx={{ py: 3, textAlign: "center" }}>
-            Sin tareas
-          </Typography>
-        ) : (
-          children
-        )}
-      </Stack>
+      <Box className="task-column-body">
+        <Stack spacing={1.5}>
+          {count === 0 && !(isOver && dropHint) ? (
+            <Box className="task-column-empty">
+              <meta.Icon sx={{ fontSize: 26, color: "var(--accent)", opacity: 0.35 }} />
+              <Typography variant="caption">{meta.empty}</Typography>
+            </Box>
+          ) : (
+            children
+          )}
+
+          {isOver && dropHint && (
+            <Box className="task-drop-hint">Soltar en {meta.label}</Box>
+          )}
+        </Stack>
+      </Box>
     </Paper>
   );
 }

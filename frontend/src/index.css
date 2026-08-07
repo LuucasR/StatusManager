@@ -27,10 +27,39 @@ a { color: #5b5ce2; font-weight: 700; text-decoration: none; }
 .mini-timer { font: 700 24px ui-monospace, monospace; margin-top: 24px !important; color: #474861; }
 .section-title { margin: 10px 0 22px; }
 .table-card { overflow-x: auto; border-radius: 18px !important; }
+/* Pizarra de tareas. Los colores llegan por custom properties (--accent,
+   --soft, --tint, --ink) que setea stateVars() en components/tasks/types.ts.
+   La doble clase (.task-card.task-card) sube la especificidad a 0-2-0 para
+   ganarle al override global de MuiPaper sin usar !important, y a diferencia
+   de un selector descendiente también aplica al DragOverlay, que se renderiza
+   fuera de .task-board. */
 .task-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; margin-top: 28px; }
-.task-column { background: #fff; border-radius: 18px !important; padding: 18px; min-height: 240px; }
-.task-column.over { outline: 2px dashed #5b5ce2; outline-offset: -4px; }
-.task-card { padding: 14px 16px; border-radius: 14px !important; border: 1px solid #e8e9f1; touch-action: none; }
+.task-column.task-column { background: #fff; border-radius: 18px; padding: 0; min-height: 240px; overflow: hidden; transition: background-color .18s ease; }
+.task-column.task-column.over { background: var(--tint); }
+.task-column-head { display: flex; align-items: center; gap: 9px; padding: 15px 16px 13px; background: var(--soft); box-shadow: inset 0 3px 0 0 var(--accent); }
+.task-column-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+.task-column-title { font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: var(--ink); }
+.task-column-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; display: grid; place-items: center; border-radius: 11px; background: #fff; box-shadow: inset 0 0 0 1px rgba(23,24,47,.08); font: 700 12px "Inter", "Segoe UI", sans-serif; color: var(--ink); }
+.task-column-body { padding: 14px; border-radius: 16px; transition: box-shadow .18s ease; }
+.task-column.over .task-column-body { box-shadow: inset 0 0 0 2px var(--accent); }
+.task-column-empty { display: grid; place-items: center; gap: 6px; padding: 26px 12px; border-radius: 14px; border: 1.5px dashed #e1e3ee; color: #9296ab; text-align: center; }
+.task-drop-hint { display: grid; place-items: center; min-height: 68px; border-radius: 14px; border: 2px dashed var(--accent); background: var(--soft); color: var(--ink); font: 700 12px "Inter", "Segoe UI", sans-serif; }
+
+.task-card.task-card { position: relative; overflow: hidden; padding: 13px 14px 13px 20px; border-radius: 14px; border: 1px solid #e8e9f1; background: #fff; touch-action: none; box-shadow: 0 1px 2px rgba(36,38,84,.05), 0 8px 18px -14px rgba(36,38,84,.55); transition: box-shadow .18s ease, transform .18s ease, background-color .18s ease, border-color .18s ease; }
+.task-card.task-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
+.task-card.task-card:hover { transform: translateY(-2px); background: var(--tint); border-color: #dcdeeb; box-shadow: 0 2px 4px rgba(36,38,84,.06), 0 16px 30px -18px rgba(36,38,84,.65); }
+.task-card.task-card:active { transform: translateY(0) scale(.995); }
+.task-card:focus-visible { outline: 3px solid #5b5ce2; outline-offset: 2px; }
+.task-card.pinned { border-color: #f0dcb4; }
+.task-card.dragging { opacity: .32; box-shadow: none; transform: none; }
+.task-card.task-card-overlay { cursor: grabbing; transform: rotate(1.5deg) scale(1.03); transition: none; box-shadow: 0 26px 48px -20px rgba(36,38,84,.65), 0 4px 10px rgba(36,38,84,.08); }
+.task-card-title { cursor: pointer; }
+.task-card-title:hover { text-decoration: underline; }
 .task-card-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px !important; }
 .task-comment { background: #f6f7fb; border-radius: 14px !important; padding: 12px 14px; }
-@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 1100px) { .task-board { gap: 12px; } .task-column-body { padding: 12px; } }
+@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } .task-column.task-column { min-height: 0; } .task-column-head { position: sticky; top: 0; z-index: 2; } }
+@media (prefers-reduced-motion: reduce) { .task-card.task-card, .task-column.task-column, .task-column-body { transition: none; } .task-card.task-card:hover, .task-card.task-card:active, .task-card.task-card-overlay { transform: none; } }

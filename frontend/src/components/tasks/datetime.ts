@@ -22,9 +22,12 @@ const dayFormatter = new Intl.DateTimeFormat("es-AR", {
   month: "short",
 });
 
+// hour12: false para que diga "21:12" y no "09:12 p. m.", que ademas de ser
+// mas largo aprieta la tarjeta cuando el rango cruza dos dias.
 const timeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
+  hour12: false,
 });
 
 /** "6 ago 10:00 - 14:30" si es el mismo día, con la fecha repetida si no. */

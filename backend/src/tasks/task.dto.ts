@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { taskArchivesAt } from "./task-state";
 
 const EMPLOYEE_SUMMARY = {
   select: { id: true, employeeNumber: true, name: true },
@@ -40,6 +41,11 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     state: task.state,
     startsAt: task.startsAt,
     endsAt: task.endsAt,
+    pinned: task.pinned,
+    // Siempre calculado, incluso si esta fijada: el frontend lo necesita para
+    // distinguir "fijada y vigente" de "fijada y ya pasada del corte", y para
+    // que la constante de 14 dias viva en un solo lugar.
+    archivesAt: taskArchivesAt(task.endsAt),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     createdBy: task.createdBy,

@@ -54,6 +54,14 @@ export const changeTaskStateSchema = z.object({
   state: z.nativeEnum(TaskState),
 });
 
+/**
+ * Booleano explicito y no un toggle que invierte: con broadcast por socket y
+ * UI optimista, dos clicks o dos clientes dejarian el estado indeterminado.
+ */
+export const changeTaskPinSchema = z.object({
+  pinned: z.boolean(),
+});
+
 export const createCommentSchema = z.object({
   body: z.string().trim().min(1, "El comentario no puede estar vacío").max(1000),
 });

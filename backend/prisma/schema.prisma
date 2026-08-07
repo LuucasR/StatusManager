@@ -87,6 +87,7 @@ model Task {
   state       TaskState @default(PENDING)
   startsAt    DateTime
   endsAt      DateTime
+  pinned      Boolean   @default(false)
   createdById Int?
   createdBy   Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
@@ -97,6 +98,7 @@ model Task {
 
   @@index([state, startsAt])
   @@index([startsAt])
+  @@index([pinned, endsAt])
 }
 
 model TaskParticipant {

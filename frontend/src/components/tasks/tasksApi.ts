@@ -22,6 +22,9 @@ export const updateTask = (id: number, payload: Partial<TaskPayload>) =>
 export const moveTask = (id: number, state: TaskState) =>
   api<Task>(`/tasks/${id}/state`, { method: "PATCH", body: JSON.stringify({ state }) });
 
+export const pinTask = (id: number, pinned: boolean) =>
+  api<Task>(`/tasks/${id}/pin`, { method: "PATCH", body: JSON.stringify({ pinned }) });
+
 export const deleteTask = (id: number) =>
   api<{ success: boolean }>(`/tasks/${id}`, { method: "DELETE" });
 
