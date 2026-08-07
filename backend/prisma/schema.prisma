@@ -10,9 +10,12 @@ datasource db {
 enum Role {
   EMPLOYEE
   ADMIN
-  // Va ultimo: ALTER TYPE ... ADD VALUE appendea al final del orden fisico en
-  // Postgres, y ponerlo en el medio haria divergir el orden logico del fisico.
+  // Van al final, en orden de incorporacion: ALTER TYPE ... ADD VALUE appendea
+  // al final del orden fisico en Postgres, y ponerlos en el medio haria
+  // divergir el orden logico del fisico. El orden de PRESENTACION vive en
+  // ROLE_ORDER (frontend/src/components/roles.ts), no aca.
   SUPERVISOR
+  TASK_MANAGER
 }
 
 enum ActivityStatus {
@@ -95,8 +98,18 @@ model ActivityHistory {
   endedAt    DateTime?
   employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  /// Tarea declarada al pasar a WORKING. SetNull: borrar una tarea no puede
+  /// borrar el tiempo que alguien le imputo.
+  taskId Int?
+  task   Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  /// Snapshot del titulo, mismo criterio que Conversation.title y
+  /// Message.authorName: el resumen tiene que seguir diciendo en que se
+  /// trabajo aunque la tarea ya no exista.
+  taskTitle String?
+
   @@index([employeeId, startedAt])
   @@index([startedAt])
+  @@index([taskId])
 }
 
 model Task {
@@ -116,6 +129,7 @@ model Task {
 
   conversation  Conversation?
   notifications Notification[]
+  activities    ActivityHistory[]
 
   @@index([state, startsAt])
   @@index([startsAt])

@@ -31,11 +31,10 @@ app.use(helmet());
 app.use(compression());
 
 if (process.env.NODE_ENV === "production") {
-  // Acotado a las rutas de siempre: 100 req / 15 min es razonable para el
-  // dashboard, pero un chat abierto lo agota en un par de minutos (cada
-  // mensaje enviado, cada marca de leido, cada paginacion cuenta).
+  // /auth es el unico que sigue en 100: ahi el limite ES la defensa (fuerza
+  // bruta de login), no una cuota de uso.
   app.use(
-    ["/auth", "/activities", "/admin", "/tasks"],
+    ["/auth"],
     rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 100,
@@ -43,8 +42,14 @@ if (process.env.NODE_ENV === "production") {
     })
   );
 
+  // El resto comparte el bucket holgado. 100 req / 15 min alcanzaba cuando el
+  // dashboard cargaba una vez, pero hoy cada `status:changed` de CUALQUIER
+  // integrante dispara un load() completo, y a eso se le suman el selector de
+  // tareas, el resumen y el historial con filtros: con 10 personas activas se
+  // agotaba en minutos. Lo mismo valia para el chat, que gasta una request por
+  // mensaje, por marca de leido y por paginacion.
   app.use(
-    ["/chat", "/notifications"],
+    ["/activities", "/admin", "/tasks", "/chat", "/notifications"],
     rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 900,

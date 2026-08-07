@@ -19,11 +19,42 @@ export const visibleHistoryWhere = {
   status: { notIn: [...HIDDEN_FROM_HISTORY] },
 } satisfies Prisma.ActivityHistoryWhereInput;
 
-/** Estados que exigen un comentario de al menos 3 caracteres. */
+/**
+ * Estados que exigen un comentario de al menos 3 caracteres.
+ *
+ * WORKING salio de esta lista cuando se pudo declarar la tarea: el "en que
+ * estoy trabajando" ya lo dice el tablero, y escribirlo de nuevo a mano era
+ * ruido. El comentario vuelve a ser obligatorio para WORKING solo cuando se
+ * elige trabajar SIN tarea (ver activity-task.ts): ahi es el unico dato que
+ * queda.
+ */
 export const statusesRequiringDetail = new Set<ActivityStatus>([
-  ActivityStatus.WORKING,
   ActivityStatus.OFFLINE,
 ]);
+
+/** Estados en los que tiene sentido declarar una tarea. */
+export const statusesAllowingTask = new Set<ActivityStatus>([
+  ActivityStatus.WORKING,
+]);
+
+/**
+ * Tramos que SOLAPAN el rango, no los que EMPIEZAN dentro.
+ *
+ * Filtrar por `startedAt: { gte: from }` pierde el caso mas comun de todos: el
+ * tramo abierto desde antes del rango. Consultar "hoy" a las 09:05 con el
+ * estado puesto a las 08:55 no devolvia nada, y el total del resumen subcontaba
+ * en silencio. La duracion se recorta despues, en segmentMs (activity-summary).
+ */
+export function overlappingWhere(
+  from?: Date,
+  to?: Date
+): Prisma.ActivityHistoryWhereInput {
+  const conditions: Prisma.ActivityHistoryWhereInput[] = [];
+  // `to` es exclusivo: el frontend manda la medianoche local del dia siguiente.
+  if (to) conditions.push({ startedAt: { lt: to } });
+  if (from) conditions.push({ OR: [{ endedAt: null }, { endedAt: { gt: from } }] });
+  return conditions.length ? { AND: conditions } : {};
+}
 
 /**
  * Etiquetas y colores por estado. Al tiparlo como Record<ActivityStatus, ...>

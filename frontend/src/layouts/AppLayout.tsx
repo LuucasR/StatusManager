@@ -8,13 +8,14 @@ import { closeSocket } from "../realtime/socket";
 import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
+import type { Role } from "../components/roles";
 
 export type SessionEmployee = {
   id: number;
   employeeNumber: number;
   name: string;
   email?: string;
-  role?: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+  role?: Role;
 };
 
 /** Contexto que reciben las páginas anidadas vía useOutletContext(). */
@@ -25,6 +26,8 @@ export type AppOutletContext = {
 const links = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/tareas", label: "Tareas" },
+  // Sin filtro por rol: el resumen es siempre el del empleado autenticado.
+  { to: "/resumen", label: "Resumen" },
 ];
 
 export default function AppLayout() {

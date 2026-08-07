@@ -5,7 +5,7 @@ import {
 } from "@mui/icons-material";
 import type { SvgIconComponent } from "@mui/icons-material";
 import type { CSSProperties } from "react";
-import { isStaff } from "../roles";
+import { canManageTasks } from "../roles";
 
 // React.CSSProperties no admite claves --*, y el cast directo falla.
 declare module "react" {
@@ -124,9 +124,9 @@ export function participantColor(id: number) {
   return `hsl(${AVATAR_HUES[Math.abs(id) % AVATAR_HUES.length]} 55% 32%)`;
 }
 
-/** Admin y supervisor mueven y fijan cualquier tarea; el empleado solo si participa. */
+/** Quien gestiona el tablero mueve y fija cualquier tarea; el resto solo si participa. */
 export function canMoveTask(task: Task, meId?: number, role?: string) {
-  if (isStaff(role)) return true;
+  if (canManageTasks(role)) return true;
   if (!meId) return false;
   return task.participants.some((participant) => participant.id === meId);
 }

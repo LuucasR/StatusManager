@@ -34,12 +34,18 @@ import {
   Typography,
 } from "@mui/material";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, API_URL } from "../api";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
-import { ROLE_META, isAdminRole, isStaff, type Role } from "../components/roles";
+import { isAdminRole, isStaff, roleMeta, type Role } from "../components/roles";
 import NewAccountDialog from "../components/admin/NewAccountDialog";
 import ChangeRoleDialog from "../components/admin/ChangeRoleDialog";
+import PeriodFilter from "../components/PeriodFilter";
+import WorkingTaskSelect, {
+  type AssignableTask,
+} from "../components/activities/WorkingTaskSelect";
+import TaskFacts from "../components/tasks/TaskFacts";
+import { STATE_META, type Task, type TaskState } from "../components/tasks/types";
 
 type Status =
   | "AVAILABLE"
@@ -68,7 +74,12 @@ type History = {
   detail: string;
   startedAt: string;
   endedAt: string | null;
+  /** null si la tarea fue eliminada; taskTitle sobrevive igual. */
+  task: { id: number; title: string; state: TaskState } | null;
+  taskTitle: string | null;
 };
+
+type HistoryResponse = { rows: History[]; truncated: boolean };
 
 type PasswordChangeRequest = {
   id: number;
@@ -106,8 +117,12 @@ const colors: Record<
 };
 
 // Estados que exigen comentario. Espeja statusesRequiringDetail del backend
-// (backend/src/activities/activity-status.ts).
-const requiresDetail = new Set<Status>(["WORKING", "OFFLINE"]);
+// (backend/src/activities/activity-status.ts). WORKING salió de la lista cuando
+// se pudo declarar la tarea; vuelve a exigirlo solo si se elige "Sin tarea".
+const requiresDetail = new Set<Status>(["OFFLINE"]);
+
+// Único estado donde se declara una tarea. Espeja statusesAllowingTask.
+const allowsTask = new Set<Status>(["WORKING"]);
 
 
 function elapsed(since: string, now: number) {
@@ -144,6 +159,20 @@ export default function DashboardPage() {
   const [dialog, setDialog] = useState(false);
   const [status, setStatus] = useState<Status>("WORKING");
   const [detail, setDetail] = useState("");
+  const [taskId, setTaskId] = useState<number | null>(null);
+  const [assignableTasks, setAssignableTasks] = useState<AssignableTask[]>([]);
+  const [assignableLoading, setAssignableLoading] = useState(false);
+
+  // El filtro de período vive en un ref además del estado: `load()` se registra
+  // una sola vez en los listeners del socket y necesita leer el rango actual.
+  const [historyParams, setHistoryParams] = useState(() => new URLSearchParams());
+  const historyParamsRef = useRef(historyParams);
+  historyParamsRef.current = historyParams;
+  const [historyTruncated, setHistoryTruncated] = useState(false);
+
+  const [factsTask, setFactsTask] = useState<Task | null>(null);
+  const [factsOpen, setFactsOpen] = useState(false);
+  const [factsLoading, setFactsLoading] = useState(false);
 
   const [error, setError] = useState("");
   const [confirmationDialog, setConfirmationDialog] = useState(false);
@@ -173,14 +202,21 @@ const [notice, setNotice] = useState("");
   const staff = isStaff(me?.role);
   const admin = isAdminRole(me?.role);
 
+  const loadHistory = useCallback(async (params: URLSearchParams) => {
+    const query = params.toString();
+    const response = await api<HistoryResponse>(
+      `/activities/history${query ? `?${query}` : ""}`
+    );
+    setHistory(response.rows);
+    setHistoryTruncated(response.truncated);
+  }, []);
+
   const load = useCallback(async () => {
     const current = await api<Employee>("/activities/me");
 
     setMe(current);
 
-    setHistory(
-      await api<History[]>("/activities/history")
-    );
+    await loadHistory(historyParamsRef.current);
 
     setEmployees(
       await api<Employee[]>(
@@ -197,7 +233,61 @@ const [notice, setNotice] = useState("");
         )
       );
     }
-  }, []);
+  }, [loadHistory]);
+
+  const handlePeriodChange = useCallback(
+    (params: URLSearchParams) => {
+      setHistoryParams(params);
+      loadHistory(params).catch((e) => setError((e as Error).message));
+    },
+    [loadHistory]
+  );
+
+  // Las tareas asignables se piden al abrir el diálogo, no al montar la página:
+  // el estado más común es no tocar el selector en toda la jornada. No aplica
+  // cuando un admin cambia el estado de otro, porque el endpoint devuelve las
+  // tareas de quien consulta y el backend valida contra el empleado destino.
+  useEffect(() => {
+    if (!dialog || selectedEmployee) return;
+    let cancelled = false;
+    setAssignableLoading(true);
+    api<AssignableTask[]>("/activities/assignable-tasks")
+      .then((tasks) => {
+        if (cancelled) return;
+        setAssignableTasks(tasks);
+        // La tarea elegida la vez anterior pudo terminarse o archivarse: sin
+        // esto el Select mostraría un valor que ya no está entre las opciones,
+        // y el backend lo rechazaría al guardar.
+        setTaskId((current) =>
+          current !== null && tasks.some((task) => task.id === current) ? current : null
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setAssignableLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dialog, selectedEmployee]);
+
+  async function openTaskFacts(id: number) {
+    setFactsOpen(true);
+    setFactsLoading(true);
+    setFactsTask(null);
+    try {
+      // GET /tasks/:id no filtra por archivado, así que las tareas viejas del
+      // historial siguen siendo consultables.
+      setFactsTask(await api<Task>(`/tasks/${id}`));
+    } catch (e) {
+      setError((e as Error).message);
+      setFactsOpen(false);
+    } finally {
+      setFactsLoading(false);
+    }
+  }
 
   useEffect(() => {
     load().catch((e) => setError(e.message));
@@ -229,6 +319,20 @@ useOnReconnect(() => load());
     [me, now]
   );
 
+  // El selector es solo para el self-service: el endpoint devuelve MIS tareas,
+  // y un admin corrigiendo el estado de otro no debería imputarle las propias.
+  const showTaskSelect = allowsTask.has(status) && !selectedEmployee;
+
+  /**
+   * Espeja resolveWorkingTask del backend: el comentario vuelve a ser
+   * obligatorio en "Trabajando" solo cuando se elige no declarar tarea TENIENDO
+   * tareas para elegir. Sin tareas asignadas no se exige nada, o alguien sin
+   * pizarra no podría ni marcar que está trabajando.
+   */
+  const detailRequired =
+    requiresDetail.has(status) ||
+    (showTaskSelect && taskId === null && assignableTasks.length > 0);
+
   async function changeStatus() {
     try {
       await api(
@@ -240,12 +344,16 @@ useOnReconnect(() => load());
         body: JSON.stringify({
           status,
           detail,
+          // Solo va en WORKING: el backend rechaza taskId en cualquier otro
+          // estado, así que mandar el residuo del select sería un 400.
+          taskId: allowsTask.has(status) && !selectedEmployee ? taskId : null,
         }),
       });
 
       setSelectedEmployee(null);
       setDialog(false);
       setDetail("");
+      setTaskId(null);
 
       await load();
     } catch (err) {
@@ -652,13 +760,13 @@ useEffect(() => {
                       {employee.role && employee.role !== "EMPLOYEE" && (
                         <Chip
                           size="small"
-                          label={ROLE_META[employee.role].label}
+                          label={roleMeta(employee.role).label}
                           sx={{
                             height: 18,
                             fontSize: 10,
                             fontWeight: 700,
-                            bgcolor: ROLE_META[employee.role].soft,
-                            color: ROLE_META[employee.role].color,
+                            bgcolor: roleMeta(employee.role).soft,
+                            color: roleMeta(employee.role).color,
                           }}
                         />
                       )}
@@ -792,11 +900,23 @@ useEffect(() => {
         </Button>
       </Box>
 
+      <Box sx={{ mb: 2 }}>
+        <PeriodFilter onChange={handlePeriodChange} />
+      </Box>
+
+      {historyTruncated && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          El período tiene más registros de los que entran en la tabla. Se muestran los más
+          recientes; el resumen sí cuenta el período completo.
+        </Alert>
+      )}
+
       <Paper className="table-card" elevation={0}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Estado</TableCell>
+              <TableCell>Tarea</TableCell>
               <TableCell>Detalle</TableCell>
               <TableCell>Inicio</TableCell>
               <TableCell>Duración</TableCell>
@@ -804,6 +924,16 @@ useEffect(() => {
           </TableHead>
 
           <TableBody>
+            {history.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <Typography color="text.secondary" sx={{ py: 2 }}>
+                    No hay actividad registrada en este período.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+
             {history.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
@@ -812,6 +942,37 @@ useEffect(() => {
                     color={colors[item.status]}
                     label={labels[item.status]}
                   />
+                </TableCell>
+
+                <TableCell>
+                  {item.task ? (
+                    <Chip
+                      size="small"
+                      clickable
+                      onClick={() => void openTaskFacts(item.task!.id)}
+                      label={item.task.title}
+                      sx={{
+                        maxWidth: 220,
+                        fontWeight: 600,
+                        bgcolor: STATE_META[item.task.state].soft,
+                        color: STATE_META[item.task.state].ink,
+                      }}
+                    />
+                  ) : item.taskTitle ? (
+                    // La tarea fue eliminada: el FK quedó en null y solo
+                    // sobrevive el snapshot del título.
+                    <Typography
+                      variant="body2"
+                      color="text.disabled"
+                      sx={{ fontStyle: "italic" }}
+                    >
+                      {item.taskTitle} (eliminada)
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.disabled">
+                      —
+                    </Typography>
+                  )}
                 </TableCell>
 
                 <TableCell>{item.detail || "Sin comentario"}</TableCell>
@@ -873,16 +1034,30 @@ useEffect(() => {
             </Select>
           </FormControl>
 
+          {showTaskSelect && (
+            <WorkingTaskSelect
+              tasks={assignableTasks}
+              loading={assignableLoading}
+              value={taskId}
+              onChange={setTaskId}
+            />
+          )}
+
           <TextField
             label={
-              requiresDetail.has(status)
+              detailRequired
                 ? "Comentario obligatorio"
                 : "Comentario opcional"
             }
             placeholder={
-              requiresDetail.has(status)
+              detailRequired
                 ? "Escribí al menos 3 caracteres"
                 : "Podés agregar un comentario"
+            }
+            helperText={
+              detailRequired && showTaskSelect
+                ? "Elegiste trabajar sin una tarea de la pizarra: contá en qué estás."
+                : undefined
             }
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
@@ -893,17 +1068,46 @@ useEffect(() => {
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={() => setDialog(false)}>
+        <Button
+          onClick={() => {
+            setDialog(false);
+            setSelectedEmployee(null);
+          }}
+        >
           Cancelar
         </Button>
 
         <Button
           variant="contained"
-          disabled={requiresDetail.has(status) && detail.trim().length < 3}
+          disabled={detailRequired && detail.trim().length < 3}
           onClick={changeStatus}
         >
           Guardar cambio
         </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/* Detalles de la tarea de un tramo del historial: integrantes, duración y
+        estado. Se reusa TaskFacts, el mismo bloque que muestra el detalle de la
+        pizarra, sin arrastrar el hilo de chat (que tiene su propio ACL). */}
+    <Dialog
+      open={factsOpen}
+      onClose={() => setFactsOpen(false)}
+      fullWidth
+      maxWidth="sm"
+    >
+      <DialogTitle>{factsTask?.title ?? "Tarea"}</DialogTitle>
+      <DialogContent dividers>
+        {factsLoading || !factsTask ? (
+          <Stack sx={{ alignItems: "center", py: 4 }}>
+            <CircularProgress />
+          </Stack>
+        ) : (
+          <TaskFacts task={factsTask} showState />
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setFactsOpen(false)}>Cerrar</Button>
       </DialogActions>
     </Dialog>
 

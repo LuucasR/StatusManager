@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import TasksPage from "./pages/TasksPage";
+import SummaryPage from "./pages/SummaryPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AppLayout from "./layouts/AppLayout";
@@ -19,6 +20,7 @@ export default function App() {
       <Route element={authenticated ? <AppLayout /> : <Navigate to="/" replace />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tareas" element={<TasksPage />} />
+        <Route path="/resumen" element={<SummaryPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" />} />

@@ -1,7 +1,6 @@
 import { PushPinOutlined, PushPinRounded } from "@mui/icons-material";
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Chip,
@@ -20,13 +19,19 @@ import { alpha } from "@mui/material/styles";
 import MessageComposer from "../chat/MessageComposer";
 import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
-import { formatDuration, formatRange } from "./datetime";
-import { STATE_META, participantColor, type Task } from "./types";
+import TaskFacts from "./TaskFacts";
+import { STATE_META, type Task } from "./types";
 
 type Props = {
   open: boolean;
   task: Task | null;
   loading: boolean;
+  /**
+   * El ACL del chat (backend/src/chat/chat.access.ts) no lo abre por gestionar
+   * el tablero. Sin esto, un gestor de tareas que abre una tarea donde no
+   * participa dispara un 403 al montar el hilo.
+   */
+  canReadChat: boolean;
   canComment: boolean;
   /** Fijar usa el mismo permiso que mover: admin o participante. */
   canPin: boolean;
@@ -39,6 +44,7 @@ export default function TaskDetailDialog({
   open,
   task,
   loading,
+  canReadChat,
   canComment,
   canPin,
   me,
@@ -46,8 +52,9 @@ export default function TaskDetailDialog({
   onPin,
 }: Props) {
   // El hilo sale del mismo store que la ventana flotante: lo que se escribe en
-  // un lado aparece en el otro sin round-trip.
-  const thread = useConversation(task?.conversationId ?? null);
+  // un lado aparece en el otro sin round-trip. Se pasa null cuando no hay
+  // permiso de lectura: montarlo igual seria un 403 garantizado.
+  const thread = useConversation(canReadChat ? (task?.conversationId ?? null) : null);
 
   const blockedReason = !task
     ? null
@@ -134,55 +141,7 @@ export default function TaskDetailDialog({
 
           <DialogContent dividers>
             <Stack spacing={2.5}>
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  Descripción
-                </Typography>
-                <Typography sx={{ whiteSpace: "pre-wrap" }}>{task.description}</Typography>
-              </Box>
-
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  Duración
-                </Typography>
-                <Typography>
-                  {formatRange(task.startsAt, task.endsAt)}{" "}
-                  <Typography component="span" color="text.secondary">
-                    ({formatDuration(task.startsAt, task.endsAt)})
-                  </Typography>
-                </Typography>
-              </Box>
-
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  Participantes
-                </Typography>
-                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 0.5 }} useFlexGap>
-                  {task.participants.length === 0 ? (
-                    <Typography color="warning.main" variant="body2">
-                      Sin participantes
-                    </Typography>
-                  ) : (
-                    task.participants.map((participant) => (
-                      <Chip
-                        key={participant.id}
-                        avatar={
-                          <Avatar sx={{ bgcolor: participantColor(participant.id), color: "#fff !important" }}>
-                            {participant.name.slice(0, 1).toUpperCase()}
-                          </Avatar>
-                        }
-                        label={`#${participant.employeeNumber} ${participant.name}`}
-                      />
-                    ))
-                  )}
-                </Stack>
-              </Box>
-
-              {task.createdBy && (
-                <Typography variant="caption" color="text.secondary">
-                  Creada por {task.createdBy.name} (#{task.createdBy.employeeNumber})
-                </Typography>
-              )}
+              <TaskFacts task={task} />
 
               <Divider />
 
@@ -191,31 +150,38 @@ export default function TaskDetailDialog({
                   Conversación ({task.commentsCount})
                 </Typography>
 
-                <Box
-                  sx={{
-                    mt: 1,
-                    border: "1px solid #e8e9f1",
-                    borderRadius: "14px",
-                    overflow: "hidden",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
-                  <MessageThread
-                    messages={thread.messages}
-                    meId={me?.id}
-                    hasMore={thread.hasMore}
-                    loading={thread.loading}
-                    loadingMore={thread.loadingMore}
-                    onLoadMore={thread.loadMore}
-                    height={280}
-                  />
-                  <MessageComposer
-                    blockedReason={blockedReason}
-                    disabled={!me}
-                    onSend={(body) => thread.send(body, { id: me!.id, name: me!.name })}
-                  />
-                </Box>
+                {canReadChat ? (
+                  <Box
+                    sx={{
+                      mt: 1,
+                      border: "1px solid #e8e9f1",
+                      borderRadius: "14px",
+                      overflow: "hidden",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <MessageThread
+                      messages={thread.messages}
+                      meId={me?.id}
+                      hasMore={thread.hasMore}
+                      loading={thread.loading}
+                      loadingMore={thread.loadingMore}
+                      onLoadMore={thread.loadMore}
+                      height={280}
+                    />
+                    <MessageComposer
+                      blockedReason={blockedReason}
+                      disabled={!me}
+                      onSend={(body) => thread.send(body, { id: me!.id, name: me!.name })}
+                    />
+                  </Box>
+                ) : (
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    La conversación es privada de los participantes. Podés gestionar la tarea, pero
+                    para seguir el hilo tenés que agregarte como integrante.
+                  </Alert>
+                )}
               </Box>
 
               {thread.error && (

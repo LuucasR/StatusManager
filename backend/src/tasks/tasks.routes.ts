@@ -3,8 +3,8 @@ import { Prisma, TaskState } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { renderTaskReport } from "../reports/task-report";
-import { requireAuth, requireStaff } from "../auth/auth.middleware";
-import { isStaff } from "../auth/roles";
+import { requireAuth, requireTaskManagement } from "../auth/auth.middleware";
+import { canManageTasks, isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
 import { emitTaskChanged } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
@@ -33,17 +33,34 @@ function parseId(value: unknown) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/**
- * El admin puede todo; un empleado solo si participa de la tarea. No se puede
- * resolver con requireAdmin a nivel router porque la regla depende de la fila.
- */
-async function isTaskMember(auth: AuthPayload, taskId: number) {
-  if (isStaff(auth.role)) return true;
+async function isParticipant(employeeId: number, taskId: number) {
   const link = await prisma.taskParticipant.findUnique({
-    where: { taskId_employeeId: { taskId, employeeId: auth.employeeId } },
+    where: { taskId_employeeId: { taskId, employeeId } },
     select: { taskId: true },
   });
   return Boolean(link);
+}
+
+/**
+ * Mover y fijar: quien gestiona el tablero, o quien participa de la tarea. No
+ * se puede resolver con un middleware a nivel router porque la regla depende
+ * de la fila.
+ */
+async function canMoveTask(auth: AuthPayload, taskId: number) {
+  if (canManageTasks(auth.role)) return true;
+  return isParticipant(auth.employeeId, taskId);
+}
+
+/**
+ * Escribir en el hilo. NO usa canManageTasks a proposito: el ACL de lectura
+ * (chat/chat.access.ts) le niega el hilo al TASK_MANAGER que no participa, y
+ * dejarlo escribir en algo que no puede leer seria incoherente — ademas
+ * postMessage ni siquiera le devolveria su propio mensaje por socket, porque
+ * no es ConversationMember. Escribir sigue la regla del chat, no la del tablero.
+ */
+async function canCommentOnTask(auth: AuthPayload, taskId: number) {
+  if (isStaff(auth.role)) return true;
+  return isParticipant(auth.employeeId, taskId);
 }
 
 /** Evita que un id inexistente llegue a Prisma y salga como 500 (P2003). */
@@ -175,7 +192,7 @@ router.get("/:id", async (req, res) => {
   res.json(toTaskDto(task));
 });
 
-router.post("/", requireStaff, async (req, res) => {
+router.post("/", requireTaskManagement, async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
@@ -226,7 +243,7 @@ router.post("/", requireStaff, async (req, res) => {
   res.status(201).json(toTaskDto(task));
 });
 
-router.patch("/:id", requireStaff, async (req, res) => {
+router.patch("/:id", requireTaskManagement, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Identificador inválido" });
 
@@ -367,7 +384,7 @@ router.patch("/:id/state", async (req, res) => {
   });
   if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
 
-  if (!(await isTaskMember(req.auth!, id))) {
+  if (!(await canMoveTask(req.auth!, id))) {
     return res
       .status(403)
       .json({ message: "Solo los participantes pueden mover esta tarea" });
@@ -396,7 +413,7 @@ router.patch("/:id/state", async (req, res) => {
 
 /**
  * Fijar una tarea la exceptua del archivado a los 14 dias y la manda al tope
- * de su columna. Mismo permiso que mover (isTaskMember): es decision de quien
+ * de su columna. Mismo permiso que mover (canMoveTask): es decision de quien
  * trabaja la tarea, y evita inventar una tercera regla de permisos.
  */
 router.patch("/:id/pin", async (req, res) => {
@@ -414,7 +431,7 @@ router.patch("/:id/pin", async (req, res) => {
   });
   if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
 
-  if (!(await isTaskMember(req.auth!, id))) {
+  if (!(await canMoveTask(req.auth!, id))) {
     return res
       .status(403)
       .json({ message: "Solo los participantes pueden fijar esta tarea" });
@@ -430,7 +447,7 @@ router.patch("/:id/pin", async (req, res) => {
   res.json(toTaskDto(task));
 });
 
-router.delete("/:id", requireStaff, async (req, res) => {
+router.delete("/:id", requireTaskManagement, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ message: "Identificador inválido" });
 
@@ -481,7 +498,7 @@ router.post("/:id/comments", async (req, res) => {
   });
   if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
 
-  if (!(await isTaskMember(req.auth!, id))) {
+  if (!(await canCommentOnTask(req.auth!, id))) {
     return res
       .status(403)
       .json({ message: "Solo los participantes pueden comentar esta tarea" });

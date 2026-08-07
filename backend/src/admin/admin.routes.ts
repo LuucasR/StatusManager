@@ -7,6 +7,7 @@ import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { visibleHistoryWhere } from "../activities/activity-status";
+import { WorkingTaskError, resolveWorkingTask } from "../activities/activity-task";
 import { z } from "zod";
 import { Role } from "@prisma/client";
 
@@ -53,6 +54,7 @@ router.get("/employees", requireStaff, async (_req, res) => {
         take: 1,
         select: {
           detail: true,
+          taskTitle: true,
         },
       },
     },
@@ -62,17 +64,24 @@ router.get("/employees", requireStaff, async (_req, res) => {
   });
 
   res.json(
-    employees.map((employee) => ({
-      id: employee.id,
-      employeeNumber: employee.employeeNumber,
-      name: employee.name,
-      email: employee.email,
-      role: employee.role,
-      currentStatus: employee.currentStatus,
-      statusSince: employee.statusSince,
-      active: employee.active,
-      detail: employee.activities[0]?.detail ?? "",
-    }))
+    employees.map((employee) => {
+      const open = employee.activities[0];
+      return {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        name: employee.name,
+        email: employee.email,
+        role: employee.role,
+        currentStatus: employee.currentStatus,
+        statusSince: employee.statusSince,
+        active: employee.active,
+        // Mismo fallback que GET /activities/team: el comentario dejo de ser
+        // obligatorio en WORKING, asi que sin esto la tarjeta diria "Sin
+        // detalle" justo para todo el que esta trabajando.
+        detail: open?.detail || open?.taskTitle || "",
+        taskTitle: open?.taskTitle ?? null,
+      };
+    })
   );
 });
 
@@ -355,6 +364,30 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
   }
 
   const now = new Date();
+
+  // El schema es compartido con /activities/status, asi que esta ruta tambien
+  // recibe taskId. Se valida contra el empleado DESTINO: sin esto un admin
+  // podria imputarle el tiempo de cualquiera a una tarea donde no participa, y
+  // ademas guardaria el taskId sin su snapshot de titulo.
+  // `enforce: false`: corregir el estado de otro no puede quedar trabado por
+  // las tareas pendientes de esa persona.
+  let task;
+  try {
+    task = await resolveWorkingTask({
+      employeeId,
+      status: parsed.data.status,
+      detail: parsed.data.detail,
+      taskId: parsed.data.taskId,
+      enforce: false,
+      now,
+    });
+  } catch (error) {
+    if (error instanceof WorkingTaskError) {
+      return res.status(400).json({ message: error.message });
+    }
+    throw error;
+  }
+
   const employee = await prisma.$transaction(async (tx) => {
     await tx.activityHistory.updateMany({
       where: { employeeId, endedAt: null },
@@ -367,6 +400,8 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
         status: parsed.data.status,
         detail: parsed.data.detail,
         startedAt: now,
+        taskId: task.taskId,
+        taskTitle: task.taskTitle,
       },
     });
 

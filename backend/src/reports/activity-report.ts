@@ -13,6 +13,8 @@ import {
 export type ReportActivity = {
   status: ActivityStatus;
   detail: string;
+  /** Snapshot del titulo de la tarea declarada, si hubo alguna. */
+  taskTitle?: string | null;
   startedAt: Date;
   endedAt: Date | null;
   employee: {
@@ -20,6 +22,16 @@ export type ReportActivity = {
     name: string;
   };
 };
+
+/**
+ * Que va en la columna DETALLE. El comentario dejo de ser obligatorio en
+ * WORKING cuando se pudo declarar la tarea: sin este fallback, la columna
+ * quedaria vacia justo en el estado que mas importa del reporte.
+ */
+function detailText(row: ReportActivity) {
+  if (row.detail && row.taskTitle) return `${row.taskTitle} - ${row.detail}`;
+  return row.detail || row.taskTitle || "";
+}
 
 type ReportOptions = {
   title: string;
@@ -113,7 +125,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
     doc.text(formatDuration(durationMs(row, generatedAt)), margin + 280, chrome.y + 16, { width: 62 });
 
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(7.5);
-    doc.text(truncate(row.detail, 92), margin + 347, chrome.y + 9, {
+    doc.text(truncate(detailText(row), 92), margin + 347, chrome.y + 9, {
       width: 154,
       height: 31,
       ellipsis: true,

@@ -36,12 +36,12 @@ import {
   type TaskState,
 } from "../components/tasks/types";
 import type { AppOutletContext } from "../layouts/AppLayout";
-import { isStaff } from "../components/roles";
+import { canManageTasks, isStaff } from "../components/roles";
 
 export default function TasksPage() {
   const { me } = useOutletContext<AppOutletContext>();
-  // Gestionar tareas es de staff (admin o supervisor), no solo del admin.
-  const isAdmin = isStaff(me?.role);
+  // Gestionar el tablero: admin, supervisor o gestor de tareas.
+  const canManage = canManageTasks(me?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -206,9 +206,14 @@ export default function TasksPage() {
   }
 
   const canPinDetail = Boolean(detail && canMoveTask(detail, me?.id, me?.role));
-  const canComment = Boolean(
-    detail && (isAdmin || detail.participants.some((participant) => participant.id === me?.id))
+  // Leer y escribir el hilo siguen la regla del CHAT, no la del tablero: un
+  // gestor de tareas que no participa administra la tarjeta pero no su
+  // conversación. Espeja canCommentOnTask y chat.access.ts del backend.
+  const isParticipant = Boolean(
+    detail?.participants.some((participant) => participant.id === me?.id)
   );
+  const canReadChat = Boolean(detail) && (isStaff(me?.role) || isParticipant);
+  const canComment = canReadChat;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -240,7 +245,7 @@ export default function TasksPage() {
             Reporte PDF
           </Button>
 
-          {isAdmin && (
+          {canManage && (
             <Button
               variant="contained"
               size="large"
@@ -288,6 +293,7 @@ export default function TasksPage() {
         open={detailId !== null}
         task={detail}
         loading={detailLoading}
+        canReadChat={canReadChat}
         canComment={canComment}
         canPin={canPinDetail}
         me={me ? { id: me.id, name: me.name } : null}

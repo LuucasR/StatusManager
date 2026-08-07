@@ -13,6 +13,7 @@ import { Box } from "@mui/material";
 import { useState } from "react";
 import TaskCard from "./TaskCard";
 import TaskColumn from "./TaskColumn";
+import { canManageTasks } from "../roles";
 import { STATE_ORDER, canMoveTask, type Task, type TaskState } from "./types";
 
 type Props = {
@@ -84,7 +85,7 @@ export default function TaskBoard({
                   key={task.id}
                   task={task}
                   canMove={canMoveTask(task, meId, role)}
-                  canEdit={role === "ADMIN"}
+                  canEdit={canManageTasks(role)}
                   onOpen={onOpen}
                   onMove={onMove}
                   onPin={onPin}
