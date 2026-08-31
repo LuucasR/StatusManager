@@ -21,7 +21,7 @@ import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
 import TaskFacts from "./TaskFacts";
 import { STATE_META, type Task } from "./types";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 type Props = {
   open: boolean;
@@ -124,7 +124,7 @@ export default function TaskDetailDialog({
                           size="small"
                           disabled={!canPin}
                           onClick={() => onPin(task, !task.pinned)}
-                          aria-label={task.pinned ? "Dejar de fijar" : "Fijar tarjeta"}
+                          aria-label={task.pinned ? t("board.unpin") : t("board.pin")}
                         >
                           {task.pinned ? (
                             <PushPinRounded sx={{ fontSize: 18, color: "#d9901f" }} />
@@ -148,7 +148,7 @@ export default function TaskDetailDialog({
 
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Conversación ({task.commentsCount})
+                  {tf("taskDetail.conversation", { count: task.commentsCount })}
                 </Typography>
 
                 {canReadChat ? (
@@ -179,8 +179,7 @@ export default function TaskDetailDialog({
                   </Box>
                 ) : (
                   <Alert severity="info" sx={{ mt: 1 }}>
-                    La conversación es privada de los participantes. Podés gestionar la tarea, pero
-                    para seguir el hilo tenés que agregarte como integrante.
+                    {t("taskDetail.privateThread")}
                   </Alert>
                 )}
               </Box>

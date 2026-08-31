@@ -344,6 +344,59 @@ export const en = {
   // --- Relative days
   "date.today": "Today",
   "date.yesterday": "Yesterday",
+
+  // --- Strings missed by the first translation pass
+  "common.edit": "Edit",
+  "common.delete": "Delete",
+  "common.viewDetail": "View detail",
+  "common.description": "Description",
+  "board.pin": "Pin card",
+  "board.unpin": "Unpin",
+  "board.pinnedTooltip": "Pinned — never archived",
+  "board.pinnedLabel": "Pinned",
+  "board.cardActions": "Actions for {title}",
+  "board.statusLabel": "State: {state}",
+  "board.moveTo": "Move to {state}",
+  "board.commentCount": "{count} comments",
+  "board.newTask": "New task",
+  "board.confirmDelete": "Delete the task \"{title}\"? Its comments go with it.",
+  "taskDetail.conversation": "Conversation ({count})",
+  "taskDetail.privateThread":
+    "The conversation is private to the participants. You can manage the task, but to follow the thread you have to add yourself as a participant.",
+  "summary.subtitle":
+    "Where your time went during the period, and the details of every task you worked on.",
+  "dashboard.tagline":
+    "Keep your activity up to date so the team stays in the loop.",
+  "dashboard.changeStatus": "Change status",
+  "dashboard.changeRole": "Change role",
+  "dashboard.deleteAccount": "Delete account",
+  "dashboard.requestConfirmation": "Request confirmation",
+  "dashboard.confirmDeleteAccount":
+    "Permanently delete {name}'s account? Their whole activity history goes with it.",
+  "dashboard.confirmApprovePassword": "Approve the password change for {name}?",
+  "dashboard.confirmRejectPassword": "Reject the password change for {name}?",
+  "dashboard.personalReportFilename": "my-activity-log.pdf",
+  "dashboard.confirmationTitle": "Activity confirmation",
+  "dashboard.confirmationBody":
+    "An administrator is asking you to confirm your current activity.",
+  "dashboard.confirmationCountdown": "Time left: {seconds}s",
+  "dashboard.changeActivity": "Change activity",
+  "dashboard.stillOnIt": "Yes, still on it",
+  "account.created":
+    "Account created: {name} · employee #{number}. Pass them the number and the password.",
+  "chat.messages": "Messages",
+  "chat.messagesUnread": "Messages, {count} unread",
+
+  // --- Remaining dialog and list strings
+  "role.appliesImmediately":
+    "It applies immediately: their next request already uses the new role, with no need to sign in again.",
+  "account.autoNumberNote":
+    "The employee number is assigned automatically and the account starts active: there is nothing to approve.",
+  "chat.noConversations": "You have no conversations yet.",
+  "chat.emptyThread": "No messages yet.",
+  "notifications.title": "Notifications",
+  "notifications.markAllRead": "Mark all as read",
+  "common.loadMore": "Load more",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -661,6 +714,60 @@ const es: Record<TranslationKey, string> = {
 
   "date.today": "Hoy",
   "date.yesterday": "Ayer",
+
+  "common.edit": "Editar",
+  "common.delete": "Eliminar",
+  "common.viewDetail": "Ver detalle",
+  "common.description": "Descripción",
+  "board.pin": "Fijar tarjeta",
+  "board.unpin": "Dejar de fijar",
+  "board.pinnedTooltip": "Fijada — no se archiva",
+  "board.pinnedLabel": "Fijada",
+  "board.cardActions": "Acciones de {title}",
+  "board.statusLabel": "Estado: {state}",
+  "board.moveTo": "Mover a {state}",
+  "board.commentCount": "{count} comentarios",
+  "board.newTask": "Nueva tarea",
+  "board.confirmDelete":
+    "¿Eliminar la tarea \"{title}\"? Se borran sus comentarios.",
+  "taskDetail.conversation": "Conversación ({count})",
+  "taskDetail.privateThread":
+    "La conversación es privada de los participantes. Podés gestionar la tarea, pero para seguir el hilo tenés que agregarte como integrante.",
+  "summary.subtitle":
+    "En qué se te fue el tiempo durante el período, y los detalles de cada tarea que trabajaste.",
+  "dashboard.tagline":
+    "Mantené tu actividad actualizada para que el equipo esté conectado.",
+  "dashboard.changeStatus": "Cambiar estado",
+  "dashboard.changeRole": "Cambiar rol",
+  "dashboard.deleteAccount": "Eliminar cuenta",
+  "dashboard.requestConfirmation": "Solicitar confirmación",
+  "dashboard.confirmDeleteAccount":
+    "¿Eliminar definitivamente la cuenta de {name}? También se eliminará todo su historial de actividades.",
+  "dashboard.confirmApprovePassword":
+    "¿Aprobar el cambio de contraseña de {name}?",
+  "dashboard.confirmRejectPassword":
+    "¿Rechazar el cambio de contraseña de {name}?",
+  "dashboard.personalReportFilename": "mi-registro-de-actividades.pdf",
+  "dashboard.confirmationTitle": "Confirmación de actividad",
+  "dashboard.confirmationBody":
+    "El administrador solicita confirmar tu actividad actual.",
+  "dashboard.confirmationCountdown": "Tiempo restante: {seconds}s",
+  "dashboard.changeActivity": "Cambiar actividad",
+  "dashboard.stillOnIt": "Sí, continúo",
+  "account.created":
+    "Cuenta creada: {name} · legajo #{number}. Pasale el legajo y la contraseña.",
+  "chat.messages": "Mensajes",
+  "chat.messagesUnread": "Mensajes, {count} sin leer",
+
+  "role.appliesImmediately":
+    "Se aplica al instante: su próxima acción ya usa el rol nuevo, sin necesidad de volver a entrar.",
+  "account.autoNumberNote":
+    "El legajo se asigna solo, y la cuenta queda activa: no hace falta aprobarla.",
+  "chat.noConversations": "No tenés conversaciones todavía.",
+  "chat.emptyThread": "Todavía no hay mensajes.",
+  "notifications.title": "Notificaciones",
+  "notifications.markAllRead": "Marcar todo como leído",
+  "common.loadMore": "Ver más",
 };
 
 export const CATALOGUES = { en, es };

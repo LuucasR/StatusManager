@@ -16,7 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ROLE_META, ROLE_ORDER, type Role } from "../roles";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 type Props = {
   open: boolean;
@@ -54,7 +54,10 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
         body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role }),
       });
       onCreated(
-        `Cuenta creada: ${created.name} · legajo #${created.employeeNumber}. Pasale el legajo y la contraseña.`
+        tf("account.created", {
+          name: created.name,
+          number: created.employeeNumber,
+        })
       );
       onClose();
     } catch (err) {
@@ -110,7 +113,7 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
           </Typography>
 
           <Alert severity="info" variant="outlined">
-            El legajo se asigna solo, y la cuenta queda activa: no hace falta aprobarla.
+            {t("account.autoNumberNote")}
           </Alert>
         </Stack>
       </DialogContent>

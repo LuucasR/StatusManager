@@ -35,7 +35,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function useChat() {
   const value = useContext(ChatContext);
-  if (!value) throw new Error("useChat debe usarse dentro de ChatProvider");
+  if (!value) throw new Error("useChat must be used inside ChatProvider");
   return value;
 }
 

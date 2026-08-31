@@ -434,7 +434,7 @@ useEffect(() => {
   async function previewPersonalReport() {
     await openPdfPreview(
       `${API_URL}/activities/report.pdf`,
-      "mi-registro-de-actividades.pdf"
+      t("dashboard.personalReportFilename")
     );
   }
 
@@ -460,7 +460,7 @@ useEffect(() => {
 
   async function deleteAccount(employee: Employee) {
     const confirmed = window.confirm(
-      `¿Eliminar definitivamente la cuenta de ${employee.name}? También se eliminará todo su historial de actividades.`
+      tf("dashboard.confirmDeleteAccount", { name: employee.name })
     );
 
     if (!confirmed) return;
@@ -483,12 +483,15 @@ useEffect(() => {
     request: PasswordChangeRequest,
     decision: "APPROVED" | "REJECTED"
   ) {
-    const action = decision === "APPROVED" ? "aprobar" : "rechazar";
-    if (
-      !window.confirm(
-        `¿Confirmás que querés ${action} el cambio de contraseña de ${request.employee.name}?`
-      )
-    ) {
+    // Two keys rather than interpolating a verb: Spanish and English do not
+    // inflect the sentence the same way around it.
+    const prompt = tf(
+      decision === "APPROVED"
+        ? "dashboard.confirmApprovePassword"
+        : "dashboard.confirmRejectPassword",
+      { name: request.employee.name }
+    );
+    if (!window.confirm(prompt)) {
       return;
     }
 
@@ -540,7 +543,7 @@ useEffect(() => {
           </Typography>
 
           <Typography color="text.secondary">
-            Mantené tu actividad actualizada para que el equipo esté conectado.
+            {t("dashboard.tagline")}
           </Typography>
         </Box>
 
@@ -550,7 +553,7 @@ useEffect(() => {
           startIcon={<UpdateRounded />}
           onClick={() => setDialog(true)}
         >
-          Cambiar estado
+          {t("dashboard.changeStatus")}
         </Button>
       </Box>
 
@@ -786,7 +789,7 @@ useEffect(() => {
         variant="outlined"
         onClick={() => requestConfirmation(employee.id)}
       >
-        Solicitar confirmación
+        {t("dashboard.requestConfirmation")}
       </Button>
     )}
     {admin && (
@@ -800,7 +803,7 @@ useEffect(() => {
     setDialog(true);
   }}
 >
-  Cambiar estado
+  {t("dashboard.changeStatus")}
 </Button>
         {employee.id !== me?.id && (
           <>
@@ -811,7 +814,7 @@ useEffect(() => {
               startIcon={<BadgeRounded />}
               onClick={() => setRoleTarget(employee)}
             >
-              Cambiar rol
+              {t("dashboard.changeRole")}
             </Button>
             <Button
               sx={{ mt: 1 }}
@@ -821,7 +824,7 @@ useEffect(() => {
               startIcon={<DeleteForeverRounded />}
               onClick={() => deleteAccount(employee)}
             >
-              Eliminar cuenta
+              {t("dashboard.deleteAccount")}
             </Button>
           </>
         )}
@@ -900,7 +903,7 @@ useEffect(() => {
               <TableRow>
                 <TableCell colSpan={5}>
                   <Typography color="text.secondary" sx={{ py: 2 }}>
-                    No hay actividad registrada en este período.
+                    {t("summary.empty")}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1087,16 +1090,16 @@ useEffect(() => {
       open={confirmationDialog}
     >
       <DialogTitle>
-        Confirmación de actividad
+        {t("dashboard.confirmationTitle")}
       </DialogTitle>
 
       <DialogContent>
         <Typography>
-          El administrador solicita confirmar tu actividad actual.
+          {t("dashboard.confirmationBody")}
         </Typography>
 
         <Typography sx={{ mt: 2 }}>
-          Tiempo restante: {confirmationCountdown}s
+          {tf("dashboard.confirmationCountdown", { seconds: confirmationCountdown })}
         </Typography>
       </DialogContent>
 
@@ -1107,14 +1110,14 @@ useEffect(() => {
             setDialog(true);
           }}
         >
-          Cambiar actividad
+          {t("dashboard.changeActivity")}
         </Button>
 
         <Button
           variant="contained"
           onClick={confirmActivity}
         >
-          Sí, continúo
+          {t("dashboard.stillOnIt")}
         </Button>
       </DialogActions>
     </Dialog>

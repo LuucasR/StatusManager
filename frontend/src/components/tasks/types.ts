@@ -135,6 +135,36 @@ export function stateVars(state: TaskState): CSSProperties {
 }
 
 /**
+ * Paper tones for the notes on the board.
+ *
+ * Purely decorative: the PIN carries the state colour, so the paper is free to
+ * vary per task and make the wall look physical. It must never be what tells
+ * the states apart. All five are light, because a note is paper on cork in both
+ * themes - it does not flip with the theme, and the note ink is fixed to match.
+ */
+const NOTE_PAPERS = ["#fdf3bf", "#fde3c4", "#e4f2d4", "#dbeaf8", "#f3e4f7"];
+
+/**
+ * Tilt in degrees, derived from the id rather than drawn at random.
+ *
+ * The board re-renders on every task:changed and status:changed socket event,
+ * so a random angle would make every note on the wall twitch each time anyone
+ * changed their status. Derived from the id, a note keeps its angle for life.
+ */
+function noteTilt(id: number) {
+  return ((id * 37) % 5) - 2;
+}
+
+export function noteVars(task: Task): CSSProperties {
+  const id = Math.abs(task.id);
+  return {
+    ...stateVars(task.state),
+    "--paper": NOTE_PAPERS[id % NOTE_PAPERS.length],
+    "--tilt": `${noteTilt(id)}deg`,
+  };
+}
+
+/**
  * Hues without the yellow-lime band (40-110), ordered so consecutive ids land
  * far apart. At S 55% / L 32% with white text the worst case (cyan 168) gives
  * 4.7:1 -> AA. Do not raise the lightness: at 36% it drops to 3.8:1.

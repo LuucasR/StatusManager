@@ -2,6 +2,7 @@ import { ChatRounded } from "@mui/icons-material";
 import { Badge, Fab, Tooltip } from "@mui/material";
 import { useChat } from "./ChatProvider";
 import ChatWindow from "./ChatWindow";
+import { t, tf } from "../../i18n";
 
 type Props = {
   me: { id: number; name: string } | null;
@@ -27,7 +28,9 @@ export default function ChatLauncher({ me }: Props) {
           color="primary"
           onClick={() => chat.setOpen(true)}
           aria-label={
-            chat.unreadTotal ? `Mensajes, ${chat.unreadTotal} sin leer` : "Mensajes"
+            chat.unreadTotal
+              ? tf("chat.messagesUnread", { count: chat.unreadTotal })
+              : t("chat.messages")
           }
         >
           <ChatRounded />

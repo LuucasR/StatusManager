@@ -37,7 +37,7 @@ import {
 } from "../components/tasks/types";
 import type { AppOutletContext } from "../layouts/AppLayout";
 import { canManageTasks, isStaff } from "../components/roles";
-import { t } from "../i18n";
+import { t, tf } from "../i18n";
 
 export default function TasksPage() {
   const { me } = useOutletContext<AppOutletContext>();
@@ -187,7 +187,7 @@ export default function TasksPage() {
   }
 
   async function handleDelete(task: Task) {
-    if (!window.confirm(`¿Eliminar la tarea "${task.title}"? Se borran sus comentarios.`)) return;
+    if (!window.confirm(tf("board.confirmDelete", { title: task.title }))) return;
     try {
       await deleteTask(task.id);
       if (detailId === task.id) setDetailId(null);
@@ -255,7 +255,7 @@ export default function TasksPage() {
                 setFormOpen(true);
               }}
             >
-              Nueva tarea
+              {t("board.newTask")}
             </Button>
           )}
         </Stack>

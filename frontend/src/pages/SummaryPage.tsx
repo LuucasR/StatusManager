@@ -125,8 +125,7 @@ export default function SummaryPage() {
             {t("summary.title")}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            En qué se te fue el tiempo durante el período, y los detalles de cada tarea que
-            trabajaste.
+            {t("summary.subtitle")}
           </Typography>
         </Box>
       </Box>

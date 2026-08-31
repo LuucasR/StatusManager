@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatClock, relativeDay } from "../tasks/datetime";
 import { participantColor } from "../tasks/types";
 import type { ChatMessage } from "./types";
-import { tf } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 type Props = {
   messages: ChatMessage[];
@@ -116,7 +116,7 @@ export default function MessageThread({
 
         {!loading && messages.length === 0 && (
           <Typography variant="body2" color="text.disabled" sx={{ textAlign: "center", py: 4 }}>
-            Todavía no hay mensajes.
+            {t("chat.emptyThread")}
           </Typography>
         )}
 

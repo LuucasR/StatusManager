@@ -2,6 +2,7 @@ import { Avatar, Box, Chip, Stack, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { formatDuration, formatRange } from "./datetime";
 import { STATE_META, participantColor, type TaskParticipant, type TaskState } from "./types";
+import { t } from "../../i18n";
 
 /**
  * Deliberately NARROWER than `Task`: the activity summary carries the task data
@@ -60,14 +61,14 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
 
       <Box>
         <Typography variant="overline" color="text.secondary">
-          Descripción
+          {t("common.description")}
         </Typography>
         <Typography sx={{ whiteSpace: "pre-wrap" }}>{task.description}</Typography>
       </Box>
 
       <Box>
         <Typography variant="overline" color="text.secondary">
-          Duración
+          {t("common.duration")}
         </Typography>
         <Typography>
           {formatRange(task.startsAt, task.endsAt)}{" "}
@@ -84,7 +85,7 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 0.5 }} useFlexGap>
           {task.participants.length === 0 ? (
             <Typography color="warning.main" variant="body2">
-              Sin participantes
+              {t("board.noParticipants")}
             </Typography>
           ) : (
             task.participants.map((participant) => (

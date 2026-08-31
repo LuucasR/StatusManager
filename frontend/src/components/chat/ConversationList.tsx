@@ -120,7 +120,7 @@ export default function ConversationList({ conversations, unreadByConversation, 
 
       {conversations.length === 0 && (
         <Typography variant="body2" color="text.disabled" sx={{ p: 3, textAlign: "center" }}>
-          No tenés conversaciones todavía.
+          {t("chat.noConversations")}
         </Typography>
       )}
     </Box>

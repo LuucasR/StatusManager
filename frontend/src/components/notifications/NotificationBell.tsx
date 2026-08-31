@@ -83,10 +83,10 @@ export default function NotificationBell() {
           }}
         >
           <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
-            Notificaciones
+            {t("notifications.title")}
           </Typography>
           <Button size="small" disabled={unread === 0} onClick={() => void markAllRead()} autoFocus>
-            Marcar todo como leído
+            {t("notifications.markAllRead")}
           </Button>
         </Stack>
 
@@ -183,7 +183,7 @@ export default function NotificationBell() {
           {hasMore && (
             <Box sx={{ p: 1.5, textAlign: "center" }}>
               <Button size="small" onClick={() => void loadMore()}>
-                Ver más
+                {t("common.loadMore")}
               </Button>
             </Box>
           )}

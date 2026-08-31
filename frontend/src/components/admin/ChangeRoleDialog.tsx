@@ -82,8 +82,7 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
           </Typography>
 
           <Alert severity="info" variant="outlined">
-            El cambio se aplica en su próximo inicio de sesión: la sesión abierta
-            conserva los permisos viejos hasta que vuelva a entrar.
+            {t("role.appliesImmediately")}
           </Alert>
         </Stack>
       </DialogContent>

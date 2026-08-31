@@ -4,7 +4,6 @@ import {
   Inventory2Rounded,
   MoreVertRounded,
   PersonOffRounded,
-  PushPinRounded,
   ScheduleRounded,
 } from "@mui/icons-material";
 import {
@@ -27,8 +26,8 @@ import {
   STATE_META,
   STATE_ORDER,
   daysUntilArchive,
+  noteVars,
   participantColor,
-  stateVars,
   type Task,
   type TaskState,
 } from "./types";
@@ -90,10 +89,13 @@ export default function TaskCard({
   const dragProps = overlay ? {} : { ref: setNodeRef, ...attributes, ...listeners };
 
   return (
+    // The Paper is only the draggable anchor: dnd-kit writes `transform` onto it,
+    // so it has to stay free of one of its own. Everything that makes it look
+    // like a note - paper, tilt, shadow, pin - lives on .task-note inside it.
     <Paper
       {...dragProps}
       elevation={0}
-      style={stateVars(task.state)}
+      style={noteVars(task)}
       className={[
         "task-card",
         task.pinned ? "pinned" : "",
@@ -107,126 +109,116 @@ export default function TaskCard({
         "&:active": { cursor: canMove ? "grabbing" : "default" },
       }}
     >
-      {/* Colour cannot be the only carrier of the state. */}
-      <span className="sr-only">Estado: {meta.label}</span>
+      <Box className="task-note">
+        {/* The pin carries the state colour. The paper tone varies per task so the
+            wall looks physical, which is exactly why it must not encode state. */}
+        <Box className="task-note-pin" aria-hidden />
 
-      <Stack direction="row" spacing={1} sx={{ alignItems: "start" }}>
-        <Typography
-          variant="subtitle2"
-          className="task-card-title"
-          sx={{ flex: 1, fontWeight: 700 }}
-          onClick={() => onOpen?.(task)}
-        >
-          {task.title}
+        {/* Colour cannot be the only carrier of the state. */}
+        <span className="sr-only">{tf("board.statusLabel", { state: meta.label })}</span>
+        {task.pinned && <span className="sr-only">{t("board.pinnedLabel")}</span>}
+
+        <Stack direction="row" spacing={1} sx={{ alignItems: "start" }}>
+          <Typography
+            variant="subtitle2"
+            className="task-card-title"
+            sx={{ flex: 1, fontWeight: 700 }}
+            onClick={() => onOpen?.(task)}
+          >
+            {task.title}
+          </Typography>
+
+          {!overlay && (
+            <IconButton
+              size="small"
+              aria-label={tf("board.cardActions", { title: task.title })}
+              onClick={(event) => {
+                event.stopPropagation();
+                setMenuAnchor(event.currentTarget);
+              }}
+              // dnd-kit's pointer sensor swallows the event unless we stop it here.
+              onPointerDown={(event) => event.stopPropagation()}
+              sx={{ color: "var(--note-ink-soft)" }}
+            >
+              <MoreVertRounded fontSize="small" />
+            </IconButton>
+          )}
+        </Stack>
+
+        <Typography variant="body2" className="task-card-desc">
+          {task.description}
         </Typography>
 
-        {task.pinned && (
-          <Tooltip title="Fijada — no se archiva">
-            <PushPinRounded
-              sx={{ fontSize: 16, color: "#d9901f", transform: "rotate(30deg)", mt: 0.25 }}
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mt: 1.5 }}>
+          <ScheduleRounded sx={{ fontSize: 15, color: "var(--note-ink-soft)" }} />
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            {formatRange(task.startsAt, task.endsAt)}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Chip
+            size="small"
+            className="note-chip"
+            label={formatDuration(task.startsAt, task.endsAt)}
+          />
+        </Stack>
+
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 1.5 }}>
+          {task.participants.length === 0 ? (
+            <Chip
+              size="small"
+              className="note-chip note-chip-warn"
+              icon={<PersonOffRounded />}
+              label={t("board.noParticipants")}
             />
-          </Tooltip>
+          ) : (
+            <AvatarGroup
+              max={4}
+              sx={{ "& .MuiAvatar-root": { width: 26, height: 26, fontSize: 11, fontWeight: 700 } }}
+              slotProps={{
+                surplus: {
+                  sx: { bgcolor: "var(--note-chip-bg)", color: "var(--note-ink-soft)" },
+                },
+              }}
+            >
+              {task.participants.map((participant) => (
+                <Tooltip
+                  key={participant.id}
+                  title={`#${participant.employeeNumber} ${participant.name}`}
+                >
+                  <Avatar sx={{ bgcolor: participantColor(participant.id), color: "#fff" }}>
+                    {initials(participant.name)}
+                  </Avatar>
+                </Tooltip>
+              ))}
+            </AvatarGroup>
+          )}
+
+          <Box sx={{ flex: 1 }} />
+
+          {task.commentsCount > 0 && (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: "center", color: "var(--note-ink-soft)" }}
+              aria-label={tf("board.commentCount", { count: task.commentsCount })}
+            >
+              <ChatBubbleOutlineRounded sx={{ fontSize: 14 }} />
+              <Typography variant="caption">{task.commentsCount}</Typography>
+            </Stack>
+          )}
+        </Stack>
+
+        {showArchiveWarning && (
+          <Box sx={{ mt: 1.25 }}>
+            <Chip
+              size="small"
+              className="note-chip note-chip-warn"
+              icon={<Inventory2Rounded />}
+              label={archiveLabel(daysLeft)}
+            />
+          </Box>
         )}
-        {task.pinned && <span className="sr-only">Fijada</span>}
-
-        {!overlay && (
-          <IconButton
-            size="small"
-            aria-label={`Acciones de ${task.title}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenuAnchor(event.currentTarget);
-            }}
-            // dnd-kit's pointer sensor swallows the event unless we stop it here.
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <MoreVertRounded fontSize="small" />
-          </IconButton>
-        )}
-      </Stack>
-
-      <Typography variant="body2" color="text.secondary" className="task-card-desc">
-        {task.description}
-      </Typography>
-
-      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mt: 1.5 }}>
-        <ScheduleRounded sx={{ fontSize: 15, color: "var(--accent)" }} />
-        <Typography variant="caption" sx={{ fontWeight: 600 }} color="text.secondary">
-          {formatRange(task.startsAt, task.endsAt)}
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        <Chip
-          size="small"
-          label={formatDuration(task.startsAt, task.endsAt)}
-          sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: "#f3f4f9", color: "text.secondary", border: 0 }}
-        />
-      </Stack>
-
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 1.5 }}>
-        {task.participants.length === 0 ? (
-          <Chip
-            size="small"
-            icon={<PersonOffRounded />}
-            label={t("board.noParticipants")}
-            sx={{
-              height: 22,
-              fontSize: 11,
-              fontWeight: 700,
-              bgcolor: "#fff3dc",
-              color: "#8a5a10",
-              "& .MuiChip-icon": { fontSize: 14, color: "#8a5a10" },
-            }}
-          />
-        ) : (
-          <AvatarGroup
-            max={4}
-            sx={{ "& .MuiAvatar-root": { width: 26, height: 26, fontSize: 11, fontWeight: 700 } }}
-            slotProps={{
-              surplus: { sx: { bgcolor: "#eef0f6", color: "#6d7087" } },
-            }}
-          >
-            {task.participants.map((participant) => (
-              <Tooltip key={participant.id} title={`#${participant.employeeNumber} ${participant.name}`}>
-                <Avatar sx={{ bgcolor: participantColor(participant.id), color: "#fff" }}>
-                  {initials(participant.name)}
-                </Avatar>
-              </Tooltip>
-            ))}
-          </AvatarGroup>
-        )}
-
-        <Box sx={{ flex: 1 }} />
-
-        {task.commentsCount > 0 && (
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{ alignItems: "center", color: "text.secondary" }}
-            aria-label={`${task.commentsCount} comentarios`}
-          >
-            <ChatBubbleOutlineRounded sx={{ fontSize: 14 }} />
-            <Typography variant="caption">{task.commentsCount}</Typography>
-          </Stack>
-        )}
-      </Stack>
-
-      {showArchiveWarning && (
-        <Box sx={{ mt: 1.25 }}>
-          <Chip
-            size="small"
-            icon={<Inventory2Rounded />}
-            label={archiveLabel(daysLeft)}
-            sx={{
-              height: 22,
-              fontSize: 11,
-              fontWeight: 700,
-              bgcolor: "#fff3dc",
-              color: "#8a5a10",
-              "& .MuiChip-icon": { fontSize: 14, color: "#8a5a10" },
-            }}
-          />
-        </Box>
-      )}
+      </Box>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
         <MenuItem
@@ -235,7 +227,7 @@ export default function TaskCard({
             onOpen?.(task);
           }}
         >
-          Ver detalle
+          {t("common.viewDetail")}
         </MenuItem>
 
         <MenuItem
@@ -245,10 +237,10 @@ export default function TaskCard({
             onPin?.(task, !task.pinned);
           }}
         >
-          {task.pinned ? "Dejar de fijar" : "Fijar tarjeta"}
+          {task.pinned ? t("board.unpin") : t("board.pin")}
         </MenuItem>
 
-        {/* Alternativa accesible al drag & drop: teclado y touch garantizados. */}
+        {/* Accessible alternative to drag and drop: keyboard and touch guaranteed. */}
         {STATE_ORDER.map((state) => (
           <MenuItem
             key={state}
@@ -258,15 +250,15 @@ export default function TaskCard({
               onMove?.(task.id, state);
             }}
           >
-            Mover a {STATE_META[state].label}
+            {tf("board.moveTo", { state: STATE_META[state].label })}
           </MenuItem>
         ))}
 
         {!canMove && (
           <MenuItem disabled sx={{ whiteSpace: "normal", maxWidth: 240 }}>
-            <Typography variant="caption">
-              Solo los participantes pueden mover esta tarea
-            </Typography>
+            {/* Same sentence the API answers with, so the rule reads identically
+                whether you are stopped by the UI or by the server. */}
+            <Typography variant="caption">{t("error.MOVE_NOT_ALLOWED")}</Typography>
           </MenuItem>
         )}
 
@@ -278,7 +270,7 @@ export default function TaskCard({
               onEdit?.(task);
             }}
           >
-            Editar
+            {t("common.edit")}
           </MenuItem>,
           <MenuItem
             key="delete"
@@ -288,7 +280,7 @@ export default function TaskCard({
               onDelete?.(task);
             }}
           >
-            Eliminar
+            {t("common.delete")}
           </MenuItem>,
         ]}
       </Menu>
