@@ -30,33 +30,40 @@ app.use(
 app.use(helmet());
 app.use(compression());
 
-if (process.env.NODE_ENV === "production") {
-  // /auth es el unico que sigue en 100: ahi el limite ES la defensa (fuerza
-  // bruta de login), no una cuota de uso.
-  app.use(
-    ["/auth"],
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 100,
-      standardHeaders: true,
-    })
-  );
+/**
+ * Rate limits apply in every environment. They used to sit behind a
+ * NODE_ENV === "production" check, which left staging unprotected and meant the
+ * limits were never exercised before they met real traffic.
+ *
+ * Caveat: the default MemoryStore is per-process and resets on restart, so
+ * these limits do not hold across a redeploy or a second instance. A shared
+ * store is required before scaling out.
+ */
 
-  // El resto comparte el bucket holgado. 100 req / 15 min alcanzaba cuando el
-  // dashboard cargaba una vez, pero hoy cada `status:changed` de CUALQUIER
-  // integrante dispara un load() completo, y a eso se le suman el selector de
-  // tareas, el resumen y el historial con filtros: con 10 personas activas se
-  // agotaba en minutos. Lo mismo valia para el chat, que gasta una request por
-  // mensaje, por marca de leido y por paginacion.
-  app.use(
-    ["/activities", "/admin", "/tasks", "/chat", "/notifications"],
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 900,
-      standardHeaders: true,
-    })
-  );
-}
+// /auth stays at 100: here the limit IS the defense (login brute force), not a
+// usage quota.
+app.use(
+  ["/auth"],
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+  })
+);
+
+// Everything else shares a roomy bucket. 100 req / 15 min was enough when the
+// dashboard loaded once, but today every `status:changed` from ANY member
+// triggers a full load(), plus the task selector, the summary and the filtered
+// history: with 10 active people it drained in minutes. Same for chat, which
+// spends a request per message, per read receipt and per page.
+app.use(
+  ["/activities", "/admin", "/tasks", "/chat", "/notifications"],
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 900,
+    standardHeaders: true,
+  })
+);
 
 app.use(express.json({ limit: "100kb" }));
 

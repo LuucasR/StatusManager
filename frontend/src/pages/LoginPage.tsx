@@ -14,11 +14,13 @@ export default function LoginPage() {
     event.preventDefault();
     setLoading(true); setError("");
     try {
-      const data = await api<{ token: string }>("/auth/login", {
+      const data = await api<{ token: string; mustChangePassword?: boolean }>("/auth/login", {
         method: "POST", body: JSON.stringify({ employeeNumber, password }),
       });
       localStorage.setItem("token", data.token);
-      window.location.assign("/dashboard");
+      // Temporary password from an admin-approved reset: the token is only good
+      // for /auth/change-password until it is replaced.
+      window.location.assign(data.mustChangePassword ? "/change-password" : "/dashboard");
     } catch (err) { setError((err as Error).message); } finally { setLoading(false); }
   }
 

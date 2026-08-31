@@ -6,6 +6,7 @@ import { renderActivityReport } from "../reports/activity-report";
 import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
+import { approvePasswordReset } from "../auth/auth.service";
 import { visibleHistoryWhere } from "../activities/activity-status";
 import { WorkingTaskError, resolveWorkingTask } from "../activities/activity-task";
 import { z } from "zod";
@@ -90,7 +91,6 @@ router.get("/password-change-requests", requireAdmin, async (_req, res) => {
     where: { status: "PENDING" },
     select: {
       id: true,
-      requestedPassword: true,
       createdAt: true,
       employee: {
         select: {
@@ -128,25 +128,31 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
     });
   }
 
-  await prisma.$transaction(async (tx) => {
-    if (decision === "APPROVED") {
-      await tx.employee.update({
-        where: { id: request.employeeId },
-        data: { password: await hashPassword(request.requestedPassword) },
-      });
-    }
-
-    await tx.passwordChangeRequest.update({
+  if (decision === "REJECTED") {
+    await prisma.passwordChangeRequest.update({
       where: { id },
-      data: { status: decision, resolvedAt: new Date() },
+      data: { status: "REJECTED", resolvedAt: new Date() },
     });
+    return res.json({ message: "Solicitud rechazada" });
+  }
+
+  // Minted here, never stored in cleartext and never written to a log. It goes
+  // out in this one response for the admin to read to the employee, who is then
+  // forced to replace it on next login (mustChangePassword).
+  //
+  // The old flow instead saved the password the EMPLOYEE picked, unhashed, and
+  // showed it on this same screen.
+  const temporaryPassword = await approvePasswordReset(request.employeeId);
+
+  await prisma.passwordChangeRequest.update({
+    where: { id },
+    data: { status: "APPROVED", resolvedAt: new Date() },
   });
 
   res.json({
+    temporaryPassword,
     message:
-      decision === "APPROVED"
-        ? "Contraseña actualizada correctamente"
-        : "Solicitud rechazada",
+      "Contraseña temporal generada. Dictásela al empleado: no se vuelve a mostrar.",
   });
 });
 

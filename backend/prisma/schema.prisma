@@ -59,6 +59,12 @@ model Employee {
   name           String
   email          String           @unique
   password       String
+  /// Forces a password change on next login. Set when an admin resolves a
+  /// reset request, because the temporary password is spoken out loud.
+  mustChangePassword Boolean     @default(false)
+  /// Tokens issued before this instant are rejected. Without it, changing a
+  /// password left every already-issued JWT valid for up to a day.
+  passwordChangedAt  DateTime?
   role           Role             @default(EMPLOYEE)
   currentStatus  ActivityStatus   @default(OFFLINE)
   statusSince    DateTime         @default(now())
@@ -76,10 +82,13 @@ model Employee {
   notifications Notification[]
 }
 
+/// A request to have the password reset. It deliberately carries NO password:
+/// the employee does not choose one and nothing reversible is ever stored. On
+/// approval the server mints a random temporary password, saves only its hash
+/// and returns the cleartext to the admin exactly once.
 model PasswordChangeRequest {
   id                Int                         @id @default(autoincrement())
   employeeId        Int
-  requestedPassword String
   status            PasswordChangeRequestStatus @default(PENDING)
   createdAt         DateTime                    @default(now())
   resolvedAt        DateTime?

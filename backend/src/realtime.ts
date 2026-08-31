@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
+import prisma from "./prisma/client";
 import { verifyToken } from "./auth/auth.token";
 
 /**
@@ -25,12 +26,32 @@ let io: Server;
 export function initializeRealtime(server: HttpServer) {
   io = new Server(server, { cors: { origin: process.env.FRONTEND_URL ?? "http://localhost:5173" } });
 
-  io.use((socket, next) => {
+  /**
+   * Same rule as requireAuth: the signature proves who is connecting, the
+   * database decides whether they still may. A socket outlives a single
+   * request, so accepting a stale token here would keep a deactivated employee
+   * receiving live team activity until they closed the tab.
+   */
+  io.use(async (socket, next) => {
     try {
       const payload = verifyToken(String(socket.handshake.auth.token ?? ""));
 
-      socket.data.employeeId = payload.employeeId;
-      socket.data.role = payload.role;
+      const employee = await prisma.employee.findUnique({
+        where: { id: payload.employeeId },
+        select: { id: true, role: true, active: true, passwordChangedAt: true },
+      });
+
+      if (!employee || !employee.active) return next(new Error("unauthorized"));
+
+      if (
+        employee.passwordChangedAt &&
+        payload.iat < Math.floor(employee.passwordChangedAt.getTime() / 1000)
+      ) {
+        return next(new Error("unauthorized"));
+      }
+
+      socket.data.employeeId = employee.id;
+      socket.data.role = employee.role;
 
       next();
     } catch {

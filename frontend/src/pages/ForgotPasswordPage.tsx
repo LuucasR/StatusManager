@@ -14,8 +14,6 @@ import { api } from "../api";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,21 +22,18 @@ export default function ForgotPasswordPage() {
     event.preventDefault();
     setError("");
     setMessage("");
-
-    if (password !== confirmation) {
-      setError("Las contraseñas no coinciden");
-      return;
-    }
-
     setLoading(true);
+
     try {
+      // Email only. This form used to ask for the password the employee wanted,
+      // which the backend then stored unhashed and showed to the admin. The
+      // admin now generates a temporary one and dictates it.
       const result = await api<{ message: string }>("/auth/forgot-password", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email }),
       });
       setMessage(result.message);
-      setPassword("");
-      setConfirmation("");
+      setEmail("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -53,8 +48,9 @@ export default function ForgotPasswordPage() {
           <Typography className="eyebrow">RECUPERAR ACCESO</Typography>
           <Typography variant="h4">¿Olvidaste tu contraseña?</Typography>
           <Typography color="text.secondary">
-            Ingresá el email de tu cuenta y elegí la contraseña nueva. Un
-            administrador revisará la solicitud.
+            Ingresá el email de tu cuenta. Un administrador va a generarte una
+            contraseña temporal y te la va a pasar; al entrar vas a elegir una
+            nueva.
           </Typography>
 
           <Stack component="form" onSubmit={submit} spacing={2.2} sx={{ mt: 4 }}>
@@ -66,27 +62,6 @@ export default function ForgotPasswordPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-            />
-            <TextField
-              label="Nueva contraseña"
-              type="password"
-              required
-              helperText="Entre 8 y 72 caracteres"
-              slotProps={{
-                htmlInput: { minLength: 8, maxLength: 72 },
-              }}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <TextField
-              label="Repetir nueva contraseña"
-              type="password"
-              required
-              slotProps={{
-                htmlInput: { minLength: 8, maxLength: 72 },
-              }}
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
             />
             <Button
               type="submit"

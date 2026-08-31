@@ -1,5 +1,9 @@
 import prisma from "../prisma/client";
-import { hashPassword, verifyPassword } from "./auth.password";
+import {
+  generateTemporaryPassword,
+  hashPassword,
+  verifyPassword,
+} from "./auth.password";
 
 export async function login(employeeNumber: number, password: string) {
   const employee = await prisma.employee.findUnique({
@@ -29,10 +33,16 @@ export async function register(name: string, email: string, password: string) {
   });
 }
 
-export async function requestPasswordReset(
-  email: string,
-  requestedPassword: string
-) {
+/**
+ * Records that someone wants their password reset. Takes NO password on
+ * purpose.
+ *
+ * The previous version accepted the password the employee wanted and stored it
+ * unhashed, so it sat in the database and in every backup and was shown to the
+ * admin on screen. Nothing reversible is stored now: the actual password is
+ * minted at approval time by `approvePasswordReset`.
+ */
+export async function requestPasswordReset(email: string) {
   const employee = await prisma.employee.findUnique({
     where: { email: email.toLowerCase() },
   });
@@ -45,12 +55,62 @@ export async function requestPasswordReset(
       data: { status: "REJECTED", resolvedAt: new Date() },
     }),
     prisma.passwordChangeRequest.create({
-      data: {
-        employeeId: employee.id,
-        requestedPassword,
-      },
+      data: { employeeId: employee.id },
     }),
   ]);
+
+  return true;
+}
+
+/**
+ * Mints a temporary password for `employeeId`, stores only its hash and returns
+ * the cleartext to the caller ONCE. The caller (the admin approval route) shows
+ * it to the admin and must not persist or log it.
+ *
+ * `mustChangePassword` forces the employee to pick their own on next login, and
+ * `passwordChangedAt` invalidates any token they still had.
+ */
+export async function approvePasswordReset(employeeId: number) {
+  const temporaryPassword = generateTemporaryPassword();
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      password: await hashPassword(temporaryPassword),
+      mustChangePassword: true,
+      passwordChangedAt: new Date(),
+    },
+  });
+
+  return temporaryPassword;
+}
+
+/**
+ * Self-service change, used both for the forced change after a reset and for a
+ * voluntary one. Requires the current password so a stolen token alone cannot
+ * take over the account.
+ */
+export async function changeOwnPassword(
+  employeeId: number,
+  currentPassword: string,
+  newPassword: string
+) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+  });
+  if (!employee?.active) return false;
+
+  const valid = await verifyPassword(currentPassword, employee.password);
+  if (!valid) return false;
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      password: await hashPassword(newPassword),
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+    },
+  });
 
   return true;
 }

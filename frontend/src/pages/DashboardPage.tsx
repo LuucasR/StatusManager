@@ -83,7 +83,6 @@ type HistoryResponse = { rows: History[]; truncated: boolean };
 
 type PasswordChangeRequest = {
   id: number;
-  requestedPassword: string;
   createdAt: string;
   employee: {
     id: number;
@@ -503,6 +502,10 @@ useEffect(() => {
     }
   }
 
+  const [issuedPassword, setIssuedPassword] = useState<
+    { name: string; password: string } | null
+  >(null);
+
   async function resolvePasswordRequest(
     request: PasswordChangeRequest,
     decision: "APPROVED" | "REJECTED"
@@ -517,10 +520,17 @@ useEffect(() => {
     }
 
     try {
-      await api(`/admin/password-change-requests/${request.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ decision }),
-      });
+      const result = await api<{ temporaryPassword?: string }>(
+        `/admin/password-change-requests/${request.id}`,
+        { method: "PATCH", body: JSON.stringify({ decision }) }
+      );
+      // Shown once and never persisted anywhere, so it has to be captured here.
+      if (result.temporaryPassword) {
+        setIssuedPassword({
+          name: request.employee.name,
+          password: result.temporaryPassword,
+        });
+      }
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -639,7 +649,6 @@ useEffect(() => {
                   <TableRow>
                     <TableCell>Empleado</TableCell>
                     <TableCell>Email</TableCell>
-                    <TableCell>Contraseña solicitada</TableCell>
                     <TableCell>Fecha</TableCell>
                     <TableCell align="right">Acciones</TableCell>
                   </TableRow>
@@ -652,19 +661,6 @@ useEffect(() => {
                         {request.employee.name}
                       </TableCell>
                       <TableCell>{request.employee.email}</TableCell>
-                      <TableCell>
-                        <Typography
-                          component="code"
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            borderRadius: 1,
-                            bgcolor: "grey.100",
-                          }}
-                        >
-                          {request.requestedPassword}
-                        </Typography>
-                      </TableCell>
                       <TableCell>
                         {new Date(request.createdAt).toLocaleString("es-AR")}
                       </TableCell>
@@ -1300,6 +1296,42 @@ useEffect(() => {
       onClick={downloadPreviewedPdf}
     >
       Descargar PDF
+    </Button>
+  </DialogActions>
+</Dialog>
+
+{/* Reveal de un solo uso: la contraseña temporal no se guarda en ningun
+    lado, asi que si se cierra sin copiarla hay que regenerarla. */}
+<Dialog
+  open={Boolean(issuedPassword)}
+  onClose={() => setIssuedPassword(null)}
+  maxWidth="xs"
+  fullWidth
+>
+  <DialogTitle>Contraseña temporal</DialogTitle>
+  <DialogContent>
+    <Typography color="text.secondary" sx={{ mb: 2 }}>
+      Pasásela a {issuedPassword?.name}. No se guarda en ningún lado y no se
+      vuelve a mostrar. Al entrar, va a tener que elegir una nueva.
+    </Typography>
+    <Typography
+      component="code"
+      sx={{
+        display: "block",
+        p: 2,
+        borderRadius: 1,
+        bgcolor: "grey.100",
+        fontSize: 20,
+        letterSpacing: ".08em",
+        textAlign: "center",
+      }}
+    >
+      {issuedPassword?.password}
+    </Typography>
+  </DialogContent>
+  <DialogActions>
+    <Button variant="contained" onClick={() => setIssuedPassword(null)}>
+      Ya la copié
     </Button>
   </DialogActions>
 </Dialog>
