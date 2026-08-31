@@ -38,7 +38,7 @@ router.get("/exceptions", async (req, res) => {
   if (!isCalendarDay(from) || !isCalendarDay(to)) {
     return res.status(400).json({
       code: "INVALID_DATE_RANGE",
-      message: "Both from and to must be YYYY-MM-DD dates",
+      message: "Invalid date range",
     });
   }
 

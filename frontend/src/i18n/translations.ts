@@ -473,6 +473,10 @@ export const en = {
   // --- Read-only calendar
   "workday.readOnly":
     "These are the hours the app works to. Only an administrator can change them.",
+
+  // --- Route vs record 404
+  "error.ROUTE_NOT_FOUND":
+    "That endpoint does not exist. The app may be newer than the server it is talking to.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -914,6 +918,9 @@ const es: Record<TranslationKey, string> = {
 
   "workday.readOnly":
     "Estos son los horarios con los que trabaja la app. Solo un administrador puede cambiarlos.",
+
+  "error.ROUTE_NOT_FOUND":
+    "Ese endpoint no existe. Puede que la app sea más nueva que el servidor al que le habla.",
 };
 
 export const CATALOGUES = { en, es };

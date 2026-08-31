@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "scan:spanish": "node scripts/scan-spanish.cjs"
+    "scan:spanish": "node scripts/scan-spanish.cjs",
+    "check:codes": "node scripts/check-error-codes.cjs",
+    "check": "npm run scan:spanish && npm run check:codes"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

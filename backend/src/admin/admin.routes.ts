@@ -209,7 +209,7 @@ router.post("/employees", requireAdmin, async (req, res) => {
   const email = parsed.data.email.toLowerCase();
   const taken = await prisma.employee.findUnique({ where: { email }, select: { id: true } });
   if (taken) {
-    return res.status(409).json({ code: "EMAIL_TAKEN", message: "An account with that email already exists" });
+    return res.status(409).json({ code: "EMAIL_TAKEN", message: "That email is already registered" });
   }
 
   try {
@@ -716,7 +716,7 @@ router.get("/workday-exceptions", requireAdmin, async (req, res) => {
   if (!isCalendarDay(from) || !isCalendarDay(to)) {
     return res.status(400).json({
       code: "INVALID_DATE_RANGE",
-      message: "Both from and to must be YYYY-MM-DD dates",
+      message: "Invalid date range",
     });
   }
 

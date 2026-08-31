@@ -3,9 +3,16 @@ import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { logger } from "../logger";
 
-/** Catch-all for unmatched routes. Mounted after every router. */
+/**
+ * Catch-all for unmatched routes. Mounted after every router.
+ *
+ * Its own code, NOT the NOT_FOUND used for a missing row. Both are 404s but they
+ * mean completely different things, and sharing a code made the client render
+ * "that record does not exist" when the real problem was that the endpoint was
+ * not there at all - which points whoever is debugging at the wrong layer.
+ */
 export const notFoundHandler: RequestHandler = (_req, res) => {
-  res.status(404).json({ code: "NOT_FOUND", message: "Route not found" });
+  res.status(404).json({ code: "ROUTE_NOT_FOUND", message: "Route not found" });
 };
 
 type Mapped = { status: number; code: string; message: string };
