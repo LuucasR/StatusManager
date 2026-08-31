@@ -21,7 +21,9 @@ export const TOKENS: Record<ThemeMode, Record<string, string>> = {
     "--accent-soft": "#ecebff",
     "--text": "#17182f",
     "--muted": "#6d7087",
-    "--faint": "#9296ab",
+    // 4.9:1 on white, 4.6:1 on the page ground. The previous #9296ab was
+    // 2.93:1, under the AA floor for the empty states that use it.
+    "--faint": "#6b6f8a",
     "--shadow": "rgba(36, 38, 84, .08)",
     "--shadow-strong": "rgba(36, 38, 84, .18)",
     "--auth-glow": "#e8e7ff",
