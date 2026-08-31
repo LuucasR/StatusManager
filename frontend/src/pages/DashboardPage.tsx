@@ -47,9 +47,11 @@ import WorkingTaskSelect, {
 } from "../components/activities/WorkingTaskSelect";
 import TaskFacts from "../components/tasks/TaskFacts";
 import { STATE_META, type Task, type TaskState } from "../components/tasks/types";
+import { paperVars } from "../components/notePaper";
 import {
   STATUS_LABELS as labels,
   STATUS_CHIP_COLORS as colors,
+  STATUS_COLORS,
   SELECTABLE_STATUSES,
   allowsTask,
   requiresDetail,
@@ -67,6 +69,8 @@ type Employee = {
   currentStatus: Status;
   statusSince: string;
   detail: string;
+  /** Task declared with the open segment. Was already sent and thrown away. */
+  taskTitle: string | null;
   active?: boolean;
 };
 
@@ -149,6 +153,7 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [confirmationDialog, setConfirmationDialog] = useState(false);
 const [confirmationCountdown, setConfirmationCountdown] = useState(120);
+const [confirming, setConfirming] = useState(false);
 const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
 const [reportDialog, setReportDialog] = useState(false);
@@ -278,11 +283,30 @@ useSocketEvent("status:changed", () => load());
 useSocketEvent("confirmation:request", () => {
   setConfirmationDialog(true);
   setConfirmationCountdown(120);
+  // A fresh prompt has to clear the previous one's in-flight flag, or a
+  // failed attempt would leave the new dialog's button permanently disabled.
+  setConfirming(false);
 });
 
-useSocketEvent("confirmation:confirmed", () => load());
+// Both of these are broadcast to EVERY client, so the payload has to be
+// checked: without it, one person's check closing would close the dialog of
+// anyone else who happened to have one open.
+useSocketEvent<{ employeeId: number }>("confirmation:confirmed", (payload) => {
+  if (payload?.employeeId === me?.id) setConfirmationDialog(false);
+  void load();
+});
 
-useSocketEvent("confirmation:timeout", () => load());
+// The server drops the pending check when its timer fires. Closing the dialog
+// here is what stops the button outliving the thing it acts on - clicking it
+// afterwards was the 400 that looked like the button doing nothing.
+useSocketEvent<{ employeeId: number }>("confirmation:timeout", (payload) => {
+  if (payload?.employeeId === me?.id) {
+    setConfirmationDialog(false);
+    setConfirming(false);
+    setError(t("dashboard.confirmationExpired"));
+  }
+  void load();
+});
 
 useOnReconnect(() => load());
 
@@ -333,13 +357,30 @@ useOnReconnect(() => load());
     }
   }
 
+  /**
+   * Answering the end-of-day check.
+   *
+   * The failure path matters as much as the success one. The pending check
+   * lives in the server's memory, so it is gone if the timer fired, if the
+   * backend restarted in between, or if this is a second click - and the call
+   * then answers 400. This used to have no catch at all, so the rejection
+   * escaped as an unhandled promise, the dialog stayed open and the button
+   * looked dead. Whatever the reason, there is nothing left to confirm, so the
+   * dialog closes either way and the message is surfaced instead of swallowed.
+   */
   async function confirmActivity() {
-  await api("/activities/confirm-activity", {
-    method: "POST",
-  });
-
-  setConfirmationDialog(false);
-}
+    if (confirming) return;
+    setConfirming(true);
+    try {
+      await api("/activities/confirm-activity", { method: "POST" });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setConfirming(false);
+      setConfirmationDialog(false);
+      void load();
+    }
+  }
 
 useEffect(() => {
 
@@ -427,7 +468,7 @@ useEffect(() => {
   async function previewReport() {
     await openPdfPreview(
       `${API_URL}/admin/report.pdf?${buildReportParams().toString()}`,
-      "reporte-actividades.pdf"
+      t("dashboard.reportFilename")
     );
   }
 
@@ -560,7 +601,7 @@ useEffect(() => {
       <Box className="status-grid">
         <Paper className="status-card" elevation={0}>
           <Typography color="text.secondary">
-            Estado actual
+            {t("dashboard.currentStatus")}
           </Typography>
 
           <Stack
@@ -714,9 +755,15 @@ useEffect(() => {
             {employees.map((employee) => (
               <Paper
                 key={employee.id}
-                className="employee-card"
+                className="employee-card emp-note"
                 elevation={0}
+                style={{
+                  ...paperVars(employee.id),
+                  // The pin carries the status. Paper tone is decorative.
+                  "--accent": STATUS_COLORS[employee.currentStatus],
+                }}
               >
+                <Box className="task-note-pin" aria-hidden />
      <Stack
   direction="row"
   sx={{
@@ -759,7 +806,7 @@ useEffect(() => {
                     <Chip
                       size="small"
                       color="warning"
-                      label="Pendiente"
+                      label={t("common.pending")}
                     />
                   )}
                 </Stack>
@@ -777,6 +824,12 @@ useEffect(() => {
     >
       {employee.detail || t("dashboard.noDetail")}
     </Typography>
+
+    {employee.taskTitle && (
+      <Typography variant="body2" className="emp-note-task">
+        {tf("dashboard.workingOn", { task: employee.taskTitle })}
+      </Typography>
+    )}
 
     <Typography className="mini-timer">
       {elapsed(employee.statusSince, now)}
@@ -941,7 +994,7 @@ useEffect(() => {
                       color="text.disabled"
                       sx={{ fontStyle: "italic" }}
                     >
-                      {item.taskTitle} (eliminada)
+                      {tf("dashboard.taskDeletedSuffix", { title: item.taskTitle })}
                     </Typography>
                   ) : (
                     <Typography variant="body2" color="text.disabled">
@@ -1021,8 +1074,8 @@ useEffect(() => {
           <TextField
             label={
               detailRequired
-                ? "Comentario obligatorio"
-                : "Comentario opcional"
+                ? t("dashboard.commentRequired")
+                : t("dashboard.commentOptional")
             }
             placeholder={
               detailRequired
@@ -1049,7 +1102,7 @@ useEffect(() => {
             setSelectedEmployee(null);
           }}
         >
-          Cancelar
+          {t("common.cancel")}
         </Button>
 
         <Button
@@ -1057,7 +1110,7 @@ useEffect(() => {
           disabled={detailRequired && detail.trim().length < 3}
           onClick={changeStatus}
         >
-          Guardar cambio
+          {t("common.saveChange")}
         </Button>
       </DialogActions>
     </Dialog>
@@ -1115,7 +1168,8 @@ useEffect(() => {
 
         <Button
           variant="contained"
-          onClick={confirmActivity}
+          disabled={confirming}
+          onClick={() => void confirmActivity()}
         >
           {t("dashboard.stillOnIt")}
         </Button>
@@ -1223,7 +1277,7 @@ useEffect(() => {
 
   <DialogActions>
     <Button onClick={() => setReportDialog(false)}>
-      Cancelar
+      {t("common.cancel")}
     </Button>
 
     <Button
@@ -1262,7 +1316,7 @@ useEffect(() => {
           height: { xs: "68vh", md: "76vh" },
           border: 0,
           borderRadius: 1,
-          bgcolor: "grey.100",
+          bgcolor: "var(--surface-2)",
         }}
       />
     )}
@@ -1298,7 +1352,7 @@ useEffect(() => {
         display: "block",
         p: 2,
         borderRadius: 1,
-        bgcolor: "grey.100",
+        bgcolor: "var(--surface-2)",
         fontSize: 20,
         letterSpacing: ".08em",
         textAlign: "center",

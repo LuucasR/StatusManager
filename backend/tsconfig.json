@@ -13,5 +13,9 @@
     "types": ["node"]
   },
 
-  "include": ["src"]
+  "include": ["src"],
+
+  // Tests run through tsx, which type-checks them on the way; they have no
+  // business in the deployed dist/.
+  "exclude": ["src/**/*.test.ts"]
 }

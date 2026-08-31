@@ -16,6 +16,7 @@ import {
   WORKDAY_SETTINGS_ID,
   isValidTimeOfDay,
   isValidTimeZone,
+  parseTimeOfDay,
 } from "../scheduler/workday";
 
 
@@ -82,10 +83,9 @@ router.get("/employees", requireStaff, async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: employee.active,
-        // Same fallback as GET /activities/team: the comment stopped being
-        // mandatory for WORKING, so without this the card would read "No detail"
-        // for exactly everyone who is working.
-        detail: open?.detail || open?.taskTitle || "",
+        // Same as GET /activities/team: the task now has its own line on the
+        // card, so folding it into `detail` would print it twice.
+        detail: open?.detail ?? "",
         taskTitle: open?.taskTitle ?? null,
       };
     })
@@ -615,6 +615,16 @@ const workdaySettingsSchema = z
     timezone: z
       .string()
       .refine(isValidTimeZone, "That timezone is not recognised"),
+    // 0 = Sunday .. 6 = Saturday. Deduplicated and sorted on the way in so the
+    // stored array has one shape, and an empty one is rejected: a week with no
+    // working days would silently switch the whole automation off, which is
+    // what `enabled` is for.
+    workingWeekdays: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, "At least one weekday has to be a working day")
+      .transform((days) => [...new Set(days)].sort((a, b) => a - b)),
+    // Grace period between the end of the day and the check.
+    confirmationDelayMinutes: z.number().int().min(0).max(240),
     // Floor of 30s so nobody can set a window too short to notice, ceiling of
     // an hour because the timer is in-process and would not survive longer.
     confirmationTimeoutSeconds: z.number().int().min(30).max(3600),
@@ -653,6 +663,121 @@ router.patch("/workday-settings", requireAdmin, async (req, res) => {
 
   // No restart needed: the scheduler re-reads this row on every tick.
   res.json(settings);
+});
+
+/**
+ * The calendar of dated deviations.
+ *
+ * Dates are "YYYY-MM-DD" strings read in the configured timezone, never
+ * timestamps: a holiday is a local calendar date, and a Date would shift it a
+ * day either way depending on the offset.
+ */
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Rejects both a malformed shape and a real-looking but impossible date. */
+function isCalendarDay(value: string) {
+  if (!DAY_PATTERN.test(value)) return false;
+  // Round-tripping catches 2026-02-30, which Date happily rolls into March.
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+const workdayExceptionSchema = z
+  .object({
+    working: z.boolean(),
+    startTime: z
+      .string()
+      .refine(isValidTimeOfDay, "Start time must be HH:MM in 24-hour format")
+      .nullable()
+      .optional(),
+    endTime: z
+      .string()
+      .refine(isValidTimeOfDay, "End time must be HH:MM in 24-hour format")
+      .nullable()
+      .optional(),
+    label: z.string().trim().max(80).nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      !value.startTime ||
+      !value.endTime ||
+      parseTimeOfDay(value.startTime)! < parseTimeOfDay(value.endTime)!,
+    { message: "The end time must be after the start time" }
+  );
+
+/**
+ * A month at a time, which is what the calendar renders. Plain string
+ * comparison works because the format is zero-padded and fixed width.
+ */
+router.get("/workday-exceptions", requireAdmin, async (req, res) => {
+  const from = String(req.query.from ?? "");
+  const to = String(req.query.to ?? "");
+
+  if (!isCalendarDay(from) || !isCalendarDay(to)) {
+    return res.status(400).json({
+      code: "INVALID_DATE_RANGE",
+      message: "Both from and to must be YYYY-MM-DD dates",
+    });
+  }
+
+  const rows = await prisma.workdayException.findMany({
+    where: { date: { gte: from, lte: to } },
+    orderBy: { date: "asc" },
+  });
+
+  res.json(rows);
+});
+
+/** Upsert, so setting the same day twice is not an error. */
+router.put("/workday-exceptions/:date", requireAdmin, async (req, res) => {
+  const date = String(req.params.date);
+  if (!isCalendarDay(date)) {
+    return res.status(400).json({
+      code: "INVALID_DATE",
+      message: "The date must be a real YYYY-MM-DD day",
+    });
+  }
+
+  const parsed = workdayExceptionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      code: "VALIDATION_ERROR",
+      message:
+        parsed.error.issues[0]?.message ??
+        "The calendar entry could not be validated",
+    });
+  }
+
+  const data = {
+    working: parsed.data.working,
+    startTime: parsed.data.startTime ?? null,
+    endTime: parsed.data.endTime ?? null,
+    label: parsed.data.label ?? null,
+  };
+
+  const row = await prisma.workdayException.upsert({
+    where: { date },
+    create: { date, ...data },
+    update: data,
+  });
+
+  res.json(row);
+});
+
+/** Clearing a day returns it to the weekly pattern. */
+router.delete("/workday-exceptions/:date", requireAdmin, async (req, res) => {
+  const date = String(req.params.date);
+  if (!isCalendarDay(date)) {
+    return res.status(400).json({
+      code: "INVALID_DATE",
+      message: "The date must be a real YYYY-MM-DD day",
+    });
+  }
+
+  // deleteMany, not delete: clearing a day that had no entry is a no-op, not
+  // a 404. The client only knows the day, not whether a row existed.
+  await prisma.workdayException.deleteMany({ where: { date } });
+  res.json({ success: true });
 });
 
 export default router;

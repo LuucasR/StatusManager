@@ -41,15 +41,53 @@ const WORDS = [
 ];
 const LEXICON = new Set(WORDS);
 
+/*
+ * Words that flag on their own.
+ *
+ * The two-hit rule below is what keeps this check from drowning in false
+ * positives - "no", "la", "un", "total", "chat", "admin" are all shared with
+ * English. But it also means a single-word label sails straight through, which
+ * is exactly how `label="Pendiente"` survived two clean runs of this script.
+ *
+ * Everything here is unambiguously Spanish and is NOT also an English word, so
+ * one occurrence is enough. Do not add "admin", "total", "chat", "control",
+ * "supervisor" or "error" to this set: they would fire on ordinary code.
+ */
+const STANDALONE = new Set([
+  "pendiente","pendientes","tarea","tareas","empleado","empleados","estado","estados",
+  "cerrar","guardar","eliminar","editar","borrar","buscar","enviar","agregar","quitar",
+  "mover","fijar","fijada","volver","entrar","salir","cuenta","cuentas","nombre","correo",
+  "eliminada","eliminado","borrada","borrado","guardada","guardado","creada","creado",
+  "pausada","pausado","archivada","archivado","cerrada","cerrado",
+  "contrasena","mensaje","mensajes","comentario","comentarios","fecha","inicio","duracion",
+  "acciones","resumen","reporte","reportes","historial","equipo","pizarra","tablero",
+  "jornada","actividad","disponible","trabajando","descanso","almuerzo","ausente",
+  "desconectado","nueva","nuevo","todos","todas","aprobar","rechazar","aceptar","cancelar",
+  "participante","participantes","legajo","periodo","terminada","conversacion",
+  "notificaciones","ajustes","idioma","solicitud","solicitudes","integrantes","feriado",
+  "laborable","calendario",
+]);
+
 function looksSpanish(text) {
   if (ALLOWED.some((rx) => rx.test(text))) return false;
-  if (/[¿¡]/.test(text)) return true;
-  // Lower-case only: an ALL-CAPS token is an enum value ("ADMIN", "SUPERVISOR"),
-  // not prose.
-  const words = text.match(/\b[a-záéíóúñ]{2,}\b/g) || [];
+  if (/[¿¡áéíóúñ]/.test(text)) return true;
+
+  // SCREAMING_CASE tokens are enum values ("ADMIN", "DISCONNECTED",
+  // "TASK_MANAGER"), not prose, and several of them lower-case into real Spanish
+  // words - so they are dropped BEFORE the text is folded to lower case.
+  //
+  // Folding is the point: matching [a-z] against the raw text made every
+  // capitalised word invisible, which is the second reason `label="Pendiente"`
+  // got through. Known blind spot left over: an ALL-CAPS Spanish label would
+  // still be dropped here.
+  const prose = text.replace(/\b[A-Z][A-Z0-9_]{2,}\b/g, " ").toLowerCase();
+  const words = prose.match(/\b[a-záéíóúñ]{2,}\b/g) || [];
   let hits = 0;
-  for (const w of words) if (LEXICON.has(w)) hits += 1;
-  return hits >= 2 || /[áéíóúñ]/.test(text);
+  for (const word of words) {
+    if (STANDALONE.has(word)) return true;
+    if (LEXICON.has(word)) hits += 1;
+  }
+  return hits >= 2;
 }
 
 const files = [];

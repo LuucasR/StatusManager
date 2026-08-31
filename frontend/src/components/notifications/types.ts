@@ -6,6 +6,7 @@ import {
   SwapHorizRounded,
 } from "@mui/icons-material";
 import type { SvgIconComponent } from "@mui/icons-material";
+import { softOf } from "../tasks/types";
 
 export type NotificationType =
   | "TASK_ADDED"
@@ -29,11 +30,14 @@ export const NOTIFICATION_META: Record<
   NotificationType,
   { Icon: SvgIconComponent; accent: string; soft: string }
 > = {
-  TASK_ADDED: { Icon: PersonAddAlt1Rounded, accent: "#2eae70", soft: "#e2f6eb" },
-  TASK_REMOVED: { Icon: PersonRemoveAlt1Rounded, accent: "#b23c4a", soft: "#fbe7ea" },
-  TASK_STATE: { Icon: SwapHorizRounded, accent: "#5b5ce2", soft: "#ecebff" },
-  TASK_MESSAGE: { Icon: ChatBubbleRounded, accent: "#16738b", soft: "#e2f5f8" },
-  ACTIVITY_NO_RESPONSE: { Icon: ReportProblemRounded, accent: "#c2410c", soft: "#fdebe0" },
+  // `soft` is a color-mix over var(--surface) rather than a pale hex, so the
+  // icon chips sit on the panel in either theme instead of glowing white on a
+  // dark one. The accents stay literal: they carry meaning and read on both.
+  TASK_ADDED: { Icon: PersonAddAlt1Rounded, accent: "#2eae70", soft: softOf("#2eae70") },
+  TASK_REMOVED: { Icon: PersonRemoveAlt1Rounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
+  TASK_STATE: { Icon: SwapHorizRounded, accent: "#5b5ce2", soft: softOf("#5b5ce2") },
+  TASK_MESSAGE: { Icon: ChatBubbleRounded, accent: "#16738b", soft: softOf("#16738b") },
+  ACTIVITY_NO_RESPONSE: { Icon: ReportProblemRounded, accent: "#c2410c", soft: softOf("#c2410c") },
 };
 
 /**

@@ -9,19 +9,31 @@ import prisma from "../prisma/client";
  */
 
 export type WorkdayConfig = {
+  /** 0 = Sunday .. 6 = Saturday. */
+  workingWeekdays: number[];
   startTime: string;
   endTime: string;
   timezone: string;
+  confirmationDelayMinutes: number;
   confirmationTimeoutSeconds: number;
   enabled: boolean;
+};
+
+/** One dated deviation, as the resolver needs it. */
+export type WorkdayExceptionInput = {
+  working: boolean;
+  startTime: string | null;
+  endTime: string | null;
 };
 
 export const WORKDAY_SETTINGS_ID = 1;
 
 const DEFAULTS: WorkdayConfig = {
+  workingWeekdays: [1, 2, 3, 4, 5],
   startTime: "09:00",
   endTime: "17:30",
   timezone: "America/Argentina/Buenos_Aires",
+  confirmationDelayMinutes: 0,
   confirmationTimeoutSeconds: 120,
   enabled: true,
 };
@@ -41,9 +53,11 @@ export async function getWorkdayConfig(): Promise<WorkdayConfig> {
 
   if (!row) return { ...DEFAULTS };
   return {
+    workingWeekdays: row.workingWeekdays,
     startTime: row.startTime,
     endTime: row.endTime,
     timezone: row.timezone,
+    confirmationDelayMinutes: row.confirmationDelayMinutes,
     confirmationTimeoutSeconds: row.confirmationTimeoutSeconds,
     enabled: row.enabled,
   };
@@ -112,9 +126,69 @@ export function zonedNow(timeZone: string, now: Date = new Date()): ZonedNow {
   };
 }
 
-/** Monday to Friday. Weekends are skipped entirely, jobs included. */
-export function isWorkingDay(weekday: number) {
-  return weekday >= 1 && weekday <= 5;
+/** The exception for one day, or null. Indexed lookup on the primary key. */
+export async function getWorkdayException(day: string) {
+  return prisma.workdayException.findUnique({ where: { date: day } });
+}
+
+export type ResolvedDay = {
+  working: boolean;
+  /** Minutes since local midnight, or null when the stored time is malformed. */
+  startMinutes: number | null;
+  endMinutes: number | null;
+};
+
+/**
+ * What a given day actually is: open or closed, and between which hours.
+ *
+ * Pure on purpose - no database, no clock - because this is the rule the whole
+ * feature turns on and it has to be testable directly.
+ *
+ * A dated exception BEATS the weekly pattern in both directions: it closes a
+ * Tuesday for a holiday, and it opens a Saturday for a crunch day. Its times
+ * are optional, so one row covers a holiday, a half day and an extra working
+ * day without three different shapes.
+ */
+export function resolveWorkday(
+  config: WorkdayConfig,
+  weekday: number,
+  exception: WorkdayExceptionInput | null
+): ResolvedDay {
+  const working = exception
+    ? exception.working
+    : config.workingWeekdays.includes(weekday);
+
+  return {
+    working,
+    startMinutes: parseTimeOfDay(exception?.startTime ?? config.startTime),
+    endMinutes: parseTimeOfDay(exception?.endTime ?? config.endTime),
+  };
+}
+
+/** Last minute of a day, used to clamp derived times. */
+const LAST_MINUTE = 23 * 60 + 59;
+
+/**
+ * When the "are you still working?" prompt goes out: the end of the day plus
+ * the configured grace period.
+ *
+ * Clamped to 23:59 rather than allowed past midnight. The scheduler fires a job
+ * once its minute has PASSED within the same local day, so a derived time of
+ * 24:10 would simply never arrive and the day would never close. Running a
+ * minute before midnight is wrong by minutes; not running at all leaves every
+ * task in progress and everyone still marked as working.
+ */
+export function promptMinutes(day: ResolvedDay, config: WorkdayConfig) {
+  if (day.endMinutes === null) return null;
+  return Math.min(day.endMinutes + config.confirmationDelayMinutes, LAST_MINUTE);
+}
+
+/** When the unanswered checks are resolved and the board is paused. */
+export function closeMinutes(day: ResolvedDay, config: WorkdayConfig) {
+  const prompt = promptMinutes(day, config);
+  if (prompt === null) return null;
+  const timeout = Math.ceil(config.confirmationTimeoutSeconds / 60);
+  return Math.min(prompt + timeout, LAST_MINUTE);
 }
 
 /** Human "DD/MM/YYYY at HH:MM" in the configured zone, for notification text. */

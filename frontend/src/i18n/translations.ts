@@ -397,6 +397,82 @@ export const en = {
   "notifications.title": "Notifications",
   "notifications.markAllRead": "Mark all as read",
   "common.loadMore": "Load more",
+
+  // --- Single-word labels the scanner used to miss
+  "common.start": "Start",
+  "common.pending": "Pending",
+  "common.saveChange": "Save change",
+  "dashboard.currentStatus": "Current status",
+  "dashboard.commentRequired": "Comment required",
+  "dashboard.commentOptional": "Comment optional",
+  "dashboard.reportFilename": "activity-report.pdf",
+  "board.participantsLabel": "Members",
+  "tasksPage.pdfReport": "PDF report",
+  "notifications.unreadLabel": "Notifications, {count} unread",
+
+  // --- Workday calendar errors
+  "error.INVALID_DATE": "The date must be a real YYYY-MM-DD day",
+
+  // --- Working calendar (admin)
+  "nav.workday": "Calendar",
+  "workday.eyebrow": "ADMINISTRATION",
+  "workday.title": "Working calendar",
+  "workday.subtitle":
+    "What counts as a working day, and the hours the app uses to pause and resume the board.",
+  "workday.settings": "Schedule",
+  "workday.enabled": "Automation on",
+  "workday.enabledHelp":
+    "Master switch. With it off, nothing is paused, resumed or checked.",
+  "workday.weekdays": "Working days",
+  "workday.startTime": "Day starts",
+  "workday.endTime": "Day ends",
+  "workday.timezone": "Timezone",
+  "workday.delay": "Wait before asking (min)",
+  "workday.delayHelp":
+    "How long after the day ends before anyone still marked as working is asked whether they still are.",
+  "workday.timeout": "Time to answer (s)",
+  "workday.timeoutHelp":
+    "Whoever does not answer in this window is disconnected, and their tasks go back to Pending.",
+  "workday.saved": "Schedule saved",
+  "workday.calendar": "Exceptions",
+  "workday.calendarHelp":
+    "A date here overrides the weekly pattern: it closes a working day, opens a weekend, or gives that one day different hours.",
+  "workday.previousMonth": "Previous month",
+  "workday.nextMonth": "Next month",
+  "workday.today": "Today",
+  "workday.closed": "Closed",
+  "workday.open": "Working day",
+  "workday.editDay": "Edit {date}",
+  "workday.isWorking": "It is a working day",
+  "workday.customHours": "Different hours that day",
+  "workday.label": "Note",
+  "workday.labelPlaceholder": "Public holiday",
+  "workday.clearDay": "Back to the weekly pattern",
+  "workday.followsPattern": "Follows the weekly pattern",
+  "weekday.0": "Sun",
+  "weekday.1": "Mon",
+  "weekday.2": "Tue",
+  "weekday.3": "Wed",
+  "weekday.4": "Thu",
+  "weekday.5": "Fri",
+  "weekday.6": "Sat",
+  "board.pausedOvernight": "Paused overnight",
+
+  // --- Expired activity check
+  "dashboard.confirmationExpired":
+    "The activity check expired. You were marked as disconnected.",
+
+  // --- Employee notes
+  "dashboard.taskDeletedSuffix": "{title} (deleted)",
+  "dashboard.workingOn": "On: {task}",
+
+  // --- Conversation state chips
+  "chat.deleted": "Deleted",
+  "chat.closed": "Closed",
+
+  // --- Read-only calendar
+  "workday.readOnly":
+    "These are the hours the app works to. Only an administrator can change them.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -768,6 +844,76 @@ const es: Record<TranslationKey, string> = {
   "notifications.title": "Notificaciones",
   "notifications.markAllRead": "Marcar todo como leído",
   "common.loadMore": "Ver más",
+
+  "common.start": "Inicio",
+  "common.pending": "Pendiente",
+  "common.saveChange": "Guardar cambio",
+  "dashboard.currentStatus": "Estado actual",
+  "dashboard.commentRequired": "Comentario obligatorio",
+  "dashboard.commentOptional": "Comentario opcional",
+  "dashboard.reportFilename": "reporte-actividades.pdf",
+  "board.participantsLabel": "Integrantes",
+  "tasksPage.pdfReport": "Reporte PDF",
+  "notifications.unreadLabel": "Notificaciones, {count} sin leer",
+
+  "error.INVALID_DATE":
+    "La fecha tiene que ser un día real en formato AAAA-MM-DD",
+
+  "nav.workday": "Calendario",
+  "workday.eyebrow": "ADMINISTRACIÓN",
+  "workday.title": "Calendario laboral",
+  "workday.subtitle":
+    "Qué cuenta como día laboral, y los horarios que la app usa para pausar y reanudar el tablero.",
+  "workday.settings": "Horarios",
+  "workday.enabled": "Automatización activa",
+  "workday.enabledHelp":
+    "Interruptor general. Apagado, no se pausa, ni se reanuda, ni se consulta a nadie.",
+  "workday.weekdays": "Días laborables",
+  "workday.startTime": "Comienza",
+  "workday.endTime": "Termina",
+  "workday.timezone": "Zona horaria",
+  "workday.delay": "Espera antes de preguntar (min)",
+  "workday.delayHelp":
+    "Cuánto se espera después del cierre para preguntarle a quien siga marcado como trabajando.",
+  "workday.timeout": "Tiempo para responder (s)",
+  "workday.timeoutHelp":
+    "A quien no responda en esa ventana se lo desconecta, y sus tareas vuelven a Pendiente.",
+  "workday.saved": "Horarios guardados",
+  "workday.calendar": "Excepciones",
+  "workday.calendarHelp":
+    "Una fecha acá pisa el patrón semanal: cierra un día laboral, abre un fin de semana, o le da otro horario a ese día.",
+  "workday.previousMonth": "Mes anterior",
+  "workday.nextMonth": "Mes siguiente",
+  "workday.today": "Hoy",
+  "workday.closed": "Cerrado",
+  "workday.open": "Día laboral",
+  "workday.editDay": "Editar {date}",
+  "workday.isWorking": "Es día laboral",
+  "workday.customHours": "Horario distinto ese día",
+  "workday.label": "Nota",
+  "workday.labelPlaceholder": "Feriado nacional",
+  "workday.clearDay": "Volver al patrón semanal",
+  "workday.followsPattern": "Sigue el patrón semanal",
+  "weekday.0": "Dom",
+  "weekday.1": "Lun",
+  "weekday.2": "Mar",
+  "weekday.3": "Mié",
+  "weekday.4": "Jue",
+  "weekday.5": "Vie",
+  "weekday.6": "Sáb",
+  "board.pausedOvernight": "Pausada anoche",
+
+  "dashboard.confirmationExpired":
+    "El control de actividad venció. Quedaste marcado como desconectado.",
+
+  "dashboard.taskDeletedSuffix": "{title} (eliminada)",
+  "dashboard.workingOn": "En: {task}",
+
+  "chat.deleted": "Eliminada",
+  "chat.closed": "Cerrada",
+
+  "workday.readOnly":
+    "Estos son los horarios con los que trabaja la app. Solo un administrador puede cambiarlos.",
 };
 
 export const CATALOGUES = { en, es };

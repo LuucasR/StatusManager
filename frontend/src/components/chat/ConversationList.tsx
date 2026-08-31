@@ -40,7 +40,14 @@ export default function ConversationList({ conversations, unreadByConversation, 
                   className={`chat-row${conversation.closed ? " closed" : ""}`}
                 >
                   {conversation.kind === "GENERAL" ? (
-                    <Avatar sx={{ width: 34, height: 34, bgcolor: "#ecebff", color: "#5b5ce2" }}>
+                    <Avatar
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        bgcolor: "color-mix(in srgb, var(--accent) 16%, var(--surface))",
+                        color: "var(--accent)",
+                      }}
+                    >
                       <GroupsRounded sx={{ fontSize: 19 }} />
                     </Avatar>
                   ) : conversation.kind === "TASK" ? (
@@ -84,14 +91,14 @@ export default function ConversationList({ conversations, unreadByConversation, 
                         <Chip
                           size="small"
                           icon={<LockOutlined />}
-                          label={conversation.taskDeleted ? "Eliminada" : "Cerrada"}
+                          label={conversation.taskDeleted ? t("chat.deleted") : t("chat.closed")}
                           sx={{
                             height: 18,
                             fontSize: 10,
                             fontWeight: 700,
-                            bgcolor: "#eef0f6",
-                            color: "#6d7087",
-                            "& .MuiChip-icon": { fontSize: 12, color: "#6d7087" },
+                            bgcolor: "var(--surface-2)",
+                            color: "var(--muted)",
+                            "& .MuiChip-icon": { fontSize: 12, color: "var(--muted)" },
                           }}
                         />
                       )}

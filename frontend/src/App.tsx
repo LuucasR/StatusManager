@@ -3,6 +3,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import TasksPage from "./pages/TasksPage";
 import SummaryPage from "./pages/SummaryPage";
+import WorkdayPage from "./pages/WorkdayPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -44,6 +45,10 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/summary" element={<SummaryPage />} />
+        {/* Admin-only. The route is mounted for everyone and the page itself
+            redirects, because the role is not known until AppLayout has
+            fetched it - and every endpoint behind it refuses non-admins. */}
+        <Route path="/workday" element={<WorkdayPage />} />
       </Route>
 
       {/* Old Spanish paths, kept as redirects. They were live in production

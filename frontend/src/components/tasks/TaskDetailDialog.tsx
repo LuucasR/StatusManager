@@ -102,7 +102,7 @@ export default function TaskDetailDialog({
                       icon={<meta.Icon />}
                       label={meta.label}
                       sx={{
-                        bgcolor: "#fff",
+                        bgcolor: "var(--surface)",
                         color: meta.ink,
                         fontWeight: 700,
                         border: `1px solid ${alpha(meta.accent, 0.35)}`,

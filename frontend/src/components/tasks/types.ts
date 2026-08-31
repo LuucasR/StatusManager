@@ -6,6 +6,7 @@ import {
 import type { SvgIconComponent } from "@mui/icons-material";
 import type { CSSProperties } from "react";
 import { canManageTasks } from "../roles";
+import { paperVars } from "../notePaper";
 import { t, type TranslationKey } from "../../i18n";
 
 // React.CSSProperties does not accept --* keys, and a direct cast fails.
@@ -38,6 +39,8 @@ export type Task = {
   startsAt: string;
   endsAt: string;
   pinned: boolean;
+  /** Set while the task is one the end-of-day job paused, cleared when resumed. */
+  autoPausedAt: string | null;
   /** endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
   /** Task chat: the comment thread and the widget thread are the same one. */
@@ -135,33 +138,10 @@ export function stateVars(state: TaskState): CSSProperties {
 }
 
 /**
- * Paper tones for the notes on the board.
- *
- * Purely decorative: the PIN carries the state colour, so the paper is free to
- * vary per task and make the wall look physical. It must never be what tells
- * the states apart. All five are light, because a note is paper on cork in both
- * themes - it does not flip with the theme, and the note ink is fixed to match.
+ * A task note: the state colours (which the pin uses) plus the shared paper.
  */
-const NOTE_PAPERS = ["#fdf3bf", "#fde3c4", "#e4f2d4", "#dbeaf8", "#f3e4f7"];
-
-/**
- * Tilt in degrees, derived from the id rather than drawn at random.
- *
- * The board re-renders on every task:changed and status:changed socket event,
- * so a random angle would make every note on the wall twitch each time anyone
- * changed their status. Derived from the id, a note keeps its angle for life.
- */
-function noteTilt(id: number) {
-  return ((id * 37) % 5) - 2;
-}
-
 export function noteVars(task: Task): CSSProperties {
-  const id = Math.abs(task.id);
-  return {
-    ...stateVars(task.state),
-    "--paper": NOTE_PAPERS[id % NOTE_PAPERS.length],
-    "--tilt": `${noteTilt(id)}deg`,
-  };
+  return { ...stateVars(task.state), ...paperVars(task.id) };
 }
 
 /**

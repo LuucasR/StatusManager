@@ -76,6 +76,12 @@ model Employee {
   /// Tokens issued before this instant are rejected. Without it, changing a
   /// password left every already-issued JWT valid for up to a day.
   passwordChangedAt  DateTime?
+  /// When they last answered an end-of-day activity check.
+  ///
+  /// Persisted rather than held in memory so the closing job can tell who
+  /// answered even if the process restarted mid-window. Compared against the
+  /// prompt job's own ranAt, so no per-day table is needed.
+  lastConfirmedAt    DateTime?
   role           Role             @default(EMPLOYEE)
   currentStatus  ActivityStatus   @default(OFFLINE)
   statusSince    DateTime         @default(now())
@@ -251,16 +257,50 @@ model ScheduledJobRun {
 model WorkdaySettings {
   /// Always 1. Enforced by the routes, which only ever upsert this id.
   id                         Int      @id @default(1)
+  /// Weekdays that are working days, 0 = Sunday .. 6 = Saturday.
+  /// Replaces what used to be a hardcoded Monday-to-Friday check.
+  workingWeekdays            Int[]    @default([1, 2, 3, 4, 5])
   /// HH:MM in `timezone`. Resume paused tasks at this time.
   startTime                  String   @default("09:00")
   /// HH:MM in `timezone`. Run the activity check and pause tasks at this time.
   endTime                    String   @default("17:30")
   timezone                   String   @default("America/Argentina/Buenos_Aires")
+  /// Minutes to wait AFTER endTime before asking whoever is still working.
+  /// Distinct from the timeout below: this is the grace period before the
+  /// question, that is how long they then have to answer it.
+  confirmationDelayMinutes   Int      @default(0)
   /// Seconds someone has to accept the check before being auto-disconnected.
   confirmationTimeoutSeconds Int      @default(120)
   /// Master switch, so the automation can be stopped without a deploy.
   enabled                    Boolean  @default(true)
   updatedAt                  DateTime @updatedAt
+}
+
+/**
+ * One dated deviation from the weekly pattern.
+ *
+ * Covers all three cases with one row: `working: false` closes the day (a
+ * holiday), `working: true` opens one the weekly pattern would have closed (a
+ * worked Saturday), and the optional times make it a half day.
+ */
+model WorkdayException {
+  /// "YYYY-MM-DD" as read in the configured timezone.
+  ///
+  /// Text and not DateTime on purpose: a holiday is a local CALENDAR DATE,
+  /// not an instant. Stored as a timestamp it would land on the previous or
+  /// next day depending on the offset, and the whole feature keys off
+  /// comparing it to what zonedNow() reports. ScheduledJobRun.lastRunOn
+  /// already stores a day this way for the same reason.
+  date      String   @id
+  /// false = closed. true = working, overriding the weekly pattern.
+  working   Boolean
+  /// HH:MM overrides. Null inherits WorkdaySettings.
+  startTime String?
+  endTime   String?
+  /// Shown in the calendar cell, e.g. "Feriado nacional".
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Notification {

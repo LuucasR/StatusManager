@@ -1,12 +1,15 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../prisma/client";
 import { logger } from "../logger";
-import { runEndOfDay, runStartOfDay } from "./jobs";
+import { runClose, runPrompt, runStartOfDay } from "./jobs";
 import {
+  closeMinutes,
   getWorkdayConfig,
-  isWorkingDay,
-  parseTimeOfDay,
+  getWorkdayException,
+  promptMinutes,
+  resolveWorkday,
   zonedNow,
+  type ResolvedDay,
   type WorkdayConfig,
 } from "./workday";
 
@@ -28,18 +31,26 @@ const TICK_MS = 60_000;
 
 type Job = {
   name: string;
-  timeOf: (config: WorkdayConfig) => string;
+  /** Minutes since local midnight, or null when the day's times are unusable. */
+  minutesOf: (day: ResolvedDay, config: WorkdayConfig) => number | null;
   run: (config: WorkdayConfig) => Promise<void>;
 };
 
 /**
- * Order matters when several jobs are due at once, which happens after a long
- * outage: replaying start-then-end leaves the board paused, which is the correct
- * state for any moment after the end of the day.
+ * Order matters when several are due at once, which happens after a long
+ * outage: replaying start, then prompt, then close leaves the board paused,
+ * which is the correct state for any moment after the end of the day.
+ *
+ * The end of the day is two jobs rather than one. The prompt asks whoever is
+ * still working; the close, a grace period plus the answer timeout later,
+ * resolves whoever ignored it. Splitting them is what lets a confirmation
+ * actually protect someone's tasks - and it moves the deadline out of a
+ * setTimeout, so a restart mid-window no longer loses the answer.
  */
 const JOBS: Job[] = [
-  { name: "workday-start", timeOf: (c) => c.startTime, run: runStartOfDay },
-  { name: "workday-end", timeOf: (c) => c.endTime, run: runEndOfDay },
+  { name: "workday-start", minutesOf: (day) => day.startMinutes, run: runStartOfDay },
+  { name: "workday-prompt", minutesOf: promptMinutes, run: runPrompt },
+  { name: "workday-close", minutesOf: closeMinutes, run: runClose },
 ];
 
 /**
@@ -83,10 +94,18 @@ async function tick() {
   if (!config.enabled) return;
 
   const now = zonedNow(config.timezone);
-  if (!isWorkingDay(now.weekday)) return;
+
+  // A dated exception overrides the weekly pattern in both directions, so this
+  // is what closes a holiday and what opens a worked Saturday.
+  const exception = await getWorkdayException(now.day);
+  const day = resolveWorkday(config, now.weekday, exception);
+
+  // Nothing runs on a closed day - not the resume, not the check. Tasks paused
+  // before a holiday simply stay paused until the next working morning.
+  if (!day.working) return;
 
   for (const job of JOBS) {
-    const scheduled = parseTimeOfDay(job.timeOf(config));
+    const scheduled = job.minutesOf(day, config);
     // A malformed time disables its own job rather than throwing every minute.
     // The admin routes validate the format, so this only guards hand-edited rows.
     if (scheduled === null) {

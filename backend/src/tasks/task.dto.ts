@@ -60,6 +60,9 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     startsAt: task.startsAt,
     endsAt: task.endsAt,
     pinned: task.pinned,
+    // Lets the board tell a task the end-of-day job paused from one nobody ever
+    // started: both sit in PENDING and would otherwise look identical.
+    autoPausedAt: task.autoPausedAt,
     // Always computed, even when pinned: the frontend needs it to tell
     // "pinned and current" from "pinned and already past the cutoff", and it
     // keeps the 14-day constant living in one place.

@@ -242,7 +242,7 @@ export default function TasksPage() {
             startIcon={<PictureAsPdfRounded />}
             onClick={() => setReportOpen(true)}
           >
-            Reporte PDF
+            {t("tasksPage.pdfReport")}
           </Button>
 
           {canManage && (

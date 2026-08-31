@@ -25,7 +25,7 @@ export default function PdfPreviewDialog({ url, title, onClose, onDownload }: Pr
             height: { xs: "68vh", md: "76vh" },
             border: 0,
             borderRadius: 1,
-            bgcolor: "grey.100",
+            bgcolor: "var(--surface-2)",
           }}
         />
       </DialogContent>

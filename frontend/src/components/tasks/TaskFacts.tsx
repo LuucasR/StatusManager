@@ -40,7 +40,7 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
       {showState && (
         <Box>
           <Typography variant="overline" color="text.secondary">
-            Estado
+            {t("common.status")}
           </Typography>
           <Box sx={{ mt: 0.5 }}>
             <Chip
@@ -80,7 +80,7 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
 
       <Box>
         <Typography variant="overline" color="text.secondary">
-          Integrantes
+          {t("board.participantsLabel")}
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 0.5 }} useFlexGap>
           {task.participants.length === 0 ? (

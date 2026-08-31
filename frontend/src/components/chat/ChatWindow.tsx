@@ -35,7 +35,7 @@ export default function ChatWindow({ me, onMinimize }: Props) {
     : null;
 
   return (
-    <Paper className="chat-window chat-window" elevation={0} role="dialog" aria-label="Mensajes">
+    <Paper className="chat-window chat-window" elevation={0} role="dialog" aria-label={t("chat.messages")}>
       <Stack direction="row" spacing={1} className="chat-head">
         {active && (
           <IconButton size="small" onClick={chat.backToList} aria-label={t("chat.backToList")}>
@@ -45,7 +45,7 @@ export default function ChatWindow({ me, onMinimize }: Props) {
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 800 }} noWrap>
-            {active ? active.title : "Mensajes"}
+            {active ? active.title : t("chat.messages")}
           </Typography>
           <Typography variant="caption" color="text.secondary" noWrap component="div">
             {!connected

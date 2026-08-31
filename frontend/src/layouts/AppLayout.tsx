@@ -32,7 +32,11 @@ const links = [
   { to: "/tasks", key: "nav.tasks" },
   // No role filter: the summary is always the authenticated employee's own.
   { to: "/summary", key: "nav.summary" },
+  { to: "/workday", key: "nav.workday" },
 ] as const;
+
+// The calendar is readable by the whole team - everyone works to these hours -
+// and only editable by an admin, which the page and the backend both enforce.
 
 export default function AppLayout() {
   const { pathname } = useLocation();

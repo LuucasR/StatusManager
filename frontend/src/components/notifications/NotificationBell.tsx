@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { formatClock, relativeDay } from "../tasks/datetime";
 import { notificationMeta, type AppNotification } from "./types";
 import { useNotifications } from "./useNotifications";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 export default function NotificationBell() {
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
@@ -32,12 +32,16 @@ export default function NotificationBell() {
 
   return (
     <>
-      <Tooltip title="Notificaciones">
+      <Tooltip title={t("notifications.title")}>
         <IconButton
           onClick={(event) => setAnchor(event.currentTarget)}
           aria-haspopup="dialog"
           aria-expanded={Boolean(anchor)}
-          aria-label={unread ? `Notificaciones, ${unread} sin leer` : "Notificaciones"}
+          aria-label={
+            unread
+              ? tf("notifications.unreadLabel", { count: unread })
+              : t("notifications.title")
+          }
         >
           <Badge
             badgeContent={unread}
@@ -46,7 +50,7 @@ export default function NotificationBell() {
             sx={{ "& .MuiBadge-badge": { bgcolor: "#b23c4a", color: "#fff", fontWeight: 700 } }}
           >
             {unread ? (
-              <NotificationsActiveRounded sx={{ color: "#5b5ce2" }} />
+              <NotificationsActiveRounded sx={{ color: "var(--accent)" }} />
             ) : (
               <NotificationsNoneRounded />
             )}
@@ -78,8 +82,8 @@ export default function NotificationBell() {
             alignItems: "center",
             px: 1.75,
             py: 1.5,
-            bgcolor: "#f7f8fc",
-            borderBottom: "1px solid #e8e9f1",
+            bgcolor: "var(--surface-2)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
@@ -98,7 +102,7 @@ export default function NotificationBell() {
           )}
 
           {!loading && items.length === 0 && (
-            <Stack sx={{ alignItems: "center", gap: 1, py: 5, color: "#9296ab" }}>
+            <Stack sx={{ alignItems: "center", gap: 1, py: 5, color: "var(--faint)" }}>
               <NotificationsNoneRounded sx={{ fontSize: 30 }} />
               <Typography variant="body2">{t("notifications.empty")}</Typography>
             </Stack>
@@ -115,7 +119,7 @@ export default function NotificationBell() {
                 {showDay && (
                   <Box
                     className="chat-section-title"
-                    sx={{ position: "sticky", top: 0, zIndex: 1, bgcolor: "#fff" }}
+                    sx={{ position: "sticky", top: 0, zIndex: 1, bgcolor: "var(--surface)" }}
                   >
                     {day}
                   </Box>
@@ -136,8 +140,12 @@ export default function NotificationBell() {
                     cursor: "pointer",
                     px: 1.75,
                     py: 1.5,
-                    bgcolor: notification.readAt ? "#fff" : "#f6f5ff",
-                    "&:hover": { bgcolor: "#f7f8fc" },
+                    // Unread is a faint wash of the accent rather than a fixed
+                    // pale violet, so the distinction survives the dark theme.
+                    bgcolor: notification.readAt
+                      ? "var(--surface)"
+                      : "color-mix(in srgb, var(--accent) 12%, var(--surface))",
+                    "&:hover": { bgcolor: "var(--surface-2)" },
                   }}
                 >
                   <Box
@@ -171,7 +179,7 @@ export default function NotificationBell() {
                       {formatClock(notification.createdAt)}
                     </Typography>
                     {!notification.readAt && (
-                      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#5b5ce2" }} />
+                      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "var(--accent)" }} />
                     )}
                   </Stack>
                 </Box>

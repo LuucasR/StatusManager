@@ -2,6 +2,7 @@ import { useDraggable } from "@dnd-kit/core";
 import {
   ChatBubbleOutlineRounded,
   Inventory2Rounded,
+  BedtimeRounded,
   MoreVertRounded,
   PersonOffRounded,
   ScheduleRounded,
@@ -207,6 +208,17 @@ export default function TaskCard({
             </Stack>
           )}
         </Stack>
+
+        {task.autoPausedAt && (
+          <Box sx={{ mt: 1.25 }}>
+            <Chip
+              size="small"
+              className="note-chip"
+              icon={<BedtimeRounded />}
+              label={t("board.pausedOvernight")}
+            />
+          </Box>
+        )}
 
         {showArchiveWarning && (
           <Box sx={{ mt: 1.25 }}>

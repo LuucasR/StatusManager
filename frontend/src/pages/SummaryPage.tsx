@@ -191,7 +191,7 @@ export default function SummaryPage() {
                         sx={{
                           height: 8,
                           borderRadius: 4,
-                          bgcolor: "#eef0f6",
+                          bgcolor: "var(--surface-2)",
                           "& .MuiLinearProgress-bar": {
                             borderRadius: 4,
                             bgcolor: STATUS_COLORS[bucket.status],

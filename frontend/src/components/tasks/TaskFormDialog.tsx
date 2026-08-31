@@ -134,7 +134,7 @@ export default function TaskFormDialog({ open, task, employees, onClose, onSubmi
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
-              label="Inicio"
+              label={t("common.start")}
               type="datetime-local"
               value={startsAt}
               onChange={(e) => setStartsAt(e.target.value)}

@@ -16,7 +16,7 @@ export default function ChatLauncher({ me }: Props) {
   }
 
   return (
-    <Tooltip title="Mensajes" placement="left">
+    <Tooltip title={t("chat.messages")} placement="left">
       <Badge
         className="chat-launcher"
         badgeContent={chat.unreadTotal}

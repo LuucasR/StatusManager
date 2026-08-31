@@ -79,10 +79,9 @@ router.get("/team", async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: true,
-        // Falls back to the task title: the comment stopped being mandatory for
-        // WORKING, and without this the card would read "No detail" for exactly
-        // everyone who is working.
-        detail: open?.detail || open?.taskTitle || "",
+        // No longer falls back to the task title: the card shows the declared
+        // task on its own line now, so folding it in here printed it twice.
+        detail: open?.detail ?? "",
         taskTitle: open?.taskTitle ?? null,
       };
     })
@@ -207,8 +206,7 @@ router.get("/report.pdf", async (req, res) => {
 });
 
 
-router.post("/confirm-activity", (req, res) => {
-
+router.post("/confirm-activity", async (req, res) => {
   const confirmed = confirmActivity(req.auth!.employeeId);
 
   if (!confirmed) {
@@ -217,10 +215,16 @@ router.post("/confirm-activity", (req, res) => {
     });
   }
 
-  res.json({
-    success: true
+  // Stamped in the database as well as cleared in memory. The closing job reads
+  // this, not the in-memory map, so an answer survives a restart between the
+  // prompt and the close - and it is what keeps this person's tasks off the
+  // pause list.
+  await prisma.employee.update({
+    where: { id: req.auth!.employeeId },
+    data: { lastConfirmedAt: new Date() },
   });
 
+  res.json({ success: true });
 });
 
 
