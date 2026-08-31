@@ -4,6 +4,13 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 
+// Imported first: it validates the environment and throws on a bad deploy
+// before any of the modules below read process.env.
+import { env } from "./env";
+import { httpLogger } from "./logger";
+import { errorHandler, notFoundHandler } from "./http/error-handler";
+import prisma from "./prisma/client";
+
 import authRoutes from "./auth/auth.routes";
 import activitiesRoutes from "./activities/activities.routes";
 import adminRoutes from "./admin/admin.routes";
@@ -14,9 +21,12 @@ import notificationsRoutes from "./notifications/notifications.routes";
 const app = express();
 app.set("trust proxy", 1);
 
+// Before everything else so that even a rejected CORS preflight is logged.
+app.use(httpLogger);
+
 const allowedOrigins = [
   "http://localhost:5173",
-  process.env.FRONTEND_URL,
+  env.FRONTEND_URL,
 ].filter((origin): origin is string => Boolean(origin));
 
 app.use(
@@ -74,12 +84,23 @@ app.use("/tasks", tasksRoutes);
 app.use("/chat", chatRoutes);
 app.use("/notifications", notificationsRoutes);
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "OK" });
+/**
+ * Touches the database on purpose. The previous version returned a static OK,
+ * so it stayed green while Postgres was unreachable and the platform never
+ * noticed a half-dead instance.
+ */
+app.get("/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "OK", database: "up" });
+  } catch {
+    res.status(503).json({ status: "ERROR", database: "down" });
+  }
 });
 
-app.use((_req, res) => {
-  res.status(404).json({ message: "Ruta no encontrada" });
-});
+app.use(notFoundHandler);
+
+// Last: Express 5 routes rejected promises from any handler above into this.
+app.use(errorHandler);
 
 export default app;

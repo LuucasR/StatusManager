@@ -8,6 +8,7 @@ import {
 } from "./auth.service";
 import { generateToken } from "./auth.token";
 import { toEmployeeDto } from "./auth.dto";
+import { logger } from "../logger";
 
 const loginSchema = z.object({
   employeeNumber: z.coerce.number().int().positive(),
@@ -85,12 +86,12 @@ export async function forgotPasswordController(req: Request, res: Response) {
   try {
     const created = await requestPasswordReset(parsed.data.email);
     if (!created) {
-      console.warn(
-        "[password-reset] No se encontró una cuenta activa para la solicitud"
-      );
+      // Not an error: this is the enumeration-proof path for an address that
+      // has no active account. Logged so a confused user can be traced.
+      logger.info("password reset requested for an unknown or inactive email");
     }
   } catch (error) {
-    console.error("[password-reset] No se pudo crear la solicitud:", error);
+    logger.error({ err: error }, "could not create password reset request");
   }
 
   // Deliberately the same answer either way: telling the caller whether the

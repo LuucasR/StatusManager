@@ -1,6 +1,24 @@
 import { expireSession, requirePasswordChange } from "./session";
 
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+/**
+ * Vite inlines VITE_* at BUILD time, not at runtime. A production build made
+ * without the variable used to fall back to localhost silently: the bundle
+ * shipped, the build passed, and every request failed in the browser with no
+ * hint as to why. Failing here makes that misconfiguration obvious instead.
+ */
+function resolveApiUrl() {
+  const configured = import.meta.env.VITE_API_URL;
+  if (configured) return configured;
+  if (import.meta.env.PROD) {
+    throw new Error(
+      "VITE_API_URL is missing. It has to be set when the frontend is built, " +
+        "otherwise the app points at localhost and nothing works."
+    );
+  }
+  return "http://localhost:3000";
+}
+
+export const API_URL = resolveApiUrl();
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
