@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "../../i18n";
 
 /**
- * Descarga un PDF protegido y lo deja listo para un <iframe>.
+ * Downloads a protected PDF and leaves it ready for an <iframe>.
  *
- * Existe una copia inline de esta lógica en pages/DashboardPage.tsx (~305-345),
- * pendiente de migrar: allá `openPdfPreview` además hace setError() y cierra su
- * diálogo de configuración, así que no es un lift-and-shift.
+ * An inline copy of this logic still lives in pages/DashboardPage.tsx, pending
+ * migration: there `openPdfPreview` also calls setError() and closes its own
+ * configuration dialog, so it is not a lift-and-shift.
  *
- * Dos diferencias a favor de esta versión:
- *  - la URL viva se guarda en un ref: leerla del closure dentro de un
- *    useCallback capturaría estado viejo y dejaría el blob anterior sin revocar;
- *  - revoca al desmontar (el dashboard no lo hace y filtra el blob al navegar).
+ * Two differences in this version's favour:
+ *  - the live URL is kept in a ref: reading it from the closure inside a
+ *    useCallback would capture stale state and leave the previous blob unrevoked;
+ *  - it revokes on unmount (the dashboard does not, and leaks the blob on navigate).
  */
 export function usePdfPreview() {
   const [url, setUrl] = useState("");
@@ -27,7 +28,7 @@ export function usePdfPreview() {
 
   useEffect(() => revoke, [revoke]);
 
-  /** Propaga el error con throw: quien llama decide qué hacer (401, alert...). */
+  /** Rethrows: the caller decides what to do (401, alert...). */
   const open = useCallback(
     async (target: string, name: string) => {
       setLoading(true);
@@ -38,7 +39,7 @@ export function usePdfPreview() {
 
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
-          throw new Error(data.message ?? "No se pudo generar el PDF");
+          throw new Error(data.message ?? t("pdf.failed"));
         }
 
         const blob = await response.blob();

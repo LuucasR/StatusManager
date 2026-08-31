@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { TaskParticipant } from "../tasks/types";
+import { t } from "../../i18n";
 
 type Props = {
   open: boolean;
@@ -26,7 +27,7 @@ export default function NewDirectDialog({ open, meId, onClose, onPick }: Props) 
   useEffect(() => {
     if (!open) return;
     setSelected(null);
-    // Misma libreta de contactos que usa la pizarra.
+    // Same address book the board uses.
     api<TaskParticipant[]>("/activities/team")
       .then((team) => setEmployees(team.filter((e) => e.id !== meId)))
       .catch(() => setEmployees([]));
@@ -45,7 +46,7 @@ export default function NewDirectDialog({ open, meId, onClose, onPick }: Props) 
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Nuevo mensaje</DialogTitle>
+      <DialogTitle>{t("chat.newMessage")}</DialogTitle>
       <DialogContent>
         <Autocomplete
           options={employees}
@@ -54,12 +55,12 @@ export default function NewDirectDialog({ open, meId, onClose, onPick }: Props) 
           getOptionLabel={(option) => `#${option.employeeNumber} - ${option.name}`}
           isOptionEqualToValue={(option, value) => option.id === value.id}
           renderInput={(params) => (
-            <TextField {...params} label="Empleado" placeholder="Buscar…" autoFocus sx={{ mt: 1 }} />
+            <TextField {...params} label={t("common.employee")} placeholder={t("chat.searchEmployee")} autoFocus sx={{ mt: 1 }} />
           )}
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant="contained" onClick={() => void confirm()} disabled={!selected || busy}>
           Abrir chat
         </Button>

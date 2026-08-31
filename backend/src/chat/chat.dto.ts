@@ -12,9 +12,9 @@ export const MESSAGE_SELECT = {
 type MessageRow = Prisma.MessageGetPayload<{ select: typeof MESSAGE_SELECT }>;
 
 /**
- * El autor puede haber sido eliminado (authorId es SetNull), por eso se usa el
- * snapshot `authorName` como fuente del nombre y `author` solo aporta el numero
- * de legajo cuando la cuenta sigue viva.
+ * The author may have been deleted (authorId is SetNull), which is why the
+ * `authorName` snapshot is the source of the name and `author` only supplies
+ * the employee number while the account is still alive.
  */
 export function toMessageDto(message: MessageRow, conversationId: number) {
   return {

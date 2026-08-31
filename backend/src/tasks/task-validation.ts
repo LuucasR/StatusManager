@@ -2,15 +2,15 @@ import { TaskState } from "@prisma/client";
 import { z } from "zod";
 
 /**
- * z.coerce.date() y no z.string().datetime(): el frontend manda lo que produce
- * <input type="datetime-local"> convertido con toISOString(), pero coercionar
- * tolera ademas las variantes sin offset sin romper.
+ * z.coerce.date() and not z.string().datetime(): the frontend sends what
+ * <input type="datetime-local"> produces run through toISOString(), but
+ * coercing also tolerates the offset-less variants without breaking.
  */
 const dateInput = z.coerce.date();
 
 const participantIds = z
   .array(z.number().int().positive())
-  .min(1, "La tarea necesita al menos un participante")
+  .min(1, "The task needs at least one participant")
   .max(50);
 
 export const createTaskSchema = z
@@ -27,15 +27,15 @@ export const createTaskSchema = z
       context.addIssue({
         code: "custom",
         path: ["endsAt"],
-        message: "La fecha de fin debe ser posterior a la de inicio",
+        message: "The end date must be after the start date",
       });
     }
   });
 
 /**
- * Todos los campos son opcionales, asi que la comparacion endsAt > startsAt no
- * puede vivir aca (el body puede traer solo uno de los dos). Se valida en el
- * handler contra los valores ya persistidos.
+ * Every field is optional, so the endsAt > startsAt comparison cannot live here
+ * (the body may carry only one of the two). It is validated in the handler
+ * against the already-persisted values.
  */
 export const updateTaskSchema = z
   .object({
@@ -47,7 +47,7 @@ export const updateTaskSchema = z
     participantIds: participantIds.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
-    message: "No hay cambios para aplicar",
+    message: "There are no changes to apply",
   });
 
 export const changeTaskStateSchema = z.object({
@@ -55,13 +55,13 @@ export const changeTaskStateSchema = z.object({
 });
 
 /**
- * Booleano explicito y no un toggle que invierte: con broadcast por socket y
- * UI optimista, dos clicks o dos clientes dejarian el estado indeterminado.
+ * An explicit boolean and not a toggle that flips: with socket broadcast and an
+ * optimistic UI, two clicks or two clients would leave the state undetermined.
  */
 export const changeTaskPinSchema = z.object({
   pinned: z.boolean(),
 });
 
 export const createCommentSchema = z.object({
-  body: z.string().trim().min(1, "El comentario no puede estar vacío").max(1000),
+  body: z.string().trim().min(1, "The comment cannot be empty").max(1000),
 });

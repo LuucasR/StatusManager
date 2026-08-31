@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { api } from "../api";
+import { t } from "../i18n";
 
 /**
  * Forced password change. Reached right after logging in with a temporary
@@ -29,7 +30,7 @@ export default function ChangePasswordPage() {
     setError("");
 
     if (newPassword !== confirmation) {
-      setError("Las contraseñas no coinciden");
+      setError(t("changePassword.mismatch"));
       return;
     }
 
@@ -53,32 +54,32 @@ export default function ChangePasswordPage() {
     <Box className="auth-shell">
       <Container maxWidth="sm">
         <Paper className="auth-card" elevation={0}>
-          <Typography className="eyebrow">SEGURIDAD</Typography>
-          <Typography variant="h4">Elegí una contraseña nueva</Typography>
+          <Typography className="eyebrow">{t("changePassword.eyebrow")}</Typography>
+          <Typography variant="h4">{t("changePassword.title")}</Typography>
           <Typography color="text.secondary">
-            Estás usando una contraseña temporal. Cambiala para poder seguir.
+            {t("changePassword.subtitle")}
           </Typography>
 
           <Stack component="form" onSubmit={submit} spacing={2.2} sx={{ mt: 4 }}>
             {error && <Alert severity="error">{error}</Alert>}
             <TextField
-              label="Contraseña temporal"
+              label={t("changePassword.current")}
               type="password"
               required
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
             />
             <TextField
-              label="Nueva contraseña"
+              label={t("changePassword.new")}
               type="password"
               required
-              helperText="Entre 8 y 72 caracteres"
+              helperText={t("changePassword.lengthHint")}
               slotProps={{ htmlInput: { minLength: 8, maxLength: 72 } }}
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
             />
             <TextField
-              label="Repetir nueva contraseña"
+              label={t("changePassword.repeat")}
               type="password"
               required
               slotProps={{ htmlInput: { minLength: 8, maxLength: 72 } }}
@@ -91,7 +92,7 @@ export default function ChangePasswordPage() {
               variant="contained"
               disabled={loading}
             >
-              {loading ? "Guardando..." : "Guardar y entrar"}
+              {loading ? t("common.saving") : t("changePassword.submit")}
             </Button>
           </Stack>
         </Paper>

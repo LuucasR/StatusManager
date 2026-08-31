@@ -19,38 +19,15 @@ import PeriodFilter from "../components/PeriodFilter";
 import TaskFacts from "../components/tasks/TaskFacts";
 import type { TaskParticipant, TaskState } from "../components/tasks/types";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
+import {
+  STATUS_COLORS,
+  STATUS_LABELS,
+  type Status,
+} from "../components/activities/statuses";
+import { t, tf } from "../i18n";
 
-type Status =
-  | "AVAILABLE"
-  | "WORKING"
-  | "BREAK"
-  | "LUNCH"
-  | "MEETING"
-  | "OFFLINE"
-  | "DISCONNECTED";
 
-// Espeja STATUS_META del backend (activities/activity-status.ts). DISCONNECTED
-// nunca llega —visibleHistoryWhere lo excluye— pero se lista igual para que el
-// Record quede exhaustivo y no explote si eso cambia.
-const STATUS_LABELS: Record<Status, string> = {
-  AVAILABLE: "Disponible",
-  WORKING: "Trabajando",
-  BREAK: "Descanso",
-  LUNCH: "Almuerzo",
-  MEETING: "Reunión",
-  OFFLINE: "Ausente",
-  DISCONNECTED: "Desconectado",
-};
 
-const STATUS_COLORS: Record<Status, string> = {
-  AVAILABLE: "#208454",
-  WORKING: "#4C4DC9",
-  BREAK: "#A66A00",
-  LUNCH: "#8C4EA3",
-  MEETING: "#16738B",
-  OFFLINE: "#666A7D",
-  DISCONNECTED: "#B23C4A",
-};
 
 type StatusBucket = { status: Status; totalMs: number; segments: number };
 
@@ -80,7 +57,7 @@ type Summary = {
   byTask: TaskBucket[];
 };
 
-/** "3 h 07 min" / "45 min". Misma forma que formatDuration del reporte PDF. */
+/** "3 h 07 min" / "45 min". Same shape as formatDuration in the PDF report. */
 function formatMs(ms: number) {
   const minutes = Math.max(0, Math.round(ms / 60_000));
   const hours = Math.floor(minutes / 60);
@@ -90,8 +67,9 @@ function formatMs(ms: number) {
   return `${hours} h ${String(rest).padStart(2, "0")} min`;
 }
 
-function plural(count: number, singular: string, pluralForm: string) {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
+/** Segment count, pluralised through the catalogue so each language picks its own form. */
+function segmentLabel(count: number) {
+  return tf(count === 1 ? "summary.segments.one" : "summary.segments.many", { count });
 }
 
 export default function SummaryPage() {
@@ -121,12 +99,12 @@ export default function SummaryPage() {
     [load]
   );
 
-  // La carga inicial la dispara PeriodFilter: su efecto de montaje llama a
-  // onChange con el período por defecto, así que no hace falta un fetch aparte.
+  // The initial load is triggered by PeriodFilter: its mount effect calls
+  // onChange with the default period, so no separate fetch is needed.
   //
-  // El tramo abierto sigue sumando mientras la página está abierta: si cambia
-  // el estado, el total en pantalla deja de ser el real. useSocketEvent guarda
-  // el handler en un ref, así que `params` acá siempre es el actual.
+  // The open segment keeps accruing while the page is open: if the status
+  // changes, the total on screen stops being the real one. useSocketEvent keeps
+  // the handler in a ref, so `params` here is always the current one.
   useSocketEvent("status:changed", () => void load(params));
   useOnReconnect(() => void load(params));
 
@@ -142,9 +120,9 @@ export default function SummaryPage() {
 
       <Box className="page-heading">
         <Box>
-          <Typography className="eyebrow">TU ACTIVIDAD</Typography>
+          <Typography className="eyebrow">{t("summary.eyebrow")}</Typography>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Resumen
+            {t("summary.title")}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
             En qué se te fue el tiempo durante el período, y los detalles de cada tarea que
@@ -165,28 +143,27 @@ export default function SummaryPage() {
         <Stack spacing={3}>
           <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
             <Typography variant="overline" color="text.secondary">
-              Tiempo registrado
+              {t("summary.timeLogged")}
             </Typography>
             <Typography variant="h3" sx={{ fontWeight: 800 }}>
               {formatMs(summary.totalMs)}
             </Typography>
-            {/* "Tiempo registrado" y no "% de la jornada" a propósito: hay
-                huecos reales entre tramos y los períodos Desconectado quedan
-                fuera del historial, así que el total no cierra con el reloj. */}
+            {/* "Time logged" and not "% of the working day" on purpose: there
+                are real gaps between segments and Disconnected periods stay out
+                of the history, so the total does not match the clock. */}
             <Typography variant="caption" color="text.secondary">
-              Suma de los tramos registrados dentro del período. No incluye los períodos
-              Desconectado ni el tiempo sin ningún estado puesto.
+              {t("summary.timeLoggedNote")}
             </Typography>
           </Paper>
 
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Por estado
+              {t("summary.byStatus")}
             </Typography>
 
             {summary.byStatus.length === 0 ? (
               <Typography color="text.secondary">
-                No hay actividad registrada en este período.
+                {t("summary.empty")}
               </Typography>
             ) : (
               <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
@@ -202,7 +179,7 @@ export default function SummaryPage() {
                         </Typography>
                         <Stack direction="row" spacing={1.5} sx={{ alignItems: "baseline" }}>
                           <Typography variant="caption" color="text.secondary">
-                            {plural(bucket.segments, "tramo", "tramos")}
+                            {segmentLabel(bucket.segments)}
                           </Typography>
                           <Typography sx={{ fontWeight: 700 }}>
                             {formatMs(bucket.totalMs)}
@@ -231,12 +208,12 @@ export default function SummaryPage() {
 
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Tareas trabajadas
+              {t("summary.tasksWorked")}
             </Typography>
 
             {summary.byTask.length === 0 ? (
               <Typography color="text.secondary">
-                No declaraste ninguna tarea en este período.
+                {t("summary.noTasks")}
               </Typography>
             ) : (
               summary.byTask.map((bucket) => (
@@ -248,15 +225,15 @@ export default function SummaryPage() {
                       sx={{ alignItems: "center", width: "100%", pr: 1 }}
                     >
                       <Typography sx={{ fontWeight: 600, flex: 1 }}>
-                        {bucket.title ?? "Tarea sin título"}
+                        {bucket.title ?? t("summary.untitledTask")}
                       </Typography>
 
                       {bucket.deleted && (
-                        <Chip size="small" label="Eliminada" variant="outlined" color="warning" />
+                        <Chip size="small" label={t("summary.deleted")} variant="outlined" color="warning" />
                       )}
 
                       <Typography variant="caption" color="text.secondary">
-                        {plural(bucket.segments, "tramo", "tramos")}
+                        {segmentLabel(bucket.segments)}
                       </Typography>
 
                       <Typography sx={{ fontWeight: 700 }}>{formatMs(bucket.totalMs)}</Typography>
@@ -268,12 +245,11 @@ export default function SummaryPage() {
                       <TaskFacts
                         task={bucket.task}
                         showState
-                        asOfNote="Integrantes y estado son los actuales de la tarea, no los del momento en que trabajaste."
+                        asOfNote={t("summary.asOfNote")}
                       />
                     ) : (
                       <Alert severity="warning">
-                        La tarea fue eliminada. Solo queda el registro del tiempo que le imputaste y
-                        su título.
+                        {t("summary.taskDeleted")}
                       </Alert>
                     )}
                   </AccordionDetails>

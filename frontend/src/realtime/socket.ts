@@ -4,17 +4,17 @@ import { API_URL } from "../api";
 let socket: Socket | null = null;
 
 /**
- * Conexión única para toda la app. Antes cada página abría la suya, así que
- * ningún listener sobrevivía a navegar entre /dashboard y /tareas — la campana
- * y el chat necesitan justamente lo contrario.
+ * One connection for the whole app. Each page used to open its own, so no
+ * listener survived navigating between /dashboard and /tasks - the bell and the
+ * chat need exactly the opposite.
  */
 export function getSocket() {
   if (!socket) {
     socket = io(API_URL, {
       autoConnect: false,
-      // `auth` como función y no como objeto: con un objeto el token queda
-      // congelado en el momento de construir el socket y una reconexión
-      // reintenta con el token viejo.
+      // `auth` as a function and not an object: with an object the token is
+      // frozen at socket-construction time and a reconnect retries with the
+      // stale one.
       auth: (cb) => cb({ token: localStorage.getItem("token") ?? "" }),
     });
   }

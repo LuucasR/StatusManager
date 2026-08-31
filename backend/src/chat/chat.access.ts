@@ -24,8 +24,8 @@ export type Access = {
 };
 
 /**
- * Unica fuente de verdad de los permisos de chat. Todo handler que devuelva o
- * acepte mensajes tiene que pasar por aca.
+ * Single source of truth for chat permissions. Every handler that returns or
+ * accepts messages has to go through here.
  */
 export async function conversationAccess(
   auth: AuthPayload,
@@ -47,31 +47,31 @@ export async function conversationAccess(
 
   switch (conversation.kind) {
     case "GENERAL":
-      // Canal del equipo: cualquier autenticado. La fila de miembro existe solo
-      // para guardar lastReadAt y se crea perezosamente; no es requisito.
+      // Team channel: any authenticated user. The member row exists only to
+      // hold lastReadAt and is created lazily; it is not a requirement.
       canRead = true;
       break;
 
     case "DIRECT":
-      // A PROPOSITO sin excepcion para ADMIN ni SUPERVISOR. Un mensaje directo
-      // es privado entre dos personas y ninguno de los dos roles es una de
-      // ellas. Si alguna vez hiciera falta auditoria, que sea una funcion
-      // explicita y visible para el usuario, no una condicion colada aca.
+      // DELIBERATELY no exception for ADMIN or SUPERVISOR. A direct message is
+      // private between two people and neither role is one of them. If auditing
+      // is ever needed, it should be an explicit feature the user can see, not
+      // a condition smuggled in here.
       canRead = isMember;
       break;
 
     case "TASK":
-      // Se mira ConversationMember y no TaskParticipant porque TaskParticipant
-      // es Cascade y desaparece con la tarea; el historial tiene que seguir
-      // siendo legible despues de que la borren.
+      // Looks at ConversationMember and not TaskParticipant because
+      // TaskParticipant is Cascade and vanishes with the task; the history has
+      // to stay readable after the task is deleted.
       canRead = isMember || isStaff(auth.role);
       break;
   }
 
   return {
     canRead,
-    // Escribir exige poder leer y que la conversacion no este cerrada (tarea
-    // Terminada o eliminada). El admin tampoco escribe en una cerrada.
+    // Writing requires being able to read and the conversation not being closed
+    // (task Done or deleted). Not even an admin writes in a closed one.
     canWrite: canRead && !conversation.closed,
     isMember,
   };

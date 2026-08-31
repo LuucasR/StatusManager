@@ -6,10 +6,10 @@ const EMPLOYEE_SUMMARY = {
 } satisfies Prisma.EmployeeDefaultArgs;
 
 /**
- * Forma que devuelve el listado del tablero. El hilo de la tarea vive en
- * Conversation/Message desde la fusion con el chat, pero el DTO sigue
- * exponiendo `commentsCount` y `comments` con la misma forma de antes para no
- * romper al frontend.
+ * Shape returned by the board listing. The task thread has lived in
+ * Conversation/Message since the merge with chat, but the DTO still exposes
+ * `commentsCount` and `comments` in their previous shape so the frontend does
+ * not break.
  */
 export const TASK_INCLUDE = {
   createdBy: EMPLOYEE_SUMMARY,
@@ -22,7 +22,7 @@ export const TASK_INCLUDE = {
   },
 } satisfies Prisma.TaskInclude;
 
-/** Forma del detalle: agrega el hilo de mensajes. */
+/** Detail shape: adds the message thread. */
 export const TASK_DETAIL_INCLUDE = {
   ...TASK_INCLUDE,
   conversation: {
@@ -31,8 +31,8 @@ export const TASK_DETAIL_INCLUDE = {
       closed: true,
       _count: { select: { messages: true } },
       messages: {
-        // Se corta a 100: lo anterior se pagina desde la ventana de chat, y
-        // commentsCount sigue mostrando el total real.
+        // Capped at 100: anything older is paged from the chat window, and
+        // commentsCount still shows the real total.
         take: 100,
         orderBy: { id: "desc" },
         select: {
@@ -50,7 +50,7 @@ export const TASK_DETAIL_INCLUDE = {
 type TaskWithInclude = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
 type TaskWithDetail = Prisma.TaskGetPayload<{ include: typeof TASK_DETAIL_INCLUDE }>;
 
-/** Aplana participants para que el frontend no navegue `p.employee.name`. */
+/** Flattens participants so the frontend does not have to walk `p.employee.name`. */
 export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
   return {
     id: task.id,
@@ -60,9 +60,9 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     startsAt: task.startsAt,
     endsAt: task.endsAt,
     pinned: task.pinned,
-    // Siempre calculado, incluso si esta fijada: el frontend lo necesita para
-    // distinguir "fijada y vigente" de "fijada y ya pasada del corte", y para
-    // que la constante de 14 dias viva en un solo lugar.
+    // Always computed, even when pinned: the frontend needs it to tell
+    // "pinned and current" from "pinned and already past the cutoff", and it
+    // keeps the 14-day constant living in one place.
     archivesAt: taskArchivesAt(task.endsAt),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -77,8 +77,8 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
             id: message.id,
             body: message.body,
             createdAt: message.createdAt,
-            // El autor puede haber sido eliminado (authorId es SetNull); el
-            // nombre sale del snapshot para que el historial siga siendo legible.
+            // The author may have been deleted (authorId is SetNull); the name
+            // comes from the snapshot so the history stays readable.
             author: message.author ?? {
               id: 0,
               employeeNumber: 0,

@@ -1,12 +1,12 @@
 import type { ChatMessage } from "./types";
 
 /**
- * Cache de mensajes por conversación, a nivel módulo y con suscriptores.
+ * Per-conversation message cache, module-level and with subscribers.
  *
- * Vive fuera de React a propósito: el diálogo de detalle de la tarea y la
- * ventana flotante muestran el MISMO hilo, y con dos copias de estado un
- * mensaje enviado desde uno no aparecería en el otro. Además evita que el
- * provider repinte en cada tecla del hilo abierto.
+ * It lives outside React on purpose: the task detail dialog and the floating
+ * window show the SAME thread, and with two copies of state a message sent from
+ * one would not appear in the other. It also stops the provider repainting on
+ * every keystroke in the open thread.
  */
 type Entry = {
   messages: ChatMessage[];
@@ -20,7 +20,7 @@ const EMPTY: Entry = { messages: [], hasMore: false, cursor: null, loaded: false
 const store = new Map<number, Entry>();
 const listeners = new Map<number, Set<() => void>>();
 
-/** Tope para que una pestaña abierta todo el día no crezca sin límite. */
+/** Cap so a tab left open all day does not grow without bound. */
 const MAX_MESSAGES = 500;
 
 function emit(conversationId: number) {
@@ -68,7 +68,7 @@ export function prependPage(
   });
 }
 
-/** Idempotente: descarta el duplicado que llega por socket tras el POST. */
+/** Idempotent: drops the duplicate that arrives over the socket after the POST. */
 export function appendMessage(conversationId: number, message: ChatMessage) {
   const entry = getEntry(conversationId);
   if (entry.messages.some((m) => m.id === message.id)) return;
@@ -83,7 +83,7 @@ export function addPending(conversationId: number, message: ChatMessage) {
   write(conversationId, { ...entry, messages: [...entry.messages, message] });
 }
 
-/** Reemplaza el optimista por el real, o lo borra si el envío falló. */
+/** Replaces the optimistic message with the real one, or drops it if sending failed. */
 export function resolvePending(
   conversationId: number,
   tempId: number,

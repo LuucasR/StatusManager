@@ -9,6 +9,8 @@ import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
 import type { Role } from "../components/roles";
+import AppSettings from "../components/AppSettings";
+import { t } from "../i18n";
 
 export type SessionEmployee = {
   id: number;
@@ -18,17 +20,19 @@ export type SessionEmployee = {
   role?: Role;
 };
 
-/** Contexto que reciben las páginas anidadas vía useOutletContext(). */
+/** Context the nested pages receive through useOutletContext(). */
 export type AppOutletContext = {
   me: SessionEmployee | null;
 };
 
+// Labels resolve through t() at render time, so the language switch relabels
+// the nav without any extra wiring.
 const links = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/tareas", label: "Tareas" },
-  // Sin filtro por rol: el resumen es siempre el del empleado autenticado.
-  { to: "/resumen", label: "Resumen" },
-];
+  { to: "/dashboard", key: "nav.dashboard" },
+  { to: "/tasks", key: "nav.tasks" },
+  // No role filter: the summary is always the authenticated employee's own.
+  { to: "/summary", key: "nav.summary" },
+] as const;
 
 export default function AppLayout() {
   const { pathname } = useLocation();
@@ -69,11 +73,13 @@ export default function AppLayout() {
                   color={active ? "primary" : "inherit"}
                   sx={{ fontWeight: active ? 700 : 500 }}
                 >
-                  {link.label}
+                  {t(link.key)}
                 </Button>
               );
             })}
           </Stack>
+
+          <AppSettings />
 
           <NotificationBell />
 
@@ -82,7 +88,7 @@ export default function AppLayout() {
           </Typography>
 
           <Button color="inherit" startIcon={<LogoutRounded />} onClick={logout}>
-            Salir
+            {t("nav.logout")}
           </Button>
         </Toolbar>
       </AppBar>

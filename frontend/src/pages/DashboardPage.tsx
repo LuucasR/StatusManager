@@ -7,6 +7,7 @@ import {
   UpdateRounded,
   VisibilityRounded,
 } from "@mui/icons-material";
+import { t, tf } from "../i18n";
 
 import {
   Alert,
@@ -46,15 +47,16 @@ import WorkingTaskSelect, {
 } from "../components/activities/WorkingTaskSelect";
 import TaskFacts from "../components/tasks/TaskFacts";
 import { STATE_META, type Task, type TaskState } from "../components/tasks/types";
+import {
+  STATUS_LABELS as labels,
+  STATUS_CHIP_COLORS as colors,
+  SELECTABLE_STATUSES,
+  allowsTask,
+  requiresDetail,
+  type Status,
+} from "../components/activities/statuses";
+import { LOCALE } from "../locale";
 
-type Status =
-  | "AVAILABLE"
-  | "WORKING"
-  | "BREAK"
-  | "LUNCH"
-  | "MEETING"
-  | "OFFLINE"
-  | "DISCONNECTED";
 
 type Employee = {
   id: number;
@@ -74,7 +76,7 @@ type History = {
   detail: string;
   startedAt: string;
   endedAt: string | null;
-  /** null si la tarea fue eliminada; taskTitle sobrevive igual. */
+  /** null if the task was deleted; taskTitle survives regardless. */
   task: { id: number; title: string; state: TaskState } | null;
   taskTitle: string | null;
 };
@@ -92,36 +94,7 @@ type PasswordChangeRequest = {
   };
 };
 
-const labels: Record<Status, string> = {
-  AVAILABLE: "Disponible",
-  WORKING: "Trabajando",
-  BREAK: "Descanso",
-  LUNCH: "Almuerzo",
-  MEETING: "Reunión",
-  OFFLINE: "Ausente",
-  DISCONNECTED: "Desconectado",
-};
 
-const colors: Record<
-  Status,
-  "success" | "primary" | "warning" | "secondary" | "info" | "default" | "error"
-> = {
-  AVAILABLE: "success",
-  WORKING: "primary",
-  BREAK: "warning",
-  LUNCH: "secondary",
-  MEETING: "info",
-  OFFLINE: "default",
-  DISCONNECTED: "error",
-};
-
-// Estados que exigen comentario. Espeja statusesRequiringDetail del backend
-// (backend/src/activities/activity-status.ts). WORKING salió de la lista cuando
-// se pudo declarar la tarea; vuelve a exigirlo solo si se elige "Sin tarea".
-const requiresDetail = new Set<Status>(["OFFLINE"]);
-
-// Único estado donde se declara una tarea. Espeja statusesAllowingTask.
-const allowsTask = new Set<Status>(["WORKING"]);
 
 
 function elapsed(since: string, now: number) {
@@ -162,8 +135,8 @@ export default function DashboardPage() {
   const [assignableTasks, setAssignableTasks] = useState<AssignableTask[]>([]);
   const [assignableLoading, setAssignableLoading] = useState(false);
 
-  // El filtro de período vive en un ref además del estado: `load()` se registra
-  // una sola vez en los listeners del socket y necesita leer el rango actual.
+  // The period filter lives in a ref as well as in state: `load()` is registered
+  // once with the socket listeners and needs to read the current range.
   const [historyParams, setHistoryParams] = useState(() => new URLSearchParams());
   const historyParamsRef = useRef(historyParams);
   historyParamsRef.current = historyParams;
@@ -196,8 +169,8 @@ const [newAccountOpen, setNewAccountOpen] = useState(false);
 const [roleTarget, setRoleTarget] = useState<Employee | null>(null);
 const [notice, setNotice] = useState("");
 
-  // Dos niveles: staff (admin o supervisor) ve al equipo y sus reportes; admin
-  // es el unico que toca cuentas, roles y estados ajenos.
+  // Two levels: staff (admin or supervisor) sees the team and its reports; admin
+  // is the only one who touches accounts, roles and other people's statuses.
   const staff = isStaff(me?.role);
   const admin = isAdminRole(me?.role);
 
@@ -242,10 +215,10 @@ const [notice, setNotice] = useState("");
     [loadHistory]
   );
 
-  // Las tareas asignables se piden al abrir el diálogo, no al montar la página:
-  // el estado más común es no tocar el selector en toda la jornada. No aplica
-  // cuando un admin cambia el estado de otro, porque el endpoint devuelve las
-  // tareas de quien consulta y el backend valida contra el empleado destino.
+  // Assignable tasks are fetched when the dialog opens, not on page mount: the
+  // most common case is never touching the picker all day. It does not apply
+  // when an admin changes someone else's status, because the endpoint returns
+  // the CALLER's tasks and the backend validates against the target employee.
   useEffect(() => {
     if (!dialog || selectedEmployee) return;
     let cancelled = false;
@@ -254,9 +227,9 @@ const [notice, setNotice] = useState("");
       .then((tasks) => {
         if (cancelled) return;
         setAssignableTasks(tasks);
-        // La tarea elegida la vez anterior pudo terminarse o archivarse: sin
-        // esto el Select mostraría un valor que ya no está entre las opciones,
-        // y el backend lo rechazaría al guardar.
+        // The task picked last time may have been finished or archived: without
+        // this the Select would show a value no longer among the options, and the
+        // backend would reject it on save.
         setTaskId((current) =>
           current !== null && tasks.some((task) => task.id === current) ? current : null
         );
@@ -277,8 +250,8 @@ const [notice, setNotice] = useState("");
     setFactsLoading(true);
     setFactsTask(null);
     try {
-      // GET /tasks/:id no filtra por archivado, así que las tareas viejas del
-      // historial siguen siendo consultables.
+      // GET /tasks/:id does not filter by archiving, so old tasks from the
+      // history stay viewable.
       setFactsTask(await api<Task>(`/tasks/${id}`));
     } catch (e) {
       setError((e as Error).message);
@@ -298,8 +271,8 @@ const [notice, setNotice] = useState("");
     return () => clearInterval(timer);
   }, [load]);
 
-// Socket compartido del layout: antes esta página abría el suyo propio y los
-// listeners morían al navegar a /tareas.
+// Shared socket from the layout: this page used to open its own and the
+// listeners died on navigating to /tasks.
 useSocketEvent("status:changed", () => load());
 
 useSocketEvent("confirmation:request", () => {
@@ -318,15 +291,15 @@ useOnReconnect(() => load());
     [me, now]
   );
 
-  // El selector es solo para el self-service: el endpoint devuelve MIS tareas,
-  // y un admin corrigiendo el estado de otro no debería imputarle las propias.
+  // The picker is for self-service only: the endpoint returns MY tasks, and an
+  // admin fixing someone else's status should not book their own against it.
   const showTaskSelect = allowsTask.has(status) && !selectedEmployee;
 
   /**
-   * Espeja resolveWorkingTask del backend: el comentario vuelve a ser
-   * obligatorio en "Trabajando" solo cuando se elige no declarar tarea TENIENDO
-   * tareas para elegir. Sin tareas asignadas no se exige nada, o alguien sin
-   * pizarra no podría ni marcar que está trabajando.
+   * Mirrors resolveWorkingTask in the backend: the comment becomes mandatory
+   * again for "Working" only when choosing not to declare a task WHILE having
+   * tasks to pick from. With none assigned nothing is required, or somebody with
+   * an empty board could not even mark themselves as working.
    */
   const detailRequired =
     requiresDetail.has(status) ||
@@ -343,8 +316,8 @@ useOnReconnect(() => load());
         body: JSON.stringify({
           status,
           detail,
-          // Solo va en WORKING: el backend rechaza taskId en cualquier otro
-          // estado, así que mandar el residuo del select sería un 400.
+          // Only sent for WORKING: the backend rejects taskId in any other
+          // status, so sending the leftover from the select would be a 400.
           taskId: allowsTask.has(status) && !selectedEmployee ? taskId : null,
         }),
       });
@@ -420,7 +393,7 @@ useEffect(() => {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message ?? "No se pudo generar el PDF");
+        throw new Error(data.message ?? t("pdf.failed"));
       }
 
       const blob = await response.blob();
@@ -474,7 +447,7 @@ useEffect(() => {
   }
 
   async function reject(id: number) {
-    if (!window.confirm("¿Rechazar esta solicitud de registro?")) {
+    if (!window.confirm(t("dashboard.confirmReject"))) {
       return;
     }
 
@@ -559,11 +532,11 @@ useEffect(() => {
       <Box className="page-heading">
         <Box>
           <Typography className="eyebrow">
-            MI JORNADA
+            {t("dashboard.eyebrow")}
           </Typography>
 
           <Typography variant="h3">
-            Hola, {me?.name?.split(" ")[0]}
+            {tf("dashboard.greeting", { name: me?.name?.split(" ")[0] ?? "" })}
           </Typography>
 
           <Typography color="text.secondary">
@@ -612,7 +585,7 @@ useEffect(() => {
           <Typography variant="caption" color="text.secondary">
             desde{" "}
             {me
-              ? new Date(me.statusSince).toLocaleTimeString("es-AR", {
+              ? new Date(me.statusSince).toLocaleTimeString(LOCALE, {
                   hour: "2-digit",
                   minute: "2-digit",
                 })
@@ -625,21 +598,21 @@ useEffect(() => {
         <>
           <Box className="section-title">
             <Box>
-              <Typography className="eyebrow">SEGURIDAD</Typography>
+              <Typography className="eyebrow">{t("dashboard.securityEyebrow")}</Typography>
               <Typography variant="h4">
-                Solicitudes de cambio de contraseña
+                {t("dashboard.passwordRequests")}
               </Typography>
             </Box>
             <Chip
               color={passwordRequests.length ? "warning" : "default"}
-              label={`${passwordRequests.length} pendientes`}
+              label={tf("dashboard.pendingCount", { count: passwordRequests.length })}
             />
           </Box>
 
           {passwordRequests.length === 0 ? (
             <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
               <Typography color="text.secondary">
-                No hay solicitudes pendientes.
+                {t("dashboard.noPendingRequests")}
               </Typography>
             </Paper>
           ) : (
@@ -647,10 +620,10 @@ useEffect(() => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Empleado</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Fecha</TableCell>
-                    <TableCell align="right">Acciones</TableCell>
+                    <TableCell>{t("common.employee")}</TableCell>
+                    <TableCell>{t("common.email")}</TableCell>
+                    <TableCell>{t("dashboard.date")}</TableCell>
+                    <TableCell align="right">{t("dashboard.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -662,7 +635,7 @@ useEffect(() => {
                       </TableCell>
                       <TableCell>{request.employee.email}</TableCell>
                       <TableCell>
-                        {new Date(request.createdAt).toLocaleString("es-AR")}
+                        {new Date(request.createdAt).toLocaleString(LOCALE)}
                       </TableCell>
                       <TableCell align="right">
                         <Stack
@@ -676,7 +649,7 @@ useEffect(() => {
                               resolvePasswordRequest(request, "REJECTED")
                             }
                           >
-                            Rechazar
+                            {t("dashboard.reject")}
                           </Button>
                           <Button
                             variant="contained"
@@ -684,7 +657,7 @@ useEffect(() => {
                               resolvePasswordRequest(request, "APPROVED")
                             }
                           >
-                            Aceptar
+                            {t("dashboard.accept")}
                           </Button>
                         </Stack>
                       </TableCell>
@@ -701,11 +674,15 @@ useEffect(() => {
           <Box className="section-title">
             <Box>
               <Typography className="eyebrow">
-                {admin ? "PANEL ADMINISTRADOR" : staff ? "PANEL SUPERVISOR" : "EQUIPO"}
+                {admin
+                  ? t("dashboard.adminPanel")
+                  : staff
+                    ? t("dashboard.supervisorPanel")
+                    : t("dashboard.teamPanel")}
               </Typography>
 
               <Typography variant="h4">
-                Equipo en vivo
+                {t("dashboard.liveTeam")}
               </Typography>
             </Box>
 
@@ -715,7 +692,7 @@ useEffect(() => {
                   startIcon={<VisibilityRounded />}
                   onClick={() => setReportDialog(true)}
                 >
-                  Ver reporte PDF
+                  {t("dashboard.viewPdfReport")}
                 </Button>
               )}
               {admin && (
@@ -724,7 +701,7 @@ useEffect(() => {
                   startIcon={<PersonAddAlt1Rounded />}
                   onClick={() => setNewAccountOpen(true)}
                 >
-                  Nueva cuenta
+                  {t("account.newTitle")}
                 </Button>
               )}
             </Stack>
@@ -795,7 +772,7 @@ useEffect(() => {
         whiteSpace: "pre-wrap",
       }}
     >
-      {employee.detail || "Sin detalle"}
+      {employee.detail || t("dashboard.noDetail")}
     </Typography>
 
     <Typography className="mini-timer">
@@ -859,7 +836,7 @@ useEffect(() => {
                       startIcon={<AdminPanelSettingsRounded />}
                       onClick={() => approve(employee.id)}
                     >
-                      Aprobar alta
+                      {t("dashboard.approveSignUp")}
                     </Button>
 
                     <Button
@@ -868,7 +845,7 @@ useEffect(() => {
                       color="error"
                       onClick={() => reject(employee.id)}
                     >
-                      Rechazar
+                      {t("dashboard.reject")}
                     </Button>
                   </Stack>
                 )}
@@ -880,11 +857,11 @@ useEffect(() => {
       <Box className="section-title">
         <Box>
           <Typography className="eyebrow">
-            ACTIVIDAD RECIENTE
+            {t("dashboard.recentActivity")}
           </Typography>
 
           <Typography variant="h4">
-            Tu historial
+            {t("dashboard.yourHistory")}
           </Typography>
         </Box>
 
@@ -892,7 +869,7 @@ useEffect(() => {
           startIcon={<VisibilityRounded />}
           onClick={previewPersonalReport}
         >
-          Previsualizar PDF
+          {t("dashboard.previewPdf")}
         </Button>
       </Box>
 
@@ -902,8 +879,7 @@ useEffect(() => {
 
       {historyTruncated && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          El período tiene más registros de los que entran en la tabla. Se muestran los más
-          recientes; el resumen sí cuenta el período completo.
+          {t("dashboard.historyTruncated")}
         </Alert>
       )}
 
@@ -911,11 +887,11 @@ useEffect(() => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Estado</TableCell>
-              <TableCell>Tarea</TableCell>
-              <TableCell>Detalle</TableCell>
-              <TableCell>Inicio</TableCell>
-              <TableCell>Duración</TableCell>
+              <TableCell>{t("common.status")}</TableCell>
+              <TableCell>{t("common.task")}</TableCell>
+              <TableCell>{t("dashboard.detail")}</TableCell>
+              <TableCell>{t("dashboard.start")}</TableCell>
+              <TableCell>{t("common.duration")}</TableCell>
             </TableRow>
           </TableHead>
 
@@ -955,8 +931,8 @@ useEffect(() => {
                       }}
                     />
                   ) : item.taskTitle ? (
-                    // La tarea fue eliminada: el FK quedó en null y solo
-                    // sobrevive el snapshot del título.
+                    // The task was deleted: the FK went null and only the title
+                    // snapshot survives.
                     <Typography
                       variant="body2"
                       color="text.disabled"
@@ -971,10 +947,10 @@ useEffect(() => {
                   )}
                 </TableCell>
 
-                <TableCell>{item.detail || "Sin comentario"}</TableCell>
+                <TableCell>{item.detail || t("dashboard.noComment")}</TableCell>
 
                 <TableCell>
-                  {new Date(item.startedAt).toLocaleString("es-AR")}
+                  {new Date(item.startedAt).toLocaleString(LOCALE)}
                 </TableCell>
 
                 <TableCell>
@@ -1003,28 +979,28 @@ useEffect(() => {
     >
  <DialogTitle>
   {selectedEmployee
-    ? `Actualizar estado de ${selectedEmployee.name}`
-    : "Actualizar estado"}
+    ? tf("dashboard.updateStatusOf", { name: selectedEmployee.name })
+    : t("dashboard.updateStatus")}
 </DialogTitle>
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           <FormControl fullWidth>
             <InputLabel>
-              Nuevo estado
+              {t("dashboard.newStatus")}
             </InputLabel>
 
             <Select
               value={status}
-              label="Nuevo estado"
+              label={t("dashboard.newStatus")}
               onChange={(e) => setStatus(e.target.value as Status)}
             >
-              {Object.entries(labels).map(([value, label]) => (
+              {SELECTABLE_STATUSES.map((value) => (
                 <MenuItem
                   key={value}
                   value={value}
                 >
-                  {label}
+                  {labels[value]}
                 </MenuItem>
               ))}
             </Select>
@@ -1047,12 +1023,12 @@ useEffect(() => {
             }
             placeholder={
               detailRequired
-                ? "Escribí al menos 3 caracteres"
-                : "Podés agregar un comentario"
+                ? t("dashboard.detailRequired")
+                : t("dashboard.detailOptional")
             }
             helperText={
               detailRequired && showTaskSelect
-                ? "Elegiste trabajar sin una tarea de la pizarra: contá en qué estás."
+                ? t("dashboard.noTaskChosen")
                 : undefined
             }
             value={detail}
@@ -1083,16 +1059,16 @@ useEffect(() => {
       </DialogActions>
     </Dialog>
 
-    {/* Detalles de la tarea de un tramo del historial: integrantes, duración y
-        estado. Se reusa TaskFacts, el mismo bloque que muestra el detalle de la
-        pizarra, sin arrastrar el hilo de chat (que tiene su propio ACL). */}
+    {/* Task details for a history segment: participants, duration and state.
+        Reuses TaskFacts, the same block the board detail shows, without
+        dragging in the chat thread (which has its own ACL). */}
     <Dialog
       open={factsOpen}
       onClose={() => setFactsOpen(false)}
       fullWidth
       maxWidth="sm"
     >
-      <DialogTitle>{factsTask?.title ?? "Tarea"}</DialogTitle>
+      <DialogTitle>{factsTask?.title ?? t("common.task")}</DialogTitle>
       <DialogContent dividers>
         {factsLoading || !factsTask ? (
           <Stack sx={{ alignItems: "center", py: 4 }}>
@@ -1103,7 +1079,7 @@ useEffect(() => {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => setFactsOpen(false)}>Cerrar</Button>
+        <Button onClick={() => setFactsOpen(false)}>{t("common.close")}</Button>
       </DialogActions>
     </Dialog>
 
@@ -1149,7 +1125,7 @@ useEffect(() => {
   maxWidth="sm"
 >
   <DialogTitle>
-    Configurar reporte PDF
+    {t("dashboard.configureReport")}
   </DialogTitle>
 
   <DialogContent>
@@ -1157,16 +1133,16 @@ useEffect(() => {
 
       <FormControl fullWidth>
         <InputLabel>
-          Empleado
+          {t("common.employee")}
         </InputLabel>
 
         <Select
           value={reportEmployee}
-          label="Empleado"
+          label={t("common.employee")}
           onChange={(e) => setReportEmployee(e.target.value)}
         >
           <MenuItem value="all">
-            Todos
+            {t("common.all")}
           </MenuItem>
 
           {employees.map((employee) => (
@@ -1182,30 +1158,30 @@ useEffect(() => {
 
       <FormControl fullWidth>
         <InputLabel>
-          Período
+          {t("period.label")}
         </InputLabel>
 
         <Select
           value={reportPeriod}
-          label="Período"
+          label={t("period.label")}
           onChange={(e) =>
             setReportPeriod(e.target.value as typeof reportPeriod)
           }
         >
           <MenuItem value="all">
-            Todo el historial
+            {t("period.all")}
           </MenuItem>
 
           <MenuItem value="today">
-            Hoy
+            {t("period.today")}
           </MenuItem>
 
           <MenuItem value="last7">
-            Últimos 7 días
+            {t("period.last7")}
           </MenuItem>
 
           <MenuItem value="custom">
-            Rango personalizado
+            {t("period.custom")}
           </MenuItem>
         </Select>
       </FormControl>
@@ -1213,7 +1189,7 @@ useEffect(() => {
       {reportPeriod === "custom" && (
         <Stack direction="row" spacing={2}>
           <TextField
-            label="Desde"
+            label={t("period.from")}
             type="date"
             value={reportFrom}
             onChange={(e) => setReportFrom(e.target.value)}
@@ -1226,7 +1202,7 @@ useEffect(() => {
           />
 
           <TextField
-            label="Hasta"
+            label={t("period.to")}
             type="date"
             value={reportTo}
             onChange={(e) => setReportTo(e.target.value)}
@@ -1260,7 +1236,7 @@ useEffect(() => {
       }
       onClick={previewReport}
     >
-      Previsualizar
+      {t("taskReport.preview")}
     </Button>
   </DialogActions>
 </Dialog>
@@ -1271,12 +1247,12 @@ useEffect(() => {
   fullWidth
   maxWidth="lg"
 >
-  <DialogTitle>Previsualización del reporte</DialogTitle>
+  <DialogTitle>{t("dashboard.reportPreviewTitle")}</DialogTitle>
   <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
     {pdfPreviewUrl && (
       <Box
         component="iframe"
-        title="Previsualización del reporte PDF"
+        title={t("dashboard.reportPreviewFrameTitle")}
         src={pdfPreviewUrl}
         sx={{
           width: "100%",
@@ -1289,30 +1265,29 @@ useEffect(() => {
     )}
   </DialogContent>
   <DialogActions>
-    <Button onClick={closePdfPreview}>Cerrar</Button>
+    <Button onClick={closePdfPreview}>{t("common.close")}</Button>
     <Button
       variant="contained"
       startIcon={<DownloadRounded />}
       onClick={downloadPreviewedPdf}
     >
-      Descargar PDF
+      {t("pdf.download")}
     </Button>
   </DialogActions>
 </Dialog>
 
-{/* Reveal de un solo uso: la contraseña temporal no se guarda en ningun
-    lado, asi que si se cierra sin copiarla hay que regenerarla. */}
+{/* One-time reveal: the temporary password is not stored anywhere, so if this
+    is closed without copying it, it has to be regenerated. */}
 <Dialog
   open={Boolean(issuedPassword)}
   onClose={() => setIssuedPassword(null)}
   maxWidth="xs"
   fullWidth
 >
-  <DialogTitle>Contraseña temporal</DialogTitle>
+  <DialogTitle>{t("dashboard.temporaryPassword")}</DialogTitle>
   <DialogContent>
     <Typography color="text.secondary" sx={{ mb: 2 }}>
-      Pasásela a {issuedPassword?.name}. No se guarda en ningún lado y no se
-      vuelve a mostrar. Al entrar, va a tener que elegir una nueva.
+      {tf("dashboard.temporaryPasswordNote", { name: issuedPassword?.name ?? "" })}
     </Typography>
     <Typography
       component="code"
@@ -1331,7 +1306,7 @@ useEffect(() => {
   </DialogContent>
   <DialogActions>
     <Button variant="contained" onClick={() => setIssuedPassword(null)}>
-      Ya la copié
+      {t("dashboard.copied")}
     </Button>
   </DialogActions>
 </Dialog>

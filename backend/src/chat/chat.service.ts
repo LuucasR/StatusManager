@@ -4,10 +4,11 @@ import { emitToEmployees } from "../realtime";
 import { notifyNewMessage } from "../notifications/notification.service";
 import { GENERAL_KEY, taskKey } from "./chat.keys";
 import { MESSAGE_SELECT, toMessageDto } from "./chat.dto";
+import { logger } from "../logger";
 
 type Tx = Prisma.TransactionClient;
 
-/** Ids de todos los miembros de una conversacion. Es a quien se le emite. */
+/** Ids of every member of a conversation. This is who gets emitted to. */
 export async function conversationMemberIds(conversationId: number) {
   const members = await prisma.conversationMember.findMany({
     where: { conversationId },
@@ -17,9 +18,9 @@ export async function conversationMemberIds(conversationId: number) {
 }
 
 /**
- * El canal general se crea al vuelo si no existe, y la fila de miembro tambien:
- * asi un empleado nuevo no arrastra como no leido todo el historial previo
- * (lastReadAt arranca en now()).
+ * The general channel is created on the fly if missing, and so is the member
+ * row: that way a new employee does not inherit the entire previous history as
+ * unread (lastReadAt starts at now()).
  */
 export async function ensureGeneralConversation(employeeId: number) {
   const conversation = await prisma.conversation.upsert({
@@ -40,8 +41,8 @@ export async function ensureGeneralConversation(employeeId: number) {
 }
 
 /**
- * Idempotente por `key`. Se llama al crear la tarea y, por las dudas, desde los
- * caminos que necesitan la conversacion (tareas creadas por codigo viejo).
+ * Idempotent through `key`. Called when the task is created and, as a safety
+ * net, from the paths that need the conversation (tasks created by older code).
  */
 export async function ensureTaskConversation(
   tx: Tx,
@@ -75,9 +76,10 @@ export async function ensureTaskConversation(
 }
 
 /**
- * `closed` se ASIGNA, no se togglea: volver la tarea a Pendiente o En curso la
- * reabre sola. Es la misma funcion en los dos lugares donde puede cambiar el
- * estado (PATCH /tasks/:id y PATCH /tasks/:id/state) para que no diverjan.
+ * `closed` is ASSIGNED, not toggled: moving the task back to Pending or In
+ * progress reopens it on its own. The same function is used in both places the
+ * state can change (PATCH /tasks/:id and PATCH /tasks/:id/state) so they cannot
+ * diverge.
  */
 export async function syncTaskConversationState(tx: Tx, taskId: number, state: TaskState) {
   await tx.conversation.updateMany({
@@ -86,12 +88,12 @@ export async function syncTaskConversationState(tx: Tx, taskId: number, state: T
   });
 }
 
-/** El snapshot del titulo tiene que estar fresco ANTES de que borren la tarea. */
+/** The title snapshot has to be fresh BEFORE the task is deleted. */
 export async function syncTaskConversationTitle(tx: Tx, taskId: number, title: string) {
   await tx.conversation.updateMany({ where: { taskId }, data: { title } });
 }
 
-/** Espeja el alta y baja de participantes sobre el roster del chat. */
+/** Mirrors participants being added and removed onto the chat roster. */
 export async function syncTaskConversationMembers(
   tx: Tx,
   taskId: number,
@@ -120,9 +122,9 @@ export async function syncTaskConversationMembers(
 }
 
 /**
- * Crea el mensaje, actualiza el orden de la lista, marca leido para el autor y
- * avisa por socket. Unico camino de escritura de mensajes: lo usa tanto
- * POST /chat/... como el alias POST /tasks/:id/comments.
+ * Creates the message, updates the list ordering, marks it read for the author
+ * and announces it over the socket. The only write path for messages: used by
+ * both POST /chat/... and the POST /tasks/:id/comments alias.
  */
 export async function postMessage(options: {
   conversationId: number;
@@ -164,7 +166,7 @@ export async function postMessage(options: {
     message: dto,
   });
 
-  // Una notificacion fallida no puede tumbar un mensaje ya guardado.
+  // A failed notification must not bring down a message that is already saved.
   try {
     await notifyNewMessage({
       conversation,
@@ -174,7 +176,7 @@ export async function postMessage(options: {
       preview: body,
     });
   } catch (error) {
-    console.error("No se pudo notificar el mensaje", error);
+    logger.error({ err: error }, "could not notify new message");
   }
 
   return dto;

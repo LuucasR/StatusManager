@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { t } from "../i18n";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -45,19 +46,17 @@ export default function ForgotPasswordPage() {
     <Box className="auth-shell">
       <Container maxWidth="sm">
         <Paper className="auth-card" elevation={0}>
-          <Typography className="eyebrow">RECUPERAR ACCESO</Typography>
-          <Typography variant="h4">¿Olvidaste tu contraseña?</Typography>
+          <Typography className="eyebrow">{t("forgot.eyebrow")}</Typography>
+          <Typography variant="h4">{t("auth.forgotPassword")}</Typography>
           <Typography color="text.secondary">
-            Ingresá el email de tu cuenta. Un administrador va a generarte una
-            contraseña temporal y te la va a pasar; al entrar vas a elegir una
-            nueva.
+            {t("forgot.subtitle")}
           </Typography>
 
           <Stack component="form" onSubmit={submit} spacing={2.2} sx={{ mt: 4 }}>
             {error && <Alert severity="error">{error}</Alert>}
             {message && <Alert severity="success">{message}</Alert>}
             <TextField
-              label="Email"
+              label={t("common.email")}
               type="email"
               required
               value={email}
@@ -69,10 +68,10 @@ export default function ForgotPasswordPage() {
               variant="contained"
               disabled={loading}
             >
-              {loading ? "Enviando..." : "Enviar solicitud"}
+              {loading ? t("common.sending") : t("register.submit")}
             </Button>
             <Typography align="center" variant="body2">
-              <Link to="/">Volver al inicio de sesión</Link>
+              <Link to="/">{t("auth.backToSignIn")}</Link>
             </Typography>
           </Stack>
         </Paper>

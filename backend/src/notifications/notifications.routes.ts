@@ -11,7 +11,7 @@ function parseId(value: unknown) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** Bandeja + contador en un solo round-trip, que es lo que necesita la campana. */
+/** Inbox + counter in a single round-trip, which is what the bell needs. */
 router.get("/", async (req, res) => {
   const employeeId = req.auth!.employeeId;
   const before = parseId(req.query.before);
@@ -46,16 +46,16 @@ router.get("/unread-count", async (req, res) => {
 
 router.post("/:id/read", async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
-  // updateMany con employeeId en el where, y NO update({ where: { id } }): es
-  // lo que impide marcar como leida la notificacion de otra persona.
+  // updateMany with employeeId in the where, and NOT update({ where: { id } }):
+  // that is what stops someone marking another person's notification as read.
   const result = await prisma.notification.updateMany({
     where: { id, employeeId: req.auth!.employeeId },
     data: { readAt: new Date() },
   });
   if (result.count === 0) {
-    return res.status(404).json({ message: "Notificación no encontrada" });
+    return res.status(404).json({ code: "NOTIFICATION_NOT_FOUND", message: "Notification not found" });
   }
 
   const unreadCount = await prisma.notification.count({

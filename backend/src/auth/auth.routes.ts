@@ -22,7 +22,7 @@ const anonymousWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    message: "Demasiados intentos. Probá nuevamente en unos minutos.",
+    code: "RATE_LIMITED", message: "Too many attempts. Try again in a few minutes.",
   },
 });
 

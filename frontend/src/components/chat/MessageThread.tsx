@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatClock, relativeDay } from "../tasks/datetime";
 import { participantColor } from "../tasks/types";
 import type { ChatMessage } from "./types";
+import { tf } from "../../i18n";
 
 type Props = {
   messages: ChatMessage[];
@@ -12,7 +13,7 @@ type Props = {
   loading: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
-  /** Alto del scroller; el diálogo de tarea usa uno más chico que el widget. */
+  /** Scroller height; the task dialog uses a smaller one than the widget. */
   height?: number | string;
   showAuthorNames?: boolean;
 };
@@ -43,7 +44,7 @@ export default function MessageThread({
     setNewCount(0);
   }
 
-  // Al abrir, al fondo sin flash: useLayoutEffect corre antes del paint.
+  // On open, jump to the bottom with no flash: useLayoutEffect runs before paint.
   useLayoutEffect(() => {
     if (loading) return;
     scrollToBottom();
@@ -58,8 +59,8 @@ export default function MessageThread({
     prevCountRef.current = messages.length;
     if (added <= 0) return;
 
-    // Al anteponer una página vieja hay que compensar la altura, si no la vista
-    // salta al tope en cada carga. Es el bug clásico de este componente.
+    // Prepending an older page requires compensating for the height, otherwise
+    // the view jumps to the top on every load. The classic bug of this component.
     if (prevHeightRef.current && el.scrollHeight > prevHeightRef.current && !atBottomRef.current) {
       el.scrollTop += el.scrollHeight - prevHeightRef.current;
       prevHeightRef.current = 0;
@@ -71,7 +72,7 @@ export default function MessageThread({
     if (atBottomRef.current || mine) {
       scrollToBottom();
     } else {
-      // Nunca mover la vista de quien está leyendo hacia arriba.
+      // Never scroll the view of somebody who is reading upwards.
       setNewCount((value) => value + added);
     }
   }, [messages, meId]);
@@ -126,7 +127,7 @@ export default function MessageThread({
           const showDay = day !== lastDay;
           lastDay = day;
 
-          // Avatar solo en el primer mensaje de una ráfaga del mismo autor.
+          // Avatar only on the first message of a burst from the same author.
           const burst =
             previous &&
             previous.author.id === message.author.id &&
@@ -188,7 +189,7 @@ export default function MessageThread({
           startIcon={<ArrowDownwardRounded />}
           onClick={() => scrollToBottom("smooth")}
         >
-          {newCount} {newCount === 1 ? "mensaje nuevo" : "mensajes nuevos"}
+          {tf(newCount === 1 ? "chat.newCount.one" : "chat.newCount.many", { count: newCount })}
         </Button>
       )}
     </Box>

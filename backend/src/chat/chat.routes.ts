@@ -27,11 +27,11 @@ function parseId(value: unknown) {
 
 const EMPLOYEE_SUMMARY = { select: { id: true, employeeNumber: true, name: true } };
 
-/** Carga la conversacion y resuelve permisos, o responde y devuelve null. */
+/** Loads the conversation and resolves permissions, or answers and returns null. */
 async function loadForAccess(req: any, res: any, mode: "read" | "write") {
   const id = parseId(req.params.id);
   if (!id) {
-    res.status(400).json({ message: "Identificador inválido" });
+    res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
     return null;
   }
 
@@ -40,20 +40,25 @@ async function loadForAccess(req: any, res: any, mode: "read" | "write") {
     select: CONVERSATION_ACL_SELECT,
   });
   if (!conversation) {
-    res.status(404).json({ message: "Conversación no encontrada" });
+    res.status(404).json({ code: "CONVERSATION_NOT_FOUND", message: "Conversation not found" });
     return null;
   }
 
   const access = await conversationAccess(req.auth!, conversation);
   if (!access.canRead) {
-    res.status(403).json({ message: "No tenés acceso a esta conversación" });
+    res.status(403).json({ code: "CONVERSATION_FORBIDDEN", message: "You do not have access to this conversation" });
     return null;
   }
   if (mode === "write" && !access.canWrite) {
+    // Two different reasons, two different codes: a task that is merely done can
+    // be reopened by moving it back, a deleted one cannot. The client has to be
+    // able to tell them apart without reading the sentence.
+    const closedByDeletion = conversation.taskId === null;
     res.status(409).json({
-      message: conversation.taskId
-        ? "El chat está cerrado porque la tarea está terminada"
-        : "La tarea fue eliminada. El historial queda como solo lectura",
+      code: closedByDeletion ? "CHAT_CLOSED_DELETED" : "CHAT_CLOSED_DONE",
+      message: closedByDeletion
+        ? "The task was deleted. The history stays read only"
+        : "The chat is closed because the task is done",
     });
     return null;
   }
@@ -64,7 +69,7 @@ async function loadForAccess(req: any, res: any, mode: "read" | "write") {
 router.get("/conversations", async (req, res) => {
   const employeeId = req.auth!.employeeId;
 
-  // El canal general se materializa al pedir la lista para que siempre aparezca.
+  // The general channel is materialised when the list is requested so it always shows up.
   await ensureGeneralConversation(employeeId);
 
   const conversations = await prisma.conversation.findMany({
@@ -99,18 +104,18 @@ router.get("/conversations", async (req, res) => {
       return {
         id: conversation.id,
         kind: conversation.kind,
-        // El DM se titula con la otra persona; el resto usa el snapshot.
-        title: peer ? peer.name : conversation.title ?? "Conversación",
+        // A DM is titled after the other person; everything else uses the snapshot.
+        title: peer ? peer.name : conversation.title ?? "Conversation",
         closed: conversation.closed,
         taskId: conversation.taskId,
-        // taskId en null en una TASK es la unica definicion de "tarea eliminada".
+        // A null taskId on a TASK is the only definition of "task deleted".
         taskDeleted: conversation.kind === "TASK" && conversation.taskId === null,
         taskState: conversation.task?.state ?? null,
         peer,
         memberCount: conversation.members.length,
         lastMessageAt: conversation.lastMessageAt,
         lastMessage: last ? { body: last.body, authorName: last.authorName, createdAt: last.createdAt } : null,
-        // Booleano barato: no toca Message, sale del mismo findMany.
+        // Cheap boolean: never touches Message, comes out of the same findMany.
         unread: Boolean(
           conversation.lastMessageAt &&
             me?.lastReadAt &&
@@ -121,7 +126,7 @@ router.get("/conversations", async (req, res) => {
   );
 });
 
-/** Contador exacto por conversacion, para los badges. */
+/** Exact per-conversation count, for the badges. */
 router.get("/unread-count", async (req, res) => {
   const employeeId = req.auth!.employeeId;
 
@@ -145,17 +150,17 @@ router.get("/unread-count", async (req, res) => {
   res.json({ total, byConversation });
 });
 
-/** Get-or-create del mensaje directo. Idempotente: siempre 200. */
+/** Get-or-create for a direct message. Idempotent: always 200. */
 router.post("/direct", async (req, res) => {
   const parsed = createDirectSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Empleado inválido" });
+    return res.status(400).json({ code: "INVALID_EMPLOYEE", message: "Invalid employee" });
   }
 
   const me = req.auth!.employeeId;
   const other = parsed.data.employeeId;
   if (me === other) {
-    return res.status(400).json({ message: "No podés abrir un chat con vos mismo" });
+    return res.status(400).json({ code: "SELF_CHAT", message: "You cannot open a chat with yourself" });
   }
 
   const employee = await prisma.employee.findFirst({
@@ -163,7 +168,7 @@ router.post("/direct", async (req, res) => {
     select: { id: true, employeeNumber: true, name: true },
   });
   if (!employee) {
-    return res.status(400).json({ message: "El empleado no existe o está inactivo" });
+    return res.status(400).json({ code: "EMPLOYEE_INACTIVE", message: "That employee does not exist or is inactive" });
   }
 
   const key = directKey(me, other);
@@ -189,12 +194,12 @@ router.get("/conversations/:id/messages", async (req, res) => {
 
   const parsed = messagesQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Parámetros de paginación inválidos" });
+    return res.status(400).json({ code: "INVALID_PAGINATION", message: "Invalid pagination parameters" });
   }
   const { before, limit } = parsed.data;
   const conversationId = loaded.conversation.id;
 
-  // Cursor por id (no por createdAt): es unico, monotono y no empata.
+  // Cursor by id (not createdAt): unique, monotonic and never ties.
   const rows = await prisma.message.findMany({
     where: { conversationId, ...(before ? { id: { lt: before } } : {}) },
     orderBy: { id: "desc" },
@@ -219,7 +224,8 @@ router.post("/conversations/:id/messages", async (req, res) => {
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "No se pudo validar el mensaje",
+      code: "INVALID_MESSAGE",
+      message: parsed.error.issues[0]?.message ?? "The message could not be validated",
     });
   }
 
@@ -251,7 +257,7 @@ router.post("/conversations/:id/read", async (req, res) => {
     update: { lastReadAt: new Date() },
   });
 
-  // A la propia room, para que las otras pestañas bajen el badge.
+  // To the sender's own room, so their other tabs clear the badge too.
   emitToEmployees([employeeId], "chat:read", { conversationId: loaded.conversation.id });
 
   res.json({ success: true });
@@ -262,20 +268,20 @@ router.delete("/conversations/:id/messages/:messageId", async (req, res) => {
   if (!loaded) return;
 
   const messageId = parseId(req.params.messageId);
-  if (!messageId) return res.status(400).json({ message: "Identificador inválido" });
+  if (!messageId) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const message = await prisma.message.findUnique({
     where: { id: messageId },
     select: { id: true, conversationId: true, authorId: true },
   });
   if (!message || message.conversationId !== loaded.conversation.id) {
-    return res.status(404).json({ message: "Mensaje no encontrado" });
+    return res.status(404).json({ code: "MESSAGE_NOT_FOUND", message: "Message not found" });
   }
 
   if (message.authorId !== req.auth!.employeeId && !isStaff(req.auth!.role)) {
     return res
       .status(403)
-      .json({ message: "Solo el autor o un administrador pueden borrar el mensaje" });
+      .json({ code: "MESSAGE_DELETE_NOT_ALLOWED", message: "Only the author or an administrator can delete the message" });
   }
 
   await prisma.message.delete({ where: { id: messageId } });

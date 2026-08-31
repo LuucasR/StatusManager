@@ -77,13 +77,13 @@ async function authenticate(req: Request): Promise<Authenticated | null> {
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const caller = await authenticate(req);
-  if (!caller) return res.status(401).json({ message: "Sesión requerida" });
+  if (!caller) return res.status(401).json({ code: "AUTH_REQUIRED", message: "Sign-in required" });
 
   if (caller.mustChangePassword) {
     return res.status(403).json({
       // Machine-readable so the client never has to match on the message text.
       code: "PASSWORD_CHANGE_REQUIRED",
-      message: "Tenés que cambiar tu contraseña para continuar",
+      message: "You have to change your password to continue",
     });
   }
 
@@ -101,36 +101,36 @@ export async function requireAuthForPasswordChange(
   next: NextFunction
 ) {
   const caller = await authenticate(req);
-  if (!caller) return res.status(401).json({ message: "Sesión requerida" });
+  if (!caller) return res.status(401).json({ code: "AUTH_REQUIRED", message: "Sign-in required" });
 
   req.auth = { employeeId: caller.employeeId, role: caller.role };
   next();
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!isAdmin(req.auth?.role)) return res.status(403).json({ message: "Acceso exclusivo para administradores" });
+  if (!isAdmin(req.auth?.role)) return res.status(403).json({ code: "ADMIN_ONLY", message: "Administrators only" });
   next();
 }
 
-/** Admin o supervisor: visibilidad del equipo (historial, reportes, chats). */
+/** Admin or supervisor: team visibility (history, reports, chats). */
 export function requireStaff(req: Request, res: Response, next: NextFunction) {
   if (!isStaff(req.auth?.role)) {
     return res
       .status(403)
-      .json({ message: "Acceso exclusivo para supervisores y administradores" });
+      .json({ code: "STAFF_ONLY", message: "Supervisors and administrators only" });
   }
   next();
 }
 
 /**
- * Gestion del tablero de tareas. Nombrado por capacidad y no por rol a
- * proposito: ADMIN y SUPERVISOR tambien pasan, no solo TASK_MANAGER.
+ * Task board management. Named after the capability and not the role on
+ * purpose: ADMIN and SUPERVISOR pass too, not just TASK_MANAGER.
  */
 export function requireTaskManagement(req: Request, res: Response, next: NextFunction) {
   if (!canManageTasks(req.auth?.role)) {
     return res
       .status(403)
-      .json({ message: "Necesitás permisos de gestión de tareas" });
+      .json({ code: "TASK_MANAGEMENT_REQUIRED", message: "You need task management permissions" });
   }
   next();
 }

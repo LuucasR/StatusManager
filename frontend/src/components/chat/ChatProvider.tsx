@@ -51,7 +51,7 @@ export default function ChatProvider({ children }: { children: ReactNode }) {
       setConversations(list);
       setUnread(counts.byConversation);
     } catch {
-      // Un fallo del chat no puede romper la app; se reintenta al reconectar.
+      // A chat failure must not break the app; it retries on reconnect.
     }
   }, []);
 
@@ -69,7 +69,7 @@ export default function ChatProvider({ children }: { children: ReactNode }) {
     try {
       await markConversationRead(id);
     } catch {
-      // ignorado: el próximo refresh corrige
+      // ignored: the next refresh corrects it
     }
   }, []);
 
@@ -85,7 +85,7 @@ export default function ChatProvider({ children }: { children: ReactNode }) {
 
       appendMessage(payload.conversationId, payload.message);
 
-      // Si el hilo está abierto a la vista, se marca leído en vez de sumar.
+      // If the thread is open and visible, mark it read instead of counting it.
       const isVisible = open && activeId === payload.conversationId;
       if (isVisible) {
         void markConversationRead(payload.conversationId);

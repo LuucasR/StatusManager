@@ -21,19 +21,20 @@ import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
 import TaskFacts from "./TaskFacts";
 import { STATE_META, type Task } from "./types";
+import { t } from "../../i18n";
 
 type Props = {
   open: boolean;
   task: Task | null;
   loading: boolean;
   /**
-   * El ACL del chat (backend/src/chat/chat.access.ts) no lo abre por gestionar
-   * el tablero. Sin esto, un gestor de tareas que abre una tarea donde no
-   * participa dispara un 403 al montar el hilo.
+   * The chat ACL (backend/src/chat/chat.access.ts) does not grant it for merely
+   * managing the board. Without this, a task manager opening a task they do not
+   * take part in fires a 403 as the thread mounts.
    */
   canReadChat: boolean;
   canComment: boolean;
-  /** Fijar usa el mismo permiso que mover: admin o participante. */
+  /** Pinning uses the same permission as moving: admin or participant. */
   canPin: boolean;
   me: { id: number; name: string } | null;
   onClose: () => void;
@@ -51,19 +52,19 @@ export default function TaskDetailDialog({
   onClose,
   onPin,
 }: Props) {
-  // El hilo sale del mismo store que la ventana flotante: lo que se escribe en
-  // un lado aparece en el otro sin round-trip. Se pasa null cuando no hay
-  // permiso de lectura: montarlo igual seria un 403 garantizado.
+  // The thread comes from the same store as the floating window: what is typed
+  // in one appears in the other with no round-trip. null is passed when there is
+  // no read permission: mounting it anyway would be a guaranteed 403.
   const thread = useConversation(canReadChat ? (task?.conversationId ?? null) : null);
 
   const blockedReason = !task
     ? null
     : task.chatClosed
       ? task.state === "DONE"
-        ? "El chat se cerró cuando la tarea pasó a Terminada. Movela a otro estado para volver a escribir."
-        : "La tarea fue eliminada. El historial queda como solo lectura."
+        ? t("chat.closed.taskDone")
+        : t("chat.closed.taskDeleted")
       : !canComment
-        ? "Solo los participantes pueden escribir en esta tarea."
+        ? t("taskDetail.cannotComment")
         : null;
 
   return (
@@ -113,9 +114,9 @@ export default function TaskDetailDialog({
                       title={
                         canPin
                           ? task.pinned
-                            ? "Dejar de fijar"
-                            : "Fijar — no se archiva a los 14 días"
-                          : "Solo los participantes pueden fijar esta tarea"
+                            ? t("taskDetail.unpin")
+                            : t("taskDetail.pin")
+                          : t("taskDetail.cannotPin")
                       }
                     >
                       <span>
@@ -193,7 +194,7 @@ export default function TaskDetailDialog({
           </DialogContent>
 
           <DialogActions>
-            <Button onClick={onClose}>Cerrar</Button>
+            <Button onClick={onClose}>{t("common.close")}</Button>
           </DialogActions>
         </>
       )}

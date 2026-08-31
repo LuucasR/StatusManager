@@ -32,12 +32,13 @@ import {
   type Task,
   type TaskState,
 } from "./types";
+import { t, tf } from "../../i18n";
 
 type Props = {
   task: Task;
   canMove: boolean;
   canEdit: boolean;
-  /** Copia que se dibuja dentro del DragOverlay: sin drag, sin menú. */
+  /** Copy drawn inside the DragOverlay: no drag, no menu. */
   overlay?: boolean;
   onOpen?: (task: Task) => void;
   onMove?: (taskId: number, state: TaskState) => void;
@@ -56,9 +57,9 @@ function initials(name: string) {
 }
 
 function archiveLabel(days: number) {
-  if (days <= 0) return "Se archiva hoy";
-  if (days === 1) return "Se archiva mañana";
-  return `Se archiva en ${days} d`;
+  if (days <= 0) return t("board.archivesToday");
+  if (days === 1) return t("board.archivesTomorrow");
+  return tf("board.archivesInDays", { days });
 }
 
 export default function TaskCard({
@@ -75,8 +76,8 @@ export default function TaskCard({
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const meta = STATE_META[task.state];
 
-  // El overlay monta un segundo TaskCard con el mismo task.id; sin el prefijo
-  // habría dos draggables con el mismo id y el drag se rompe.
+  // The overlay mounts a second TaskCard with the same task.id; without the
+  // prefix there would be two draggables sharing an id and the drag breaks.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: overlay ? `overlay-${task.id}` : task.id,
     disabled: !canMove || overlay,
@@ -106,7 +107,7 @@ export default function TaskCard({
         "&:active": { cursor: canMove ? "grabbing" : "default" },
       }}
     >
-      {/* El color no puede ser el único portador del estado. */}
+      {/* Colour cannot be the only carrier of the state. */}
       <span className="sr-only">Estado: {meta.label}</span>
 
       <Stack direction="row" spacing={1} sx={{ alignItems: "start" }}>
@@ -136,7 +137,7 @@ export default function TaskCard({
               event.stopPropagation();
               setMenuAnchor(event.currentTarget);
             }}
-            // El pointer sensor de dnd-kit se queda con el evento si no lo frenamos.
+            // dnd-kit's pointer sensor swallows the event unless we stop it here.
             onPointerDown={(event) => event.stopPropagation()}
           >
             <MoreVertRounded fontSize="small" />
@@ -166,7 +167,7 @@ export default function TaskCard({
           <Chip
             size="small"
             icon={<PersonOffRounded />}
-            label="Sin participantes"
+            label={t("board.noParticipants")}
             sx={{
               height: 22,
               fontSize: 11,

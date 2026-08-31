@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { STATE_META, STATE_ORDER, type TaskParticipant } from "./types";
+import { t } from "../../i18n";
 
 type Period = "all" | "last30" | "last90" | "custom";
 
@@ -36,8 +37,8 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
 
   function buildParams() {
     const params = new URLSearchParams();
-    // Se omiten las claves en "all" en vez de mandarlas y compararlas como
-    // string en el handler.
+    // Keys set to "all" are omitted rather than sent and string-compared in the
+    // handler.
     if (participant !== "all") params.set("participantId", participant);
     if (state !== "all") params.set("state", state);
     params.set("period", period);
@@ -50,22 +51,22 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Reporte de tareas</DialogTitle>
+      <DialogTitle>{t("taskReport.title")}</DialogTitle>
 
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 1 }}>
           <Alert severity="info" variant="outlined">
-            El reporte incluye las tareas archivadas, que ya no aparecen en la pizarra.
+            {t("taskReport.note")}
           </Alert>
 
           <FormControl fullWidth>
-            <InputLabel>Participante</InputLabel>
+            <InputLabel>{t("taskReport.participant")}</InputLabel>
             <Select
               value={participant}
-              label="Participante"
+              label={t("taskReport.participant")}
               onChange={(e) => setParticipant(e.target.value)}
             >
-              <MenuItem value="all">Todos</MenuItem>
+              <MenuItem value="all">{t("common.all")}</MenuItem>
               {employees.map((employee) => (
                 <MenuItem key={employee.id} value={String(employee.id)}>
                   #{employee.employeeNumber} - {employee.name}
@@ -75,9 +76,9 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
           </FormControl>
 
           <FormControl fullWidth>
-            <InputLabel>Estado</InputLabel>
-            <Select value={state} label="Estado" onChange={(e) => setState(e.target.value)}>
-              <MenuItem value="all">Todos</MenuItem>
+            <InputLabel>{t("common.status")}</InputLabel>
+            <Select value={state} label={t("common.status")} onChange={(e) => setState(e.target.value)}>
+              <MenuItem value="all">{t("common.all")}</MenuItem>
               {STATE_ORDER.map((value) => (
                 <MenuItem key={value} value={value}>
                   {STATE_META[value].label}
@@ -87,30 +88,30 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
           </FormControl>
 
           <FormControl fullWidth>
-            <InputLabel>Período</InputLabel>
+            <InputLabel>{t("period.label")}</InputLabel>
             <Select
               value={period}
-              label="Período"
+              label={t("period.label")}
               onChange={(e) => setPeriod(e.target.value as Period)}
             >
-              <MenuItem value="all">Todo el historial</MenuItem>
-              <MenuItem value="last30">Últimos 30 días</MenuItem>
-              <MenuItem value="last90">Últimos 90 días</MenuItem>
-              <MenuItem value="custom">Rango personalizado</MenuItem>
+              <MenuItem value="all">{t("period.all")}</MenuItem>
+              <MenuItem value="last30">{t("period.last30")}</MenuItem>
+              <MenuItem value="last90">{t("taskReport.last90")}</MenuItem>
+              <MenuItem value="custom">{t("period.custom")}</MenuItem>
             </Select>
           </FormControl>
 
           {period === "custom" && (
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
-                label="Desde"
+                label={t("period.from")}
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
-                label="Hasta"
+                label={t("period.to")}
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
@@ -122,7 +123,7 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button
           variant="contained"
           startIcon={
@@ -131,7 +132,7 @@ export default function TaskReportDialog({ open, employees, loading, onClose, on
           disabled={loading || (period === "custom" && (!from || !to))}
           onClick={() => onPreview(buildParams())}
         >
-          Previsualizar
+          {t("taskReport.preview")}
         </Button>
       </DialogActions>
     </Dialog>

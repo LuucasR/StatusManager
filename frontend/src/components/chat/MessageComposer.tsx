@@ -1,10 +1,11 @@
 import { LockOutlined, SendRounded } from "@mui/icons-material";
 import { Box, IconButton, Stack, TextField, Typography } from "@mui/material";
 import { useState, type KeyboardEvent } from "react";
+import { t } from "../../i18n";
 
 type Props = {
   disabled?: boolean;
-  /** Motivo del bloqueo; si viene, reemplaza al campo de texto. */
+  /** Reason it is blocked; when present, it replaces the text field. */
   blockedReason?: string | null;
   onSend: (body: string) => Promise<void>;
 };
@@ -17,7 +18,7 @@ export default function MessageComposer({ disabled, blockedReason, onSend }: Pro
     const text = body.trim();
     if (!text || sending) return;
     setSending(true);
-    // Se limpia antes: el envío es optimista y así se puede seguir escribiendo.
+    // Cleared first: sending is optimistic, so typing can continue right away.
     setBody("");
     try {
       await onSend(text);
@@ -29,8 +30,8 @@ export default function MessageComposer({ disabled, blockedReason, onSend }: Pro
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // isComposing: sin esto, confirmar un acento o un IME con Enter manda el
-    // mensaje a medio escribir. En español pasa todo el tiempo.
+    // isComposing: without this, confirming an accent or an IME with Enter sends
+    // the half-written message. In Spanish that happens constantly.
     if (event.key !== "Enter" || event.shiftKey) return;
     if ((event.nativeEvent as unknown as { isComposing?: boolean }).isComposing) return;
     event.preventDefault();
@@ -55,7 +56,7 @@ export default function MessageComposer({ disabled, blockedReason, onSend }: Pro
           value={body}
           onChange={(event) => setBody(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Escribí un mensaje…"
+          placeholder={t("chat.composerPlaceholder")}
           multiline
           maxRows={4}
           size="small"
@@ -65,7 +66,7 @@ export default function MessageComposer({ disabled, blockedReason, onSend }: Pro
           color="primary"
           onClick={() => void submit()}
           disabled={disabled || !body.trim()}
-          aria-label="Enviar mensaje"
+          aria-label={t("chat.send")}
         >
           <SendRounded />
         </IconButton>

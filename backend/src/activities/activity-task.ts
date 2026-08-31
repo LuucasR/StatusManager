@@ -3,16 +3,28 @@ import prisma from "../prisma/client";
 import { visibleTasksWhere } from "../tasks/task-state";
 import { statusesAllowingTask } from "./activity-status";
 
-/** Error de regla de negocio: la ruta lo traduce a 400 con este mensaje. */
-export class WorkingTaskError extends Error {}
+/**
+ * Business-rule error: the route turns it into a 400 carrying this message.
+ *
+ * Carries its own code so the client can translate it. Without one, these were
+ * the only two responses in the API whose text reached the user untranslated.
+ */
+export class WorkingTaskError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
 
 /**
- * Tareas sobre las que un empleado puede declarar trabajo: las suyas, no
- * terminadas y todavia en la pizarra.
+ * Tasks an employee can declare work against: their own, not done, and still
+ * on the board.
  *
- * Es la MISMA definicion que usa el selector (GET /activities/assignable-tasks)
- * y la que valida el POST. Si divergen, la UI ofrece opciones que el backend
- * rechaza.
+ * This is the SAME definition the picker uses (GET /activities/assignable-tasks)
+ * and the one that validates the POST. If they diverge, the UI offers options
+ * the backend rejects.
  */
 export function assignableTasksWhere(
   employeeId: number,
@@ -20,12 +32,12 @@ export function assignableTasksWhere(
 ): Prisma.TaskWhereInput {
   return {
     participants: { some: { employeeId } },
-    // Terminada no se puede EMPEZAR a trabajar. Un tramo ya abierto sobre una
-    // tarea que despues pasa a DONE sigue vivo a proposito: cerrarlo por detras
-    // le borraria tiempo real a alguien.
+    // You cannot START working on a Done task. A segment already open against a
+    // task that later moves to DONE stays alive on purpose: closing it behind
+    // the scenes would erase real time from someone.
     state: { not: TaskState.DONE },
-    // visibleTasksWhere aporta un `OR`; el resto son claves planas, asi que
-    // Prisma las ANDea sin pisarse.
+    // visibleTasksWhere contributes an `OR`; the rest are flat keys, so Prisma
+    // ANDs them together without clashing.
     ...visibleTasksWhere(now),
   };
 }
@@ -45,19 +57,19 @@ type ResolveInput = {
   detail: string;
   taskId?: number | null;
   /**
-   * true solo en el self-service. El admin corrige estados ajenos y no tiene
-   * por que quedar trabado por las tareas de otro.
+   * true only in the self-service path. An admin fixes other people's statuses
+   * and should not be blocked by someone else's task list.
    */
   enforce: boolean;
   now?: Date;
 };
 
 /**
- * Valida la tarea declarada y devuelve lo que se persiste en el tramo.
+ * Validates the declared task and returns what gets persisted on the segment.
  *
- * `taskTitle` es un snapshot deliberado: el FK es SetNull, asi que borrar una
- * tarea no puede llevarse puesto el tiempo que alguien le imputo, pero sin el
- * titulo el resumen quedaria mostrando un hueco.
+ * `taskTitle` is a deliberate snapshot: the FK is SetNull, so deleting a task
+ * cannot take with it the time somebody booked against it, but without the
+ * title the summary would be left showing a gap.
  */
 export async function resolveWorkingTask({
   employeeId,
@@ -76,7 +88,8 @@ export async function resolveWorkingTask({
     });
     if (!task) {
       throw new WorkingTaskError(
-        "Esa tarea no está entre las tuyas, ya está terminada o salió de la pizarra"
+        "TASK_NOT_ASSIGNABLE",
+        "That task is not one of yours, is already done, or has left the board"
       );
     }
     return { taskId: task.id, taskTitle: task.title };
@@ -84,9 +97,9 @@ export async function resolveWorkingTask({
 
   if (!enforce) return { taskId: null, taskTitle: null };
 
-  // Sin tarea hace falta decir en que se trabaja. Se exige solo si hay algo
-  // para elegir: si no, alguien sin tareas asignadas no podria ni marcar que
-  // esta trabajando.
+  // With no task you have to say what you are working on. Only required when
+  // there is something to pick: otherwise someone with no assigned tasks could
+  // not even mark themselves as working.
   if (detail.length >= 3) return { taskId: null, taskTitle: null };
 
   const assignable = await prisma.task.count({
@@ -94,7 +107,8 @@ export async function resolveWorkingTask({
   });
   if (assignable > 0) {
     throw new WorkingTaskError(
-      "Elegí la tarea en la que vas a trabajar, o escribí un comentario de al menos 3 caracteres si es otro trabajo"
+      "TASK_OR_COMMENT_REQUIRED",
+      "Pick the task you are going to work on, or write a comment of at least 3 characters if it is other work"
     );
   }
 

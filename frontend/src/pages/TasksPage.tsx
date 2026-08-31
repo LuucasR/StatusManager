@@ -37,10 +37,11 @@ import {
 } from "../components/tasks/types";
 import type { AppOutletContext } from "../layouts/AppLayout";
 import { canManageTasks, isStaff } from "../components/roles";
+import { t } from "../i18n";
 
 export default function TasksPage() {
   const { me } = useOutletContext<AppOutletContext>();
-  // Gestionar el tablero: admin, supervisor o gestor de tareas.
+  // Board management: admin, supervisor or task manager.
   const canManage = canManageTasks(me?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -59,11 +60,11 @@ export default function TasksPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const pdf = usePdfPreview();
 
-  // El handler del socket se registra una sola vez; necesita leer el id actual.
+  // The socket handler is registered once; it needs to read the current id.
   const detailIdRef = useRef<number | null>(null);
   detailIdRef.current = detailId;
 
-  // El 401 lo maneja api() de forma centralizada; acá solo se muestra el error.
+  // 401 is handled centrally by api(); here the error is only displayed.
   const handleError = useCallback((err: unknown) => {
     setError((err as Error).message);
   }, []);
@@ -123,15 +124,15 @@ export default function TasksPage() {
     }
   });
 
-  // El socket no guarda lo emitido mientras estuvo caído: al volver, re-sincronizar.
+  // The socket does not buffer what was emitted while it was down: re-sync on return.
   useOnReconnect(() => {
     void load();
     if (detailIdRef.current) void reloadDetail(detailIdRef.current);
   });
 
   /**
-   * Deep link desde el reporte: una tarea archivada ya no está en la pizarra,
-   * pero GET /tasks/:id sí la devuelve, así que se puede abrir y fijar.
+   * Deep link from the report: an archived task is no longer on the board, but
+   * GET /tasks/:id still returns it, so it can be opened and pinned.
    */
   useEffect(() => {
     const id = Number(searchParams.get("task"));
@@ -142,8 +143,8 @@ export default function TasksPage() {
   }, [searchParams, setSearchParams, openDetailById]);
 
   /**
-   * Optimista: esperar el round-trip hace que la tarjeta "salte hacia atrás".
-   * Si el backend rechaza (403 de no participante), se revierte y se muestra.
+   * Optimistic: waiting for the round-trip makes the card "jump back". If the
+   * backend refuses (403 for a non-participant), it is reverted and surfaced.
    */
   async function handleMove(taskId: number, state: TaskState) {
     const previous = tasks;
@@ -158,10 +159,10 @@ export default function TasksPage() {
   }
 
   async function handlePin(task: Task, pinned: boolean) {
-    // Despinnear algo que ya pasó el corte lo hace desaparecer del tablero.
+    // Unpinning something already past the cutoff makes it vanish from the board.
     if (!pinned && daysUntilArchive(task) <= 0) {
       const ok = window.confirm(
-        "Esta tarea ya superó los 14 días desde su fecha de fin. Si dejás de fijarla, desaparecerá de la pizarra. ¿Continuar?"
+        t("tasksPage.unpinWarning")
       );
       if (!ok) return;
     }
@@ -198,7 +199,7 @@ export default function TasksPage() {
 
   async function handlePreviewReport(params: URLSearchParams) {
     try {
-      await pdf.open(`${API_URL}/tasks/report.pdf?${params.toString()}`, "reporte-tareas.pdf");
+      await pdf.open(`${API_URL}/tasks/report.pdf?${params.toString()}`, t("taskReport.filename"));
       setReportOpen(false);
     } catch (err) {
       handleError(err);
@@ -206,9 +207,9 @@ export default function TasksPage() {
   }
 
   const canPinDetail = Boolean(detail && canMoveTask(detail, me?.id, me?.role));
-  // Leer y escribir el hilo siguen la regla del CHAT, no la del tablero: un
-  // gestor de tareas que no participa administra la tarjeta pero no su
-  // conversación. Espeja canCommentOnTask y chat.access.ts del backend.
+  // Reading and writing the thread follow the CHAT rule, not the board's: a task
+  // manager who is not a participant administers the card but not its
+  // conversation. Mirrors canCommentOnTask and chat.access.ts in the backend.
   const isParticipant = Boolean(
     detail?.participants.some((participant) => participant.id === me?.id)
   );
@@ -225,13 +226,12 @@ export default function TasksPage() {
 
       <Box className="page-heading">
         <Box>
-          <Typography className="eyebrow">PIZARRA DE TAREAS</Typography>
+          <Typography className="eyebrow">{t("tasksPage.eyebrow")}</Typography>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Tareas del equipo
+            {t("tasksPage.title")}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Arrastrá una tarjeta entre columnas, o usá el menú de la tarjeta para moverla. Las
-            tareas se archivan 14 días después de su fecha de fin, salvo que las fijes.
+            {t("tasksPage.subtitle")}
           </Typography>
         </Box>
 
@@ -314,7 +314,7 @@ export default function TasksPage() {
 
       <PdfPreviewDialog
         url={pdf.url}
-        title="Reporte de tareas"
+        title={t("taskReport.title")}
         onClose={pdf.close}
         onDownload={pdf.download}
       />

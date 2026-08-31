@@ -6,8 +6,9 @@ import {
 import type { SvgIconComponent } from "@mui/icons-material";
 import type { CSSProperties } from "react";
 import { canManageTasks } from "../roles";
+import { t, type TranslationKey } from "../../i18n";
 
-// React.CSSProperties no admite claves --*, y el cast directo falla.
+// React.CSSProperties does not accept --* keys, and a direct cast fails.
 declare module "react" {
   interface CSSProperties {
     [key: `--${string}`]: string | number | undefined;
@@ -37,18 +38,18 @@ export type Task = {
   startsAt: string;
   endsAt: string;
   pinned: boolean;
-  /** endsAt + 14 días. El backend es dueño de la constante. */
+  /** endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
-  /** Chat de la tarea: el hilo de comentarios y el del widget son el mismo. */
+  /** Task chat: the comment thread and the widget thread are the same one. */
   conversationId: number | null;
-  /** true cuando la tarea está Terminada o fue eliminada: solo lectura. */
+  /** true when the task is Done or was deleted: read only. */
   chatClosed: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: TaskParticipant | null;
   participants: TaskParticipant[];
   commentsCount: number;
-  /** Solo viene en el detalle (GET /tasks/:id). */
+  /** Only present in the detail response (GET /tasks/:id). */
   comments?: TaskComment[];
 };
 
@@ -56,53 +57,73 @@ export const STATE_ORDER: TaskState[] = ["PENDING", "IN_PROGRESS", "DONE"];
 
 export type StateMeta = {
   label: string;
-  /** Barra lateral de la tarjeta, punto de la cabecera, borde de drop. */
+  /** Card side bar, column header dot, drop border. */
   accent: string;
-  /** Fondo de la cabecera de columna y del pill de estado. */
+  /** Column header background and state pill background. */
   soft: string;
-  /** Hover de tarjeta y fondo de columna cuando es destino de drop. */
+  /** Card hover, and column background when it is the drop target. */
   tint: string;
-  /** Texto sobre soft/tint. Contraste verificado >= 4.5:1. */
+  /** Text on soft/tint. Contrast verified >= 4.5:1. */
   ink: string;
   Icon: SvgIconComponent;
   empty: string;
 };
 
 /**
- * Los acentos son los mismos de .status-dot.offline/.working/.available en
- * index.css, para que la pizarra y el dashboard se lean como una sola app.
+ * The accents are the same ones used by .status-dot.offline/.working/.available
+ * in index.css, so the board and the dashboard read as a single app.
  */
-export const STATE_META: Record<TaskState, StateMeta> = {
-  PENDING: {
-    label: "Pendiente",
-    accent: "#8a8da0",
-    soft: "#eef0f6",
-    tint: "#f7f8fc",
-    ink: "#4a4d63",
-    Icon: RadioButtonUncheckedRounded,
-    empty: "Nada pendiente por ahora",
-  },
-  IN_PROGRESS: {
-    label: "En curso",
-    accent: "#5b5ce2",
-    soft: "#ecebff",
-    tint: "#f6f5ff",
-    ink: "#3c3ca8",
-    Icon: AutorenewRounded,
-    empty: "Nadie arrancó ninguna tarea",
-  },
-  DONE: {
-    label: "Terminada",
-    accent: "#2eae70",
-    soft: "#e2f6eb",
-    tint: "#f2fbf6",
-    ink: "#1a7048",
-    Icon: CheckCircleRounded,
-    empty: "Todavía no terminaron ninguna",
-  },
+/**
+ * Only the accent is a fixed hue; soft/tint/ink are DERIVED from it against
+ * the theme surface at paint time.
+ *
+ * They used to be hardcoded pale hexes, which meant the board stayed white
+ * under a dark theme. color-mix() against var(--surface)/var(--text) - both
+ * published on :root by ThemeModeProvider - makes them follow light and dark
+ * with no extra JS and without touching the call sites that read .soft/.ink
+ * as inline style values.
+ */
+const STATE_ACCENTS: Record<TaskState, { accent: string; Icon: SvgIconComponent }> = {
+  PENDING: { accent: "#8a8da0", Icon: RadioButtonUncheckedRounded },
+  IN_PROGRESS: { accent: "#5b5ce2", Icon: AutorenewRounded },
+  DONE: { accent: "#2eae70", Icon: CheckCircleRounded },
 };
 
-/** Custom properties para que el CSS estático pinte según el estado. */
+/** Header and pill background: a light wash of the accent over the surface. */
+export const softOf = (accent: string) =>
+  `color-mix(in srgb, ${accent} 16%, var(--surface))`;
+/** Hover / drop-target background: a fainter wash still. */
+export const tintOf = (accent: string) =>
+  `color-mix(in srgb, ${accent} 8%, var(--surface))`;
+/** Text sitting on soft/tint: the accent pulled towards the body text colour. */
+export const inkOf = (accent: string) =>
+  `color-mix(in srgb, ${accent} 72%, var(--text))`;
+
+/** `label` and `empty` follow the active language; the styling does not. */
+export const STATE_META = STATE_ORDER.reduce((all, state) => {
+  const { accent, Icon } = STATE_ACCENTS[state];
+  all[state] = {
+    accent,
+    Icon,
+    soft: softOf(accent),
+    tint: tintOf(accent),
+    ink: inkOf(accent),
+    get label() {
+      return t(`taskState.${state}` as TranslationKey);
+    },
+    get empty() {
+      return t(`taskState.${state}.empty` as TranslationKey);
+    },
+  };
+  return all;
+}, {} as Record<TaskState, StateMeta>);
+
+/**
+ * Custom properties so the static CSS can paint according to the state.
+ *
+ * --soft/--tint/--ink are color-mix() expressions referencing var(--surface)
+ * and var(--text), so they re-resolve on their own when the theme flips.
+ */
 export function stateVars(state: TaskState): CSSProperties {
   const meta = STATE_META[state];
   return {
@@ -114,9 +135,9 @@ export function stateVars(state: TaskState): CSSProperties {
 }
 
 /**
- * Hues sin la banda amarillo-lima (40-110) y ordenados para que ids
- * consecutivos caigan lejos entre sí. Con S 55% / L 32% y texto blanco el peor
- * caso (cian 168) da 4.7:1 → AA. No subir la lightness: a 36% cae a 3.8:1.
+ * Hues without the yellow-lime band (40-110), ordered so consecutive ids land
+ * far apart. At S 55% / L 32% with white text the worst case (cyan 168) gives
+ * 4.7:1 -> AA. Do not raise the lightness: at 36% it drops to 3.8:1.
  */
 const AVATAR_HUES = [231, 350, 168, 292, 24, 200, 322, 145, 262, 12];
 
@@ -124,17 +145,17 @@ export function participantColor(id: number) {
   return `hsl(${AVATAR_HUES[Math.abs(id) % AVATAR_HUES.length]} 55% 32%)`;
 }
 
-/** Quien gestiona el tablero mueve y fija cualquier tarea; el resto solo si participa. */
+/** Board managers move and pin any task; everyone else only their own. */
 export function canMoveTask(task: Task, meId?: number, role?: string) {
   if (canManageTasks(role)) return true;
   if (!meId) return false;
   return task.participants.some((participant) => participant.id === meId);
 }
 
-/** Días antes del corte en que la tarjeta empieza a avisar. */
+/** Days before the cutoff at which the card starts warning. */
 export const ARCHIVE_WARNING_DAYS = 3;
 
-/** Días enteros que faltan para que se archive. Negativo = ya pasó el corte. */
+/** Whole days left before it is archived. Negative = past the cutoff. */
 export function daysUntilArchive(task: Task, now = Date.now()) {
   return Math.ceil((new Date(task.archivesAt).getTime() - now) / 86_400_000);
 }

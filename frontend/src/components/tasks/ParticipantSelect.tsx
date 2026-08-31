@@ -1,5 +1,6 @@
 import { Autocomplete, TextField } from "@mui/material";
 import type { TaskParticipant } from "./types";
+import { t } from "../../i18n";
 
 type Props = {
   options: TaskParticipant[];
@@ -17,15 +18,15 @@ export default function ParticipantSelect({ options, value, onChange, disabled }
       value={value}
       onChange={(_, next) => onChange(next)}
       getOptionLabel={(option) => `#${option.employeeNumber} - ${option.name}`}
-      // Obligatorio: sin esto MUI compara por identidad de objeto y tira
-      // warnings al reabrir el diálogo en modo edición.
+      // Required: without it MUI compares by object identity and warns when the
+      // dialog is reopened in edit mode.
       isOptionEqualToValue={(option, selected) => option.id === selected.id}
       filterSelectedOptions
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Participantes"
-          placeholder={value.length ? "" : "Buscar empleado…"}
+          label={t("board.participants")}
+          placeholder={value.length ? "" : t("board.searchEmployee")}
         />
       )}
     />

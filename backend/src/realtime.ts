@@ -3,15 +3,16 @@ import { Server } from "socket.io";
 import prisma from "./prisma/client";
 import { env } from "./env";
 import { verifyToken } from "./auth/auth.token";
+import { logger } from "./logger";
 
 /**
- * Cada socket se une a la room `emp:<employeeId>` al conectarse. Se usa una
- * room y no un Map<employeeId, socketId> porque una room admite N sockets por
- * empleado (varias pestañas) y Socket.IO la limpia sola en `disconnect`.
+ * Every socket joins the room `emp:<employeeId>` on connect. A room is used
+ * rather than a Map<employeeId, socketId> because a room holds N sockets per
+ * employee (several tabs) and Socket.IO cleans it up itself on `disconnect`.
  *
- * La version anterior guardaba UN socket por empleado y en `disconnect` hacia
- * `delete` sin comparar el socket.id: con dos pestañas, la segunda pisaba a la
- * primera y cerrar cualquiera dejaba al empleado sin socket registrado.
+ * The previous version stored ONE socket per employee and on `disconnect` did a
+ * `delete` without comparing socket.id: with two tabs the second overwrote the
+ * first, and closing either left the employee with no registered socket.
  */
 const employeeRoom = (employeeId: number) => `emp:${employeeId}`;
 
@@ -21,6 +22,25 @@ type PendingConfirmation = {
 };
 
 const pendingConfirmations = new Map<number, PendingConfirmation>();
+
+export const DEFAULT_CONFIRMATION_TIMEOUT_MS = 120_000;
+
+type ConfirmationTimeoutHandler = (employeeId: number) => void | Promise<void>;
+
+/**
+ * What to do when a check goes unanswered, injected at boot rather than
+ * imported.
+ *
+ * The consequence (close the segment, set AUTO_DISCONNECTED, tell the admins)
+ * needs notification.service, which already imports this module for
+ * emitToEmployees. Importing it back would close a cycle, so the dependency is
+ * registered instead. See activities/activity-confirmation.ts.
+ */
+let onConfirmationTimeout: ConfirmationTimeoutHandler | null = null;
+
+export function setConfirmationTimeoutHandler(handler: ConfirmationTimeoutHandler) {
+  onConfirmationTimeout = handler;
+}
 
 let io: Server;
 
@@ -72,20 +92,20 @@ export function emitStatusChanged(payload: unknown) {
 }
 
 /**
- * Un solo canal para toda la pizarra. El payload lleva `type` (created,
- * updated, moved, deleted, commented) y el frontend decide si refresca el
- * tablero, el detalle abierto, o ambos.
+ * A single channel for the whole board. The payload carries `type` (created,
+ * updated, moved, deleted, commented) and the frontend decides whether to
+ * refresh the board, the open detail, or both.
  */
 export function emitTaskChanged(payload: unknown) {
   io?.emit("task:changed", payload);
 }
 
 /**
- * Emite solo a los empleados indicados, a todas sus pestañas abiertas. Se
- * emite a rooms de empleado y no a rooms por conversacion para no tener que
- * mantener join/leave sincronizados con cada alta y baja de participante: la
- * membresia se consulta en la base al momento de emitir, que es la unica
- * fuente de verdad.
+ * Emits only to the given employees, across all their open tabs. It emits to
+ * per-employee rooms rather than per-conversation rooms so that join/leave does
+ * not have to be kept in sync with every participant added and removed:
+ * membership is read from the database at emit time, which is the only source
+ * of truth.
  */
 export function emitToEmployees(employeeIds: number[], event: string, payload: unknown) {
   const rooms = [...new Set(employeeIds)].map(employeeRoom);
@@ -93,12 +113,26 @@ export function emitToEmployees(employeeIds: number[], event: string, payload: u
   io?.to(rooms).emit(event, payload);
 }
 
-/** true si el empleado tiene al menos una pestaña conectada. */
+/** true if the employee has at least one tab connected. */
 export function isEmployeeOnline(employeeId: number) {
   return (io?.sockets.adapter.rooms.get(employeeRoom(employeeId))?.size ?? 0) > 0;
 }
 
-export function sendConfirmationRequest(employeeId: number) {
+/**
+ * Asks one employee to confirm they are still working, and starts the clock.
+ *
+ * Returns false when they have no tab open: there is nobody to show the prompt
+ * to, so the caller decides what that means (the end-of-day job treats it as an
+ * immediate miss rather than waiting out a timer nobody can beat).
+ *
+ * NOTE: the timer is an in-process setTimeout, so a restart inside the window
+ * drops it and that person is never resolved. Surviving a restart would mean
+ * persisting the pending check; it is a known gap, not an oversight.
+ */
+export function sendConfirmationRequest(
+  employeeId: number,
+  timeoutMs: number = DEFAULT_CONFIRMATION_TIMEOUT_MS
+) {
   if (!isEmployeeOnline(employeeId)) {
     return false;
   }
@@ -112,12 +146,24 @@ export function sendConfirmationRequest(employeeId: number) {
   io.to(employeeRoom(employeeId)).emit("confirmation:request");
 
   const timeout = setTimeout(() => {
+    // Dropped from the map FIRST: the handler below is async, and leaving the
+    // entry in place would let a late confirmActivity() think the check is
+    // still open after the employee has already been disconnected.
+    pendingConfirmations.delete(employeeId);
+
     io.emit("confirmation:timeout", {
       employeeId,
     });
 
-    pendingConfirmations.delete(employeeId);
-  }, 120000);
+    void Promise.resolve()
+      .then(() => onConfirmationTimeout?.(employeeId))
+      .catch((error) => {
+        logger.error(
+          { err: error, employeeId },
+          "could not resolve a missed activity confirmation"
+        );
+      });
+  }, timeoutMs);
 
   pendingConfirmations.set(employeeId, {
     employeeId,

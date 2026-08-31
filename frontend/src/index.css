@@ -1,88 +1,121 @@
+/* Colours come from the token set ThemeModeProvider publishes on :root
+   (see theme/theme.ts). Nothing in this file hardcodes a neutral any more, so
+   light and dark are the same stylesheet with a different token set.
+   Semantic hues (the per-status dots) stay literal: they carry meaning and read
+   correctly on both grounds. Their halos are mixed against the surface so they
+   do not glow white on a dark page. */
+/* Pre-JS defaults.
+   ThemeModeProvider writes the real token set onto :root as INLINE styles,
+   which beat this block. These exist so the very first paint - before any
+   effect has run - is already styled instead of flashing a transparent page,
+   and so a system dark preference is honoured immediately rather than
+   flashing white first. */
+:root {
+  --bg: #f5f6fa; --surface: #ffffff; --surface-2: #f7f8fc;
+  --border: #e8e9f1; --border-strong: #dcdeeb;
+  --accent: #5b5ce2; --accent-soft: #ecebff;
+  --text: #17182f; --muted: #6d7087; --faint: #9296ab;
+  --shadow: rgba(36, 38, 84, .08); --shadow-strong: rgba(36, 38, 84, .18);
+  --auth-glow: #e8e7ff; --auth-bg: #f7f7fb;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0f1a; --surface: #171930; --surface-2: #1e2039;
+    --border: #262a45; --border-strong: #333861;
+    --accent: #8b8cf0; --accent-soft: #242653;
+    --text: #e6e7f2; --muted: #a2a5bd; --faint: #8589a3;
+    --shadow: rgba(0, 0, 0, .45); --shadow-strong: rgba(0, 0, 0, .65);
+    --auth-glow: #1d1f42; --auth-bg: #0b0c16;
+    color-scheme: dark;
+  }
+}
+
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
-body { background: #f5f6fa; }
-a { color: #5b5ce2; font-weight: 700; text-decoration: none; }
-.auth-shell { min-height: 100vh; display: flex; align-items: center; padding: 40px 0; background: radial-gradient(circle at 15% 15%, #e8e7ff 0, transparent 30%), #f7f7fb; }
+body { background: var(--bg); color: var(--text); }
+a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.auth-shell { min-height: 100vh; display: flex; align-items: center; padding: 40px 0; background: radial-gradient(circle at 15% 15%, var(--auth-glow) 0, transparent 30%), var(--auth-bg); }
 .auth-grid { display: grid; grid-template-columns: 1.1fr .9fr; align-items: center; gap: 10%; }
 .brand-panel { padding: 40px 0; max-width: 600px; }
-.brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; color: white; background: linear-gradient(145deg, #6d6ee9, #4647bd); box-shadow: 0 10px 30px #5b5ce250; margin-bottom: 28px; }
+.brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 32%, transparent); margin-bottom: 28px; }
 .brand-mark.small { width: 38px; height: 38px; border-radius: 11px; margin: 0 12px 0 0; }
-.eyebrow { color: #5b5ce2; font-size: 12px !important; letter-spacing: .14em !important; font-weight: 800 !important; margin-bottom: 10px !important; }
+.eyebrow { color: var(--accent); font-size: 12px !important; letter-spacing: .14em !important; font-weight: 800 !important; margin-bottom: 10px !important; }
 .hero-copy { font-size: 18px !important; line-height: 1.7 !important; max-width: 520px; margin-top: 25px !important; }
-.auth-card { padding: 46px; border-radius: 24px !important; box-shadow: 0 24px 80px rgba(36, 38, 84, .08) !important; }
+.auth-card { padding: 46px; border-radius: 24px !important; box-shadow: 0 24px 80px var(--shadow) !important; }
 .page-heading, .section-title { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 36px 0 56px; }
 .status-card { padding: 28px; min-height: 160px; border-radius: 18px !important; }
-.status-card.accent { background: linear-gradient(135deg, #fff, #f0efff); }
-.timer { font: 700 46px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; color: #5b5ce2; margin: 12px 0 2px; }
-.status-dot { width: 14px; height: 14px; border-radius: 50%; background: #a1a3b3; box-shadow: 0 0 0 6px #eee; }
-.status-dot.working { background: #5b5ce2; box-shadow: 0 0 0 6px #e7e7ff; }
-.status-dot.available { background: #2eae70; box-shadow: 0 0 0 6px #e2f6eb; }
-.status-dot.break, .status-dot.lunch { background: #e3a22b; box-shadow: 0 0 0 6px #fff3dc; }
-.status-dot.meeting { background: #16738b; box-shadow: 0 0 0 6px #e2f5f8; }
-.status-dot.offline { background: #8a8da0; box-shadow: 0 0 0 6px #edeef3; }
-.status-dot.disconnected { background: #b23c4a; box-shadow: 0 0 0 6px #fbe7ea; }
+.status-card.accent { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
+.timer { font: 700 46px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--accent); margin: 12px 0 2px; }
+.status-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 6px color-mix(in srgb, var(--faint) 22%, var(--surface)); }
+.status-dot.working { background: #5b5ce2; box-shadow: 0 0 0 6px color-mix(in srgb, #5b5ce2 22%, var(--surface)); }
+.status-dot.available { background: #2eae70; box-shadow: 0 0 0 6px color-mix(in srgb, #2eae70 22%, var(--surface)); }
+.status-dot.break, .status-dot.lunch { background: #e3a22b; box-shadow: 0 0 0 6px color-mix(in srgb, #e3a22b 22%, var(--surface)); }
+.status-dot.meeting { background: #16738b; box-shadow: 0 0 0 6px color-mix(in srgb, #16738b 22%, var(--surface)); }
+.status-dot.offline { background: #8a8da0; box-shadow: 0 0 0 6px color-mix(in srgb, #8a8da0 22%, var(--surface)); }
+.status-dot.disconnected { background: #b23c4a; box-shadow: 0 0 0 6px color-mix(in srgb, #b23c4a 22%, var(--surface)); }
 .employee-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0 56px; }
 .employee-card { padding: 20px; border-radius: 16px !important; }
-.mini-timer { font: 700 24px ui-monospace, monospace; margin-top: 24px !important; color: #474861; }
+.mini-timer { font: 700 24px ui-monospace, monospace; margin-top: 24px !important; color: var(--text); }
 .section-title { margin: 10px 0 22px; }
 .table-card { overflow-x: auto; border-radius: 18px !important; }
-/* Pizarra de tareas. Los colores llegan por custom properties (--accent,
-   --soft, --tint, --ink) que setea stateVars() en components/tasks/types.ts.
-   La doble clase (.task-card.task-card) sube la especificidad a 0-2-0 para
-   ganarle al override global de MuiPaper sin usar !important, y a diferencia
-   de un selector descendiente también aplica al DragOverlay, que se renderiza
-   fuera de .task-board. */
+/* Task board. Colours arrive through custom properties (--accent, --soft,
+   --tint, --ink) set by stateVars() in components/tasks/types.ts; soft/tint/ink
+   are color-mix() expressions over var(--surface), so they follow the theme.
+   The doubled class (.task-card.task-card) raises specificity to 0-2-0 to beat
+   the global MuiPaper override without !important, and unlike a descendant
+   selector it also applies to the DragOverlay, which renders outside
+   .task-board. */
 .task-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; margin-top: 28px; }
-.task-column.task-column { background: #fff; border-radius: 18px; padding: 0; min-height: 240px; overflow: hidden; transition: background-color .18s ease; }
+.task-column.task-column { background: var(--surface); border-radius: 18px; padding: 0; min-height: 240px; overflow: hidden; transition: background-color .18s ease; }
 .task-column.task-column.over { background: var(--tint); }
 .task-column-head { display: flex; align-items: center; gap: 9px; padding: 15px 16px 13px; background: var(--soft); box-shadow: inset 0 3px 0 0 var(--accent); }
 .task-column-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
 .task-column-title { font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: var(--ink); }
-.task-column-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; display: grid; place-items: center; border-radius: 11px; background: #fff; box-shadow: inset 0 0 0 1px rgba(23,24,47,.08); font: 700 12px "Inter", "Segoe UI", sans-serif; color: var(--ink); }
+.task-column-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; display: grid; place-items: center; border-radius: 11px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font: 700 12px "Inter", "Segoe UI", sans-serif; color: var(--ink); }
 .task-column-body { padding: 14px; border-radius: 16px; transition: box-shadow .18s ease; }
 .task-column.over .task-column-body { box-shadow: inset 0 0 0 2px var(--accent); }
-.task-column-empty { display: grid; place-items: center; gap: 6px; padding: 26px 12px; border-radius: 14px; border: 1.5px dashed #e1e3ee; color: #9296ab; text-align: center; }
+.task-column-empty { display: grid; place-items: center; gap: 6px; padding: 26px 12px; border-radius: 14px; border: 1.5px dashed var(--border); color: var(--faint); text-align: center; }
 .task-drop-hint { display: grid; place-items: center; min-height: 68px; border-radius: 14px; border: 2px dashed var(--accent); background: var(--soft); color: var(--ink); font: 700 12px "Inter", "Segoe UI", sans-serif; }
 
-.task-card.task-card { position: relative; overflow: hidden; padding: 13px 14px 13px 20px; border-radius: 14px; border: 1px solid #e8e9f1; background: #fff; touch-action: none; box-shadow: 0 1px 2px rgba(36,38,84,.05), 0 8px 18px -14px rgba(36,38,84,.55); transition: box-shadow .18s ease, transform .18s ease, background-color .18s ease, border-color .18s ease; }
+.task-card.task-card { position: relative; overflow: hidden; padding: 13px 14px 13px 20px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); touch-action: none; box-shadow: 0 1px 2px var(--shadow), 0 8px 18px -14px var(--shadow-strong); transition: box-shadow .18s ease, transform .18s ease, background-color .18s ease, border-color .18s ease; }
 .task-card.task-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
-.task-card.task-card:hover { transform: translateY(-2px); background: var(--tint); border-color: #dcdeeb; box-shadow: 0 2px 4px rgba(36,38,84,.06), 0 16px 30px -18px rgba(36,38,84,.65); }
+.task-card.task-card:hover { transform: translateY(-2px); background: var(--tint); border-color: var(--border-strong); box-shadow: 0 2px 4px var(--shadow), 0 16px 30px -18px var(--shadow-strong); }
 .task-card.task-card:active { transform: translateY(0) scale(.995); }
-.task-card:focus-visible { outline: 3px solid #5b5ce2; outline-offset: 2px; }
-.task-card.pinned { border-color: #f0dcb4; }
+.task-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.task-card.pinned { border-color: #c8912f; }
 .task-card.dragging { opacity: .32; box-shadow: none; transform: none; }
-.task-card.task-card-overlay { cursor: grabbing; transform: rotate(1.5deg) scale(1.03); transition: none; box-shadow: 0 26px 48px -20px rgba(36,38,84,.65), 0 4px 10px rgba(36,38,84,.08); }
+.task-card.task-card-overlay { cursor: grabbing; transform: rotate(1.5deg) scale(1.03); transition: none; box-shadow: 0 26px 48px -20px var(--shadow-strong), 0 4px 10px var(--shadow); }
 .task-card-title { cursor: pointer; }
 .task-card-title:hover { text-decoration: underline; }
 .task-card-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px !important; }
-.task-comment { background: #f6f7fb; border-radius: 14px !important; padding: 12px 14px; }
+.task-comment { background: var(--surface-2); border-radius: 14px !important; padding: 12px 14px; }
 
-/* Chat flotante. Misma convencion que el bloque de tareas: doble clase para
-   ganarle al override global de MuiPaper sin !important. z-index 1200 a
-   proposito: por encima del AppBar sticky pero por DEBAJO de los Dialog de MUI
-   (1300), asi la ventana nunca tapa el detalle de tarea ni el dialogo
-   bloqueante de confirmacion de actividad. */
-/* Doble clase: MuiBadge-root trae position:relative y Emotion inyecta despues
-   que este archivo, asi que con una sola clase el FAB queda en el flujo. */
+/* Floating chat. Same convention as the task block: doubled class to beat the
+   global MuiPaper override without !important. z-index 1200 on purpose: above
+   the sticky AppBar but BELOW MUI Dialogs (1300), so the window never covers
+   the task detail or the blocking activity-confirmation dialog. */
+/* Doubled class: MuiBadge-root brings position:relative and Emotion injects
+   after this file, so with a single class the FAB stays in the flow. */
 .chat-launcher.chat-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 1200; }
-.chat-window.chat-window { position: fixed; right: 24px; bottom: 24px; z-index: 1200; width: 360px; height: 520px; max-height: calc(100dvh - 120px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid #e8e9f1; background: #fff; box-shadow: 0 24px 80px rgba(36,38,84,.18); }
-.chat-head { align-items: center; padding: 12px 14px; background: #f7f8fc; border-bottom: 1px solid #e8e9f1; flex: none; }
+.chat-window.chat-window { position: fixed; right: 24px; bottom: 24px; z-index: 1200; width: 360px; height: 520px; max-height: calc(100dvh - 120px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 24px 80px var(--shadow-strong); }
+.chat-head { align-items: center; padding: 12px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: none; }
 .chat-body { flex: 1; min-height: 0; overflow-y: auto; }
-.chat-section-title { padding: 10px 14px 6px; font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: #6d7087; text-transform: uppercase; background: #fff; }
-.chat-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 10px 14px; border: 0; background: #fff; cursor: pointer; text-align: left; }
-.chat-row:hover { background: #f7f8fc; }
-.chat-row:focus-visible { outline: 3px solid #5b5ce2; outline-offset: -3px; }
+.chat-section-title { padding: 10px 14px 6px; font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; background: var(--surface); }
+.chat-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 10px 14px; border: 0; background: var(--surface); color: inherit; cursor: pointer; text-align: left; }
+.chat-row:hover { background: var(--surface-2); }
+.chat-row:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 .chat-row.closed { opacity: .65; }
 .chat-badge { min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 10px; background: #b23c4a; color: #fff; font: 700 11px "Inter", "Segoe UI", sans-serif; }
 .chat-scroller { overflow-y: auto; padding: 12px 14px; }
-.chat-day { margin: 14px 0 6px; text-align: center; font: 700 11px "Inter", "Segoe UI", sans-serif; color: #9296ab; }
-.chat-bubble.chat-bubble { max-width: 78%; padding: 8px 11px; border-radius: 14px 14px 14px 4px; background: #f1f2f8; border: 0; }
-.chat-bubble.chat-bubble.mine { background: #5b5ce2; color: #fff; border-radius: 14px 14px 4px 14px; }
-.chat-bubble-time { margin-top: 2px; font: 500 10px "Inter", "Segoe UI", sans-serif; color: #8a8da0; text-align: right; }
+.chat-day { margin: 14px 0 6px; text-align: center; font: 700 11px "Inter", "Segoe UI", sans-serif; color: var(--faint); }
+.chat-bubble.chat-bubble { max-width: 78%; padding: 8px 11px; border-radius: 14px 14px 14px 4px; background: var(--surface-2); border: 0; }
+.chat-bubble.chat-bubble.mine { background: var(--accent); color: #fff; border-radius: 14px 14px 4px 14px; }
+.chat-bubble-time { margin-top: 2px; font: 500 10px "Inter", "Segoe UI", sans-serif; color: var(--faint); text-align: right; }
 .chat-bubble.mine .chat-bubble-time { color: rgba(255,255,255,.85); }
-.chat-composer { flex: none; padding: 10px 12px; border-top: 1px solid #e8e9f1; background: #fff; }
-.chat-blocked { flex: none; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid #e8e9f1; background: #fff3dc; }
+.chat-composer { flex: none; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.chat-blocked { flex: none; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); background: color-mix(in srgb, #e3a22b 18%, var(--surface)); }
 .chat-newpill { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; border-radius: 999px !important; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

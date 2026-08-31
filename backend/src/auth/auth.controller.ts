@@ -30,20 +30,20 @@ const changePasswordSchema = z
   })
   .refine((value) => value.currentPassword !== value.newPassword, {
     path: ["newPassword"],
-    message: "La contraseña nueva tiene que ser distinta de la actual",
+    message: "The new password has to be different from the current one",
   });
 
 export async function loginController(req: Request, res: Response) {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Datos de acceso inválidos" });
+    return res.status(400).json({ code: "INVALID_SIGN_IN_INPUT", message: "Invalid sign-in details" });
   }
   const employee = await login(
     parsed.data.employeeNumber,
     parsed.data.password
   );
   if (!employee) {
-    return res.status(401).json({ message: "Credenciales inválidas" });
+    return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Invalid credentials" });
   }
   res.json({
     token: generateToken({
@@ -60,7 +60,7 @@ export async function loginController(req: Request, res: Response) {
 export async function registerController(req: Request, res: Response) {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Revisá los datos ingresados" });
+    return res.status(400).json({ code: "INVALID_INPUT", message: "Check the details you entered" });
   }
   try {
     const employee = await register(
@@ -70,17 +70,17 @@ export async function registerController(req: Request, res: Response) {
     );
     res.status(201).json({
       employee: toEmployeeDto(employee),
-      message: "Solicitud pendiente de aprobación",
+      code: "REGISTRATION_PENDING", message: "Request pending approval",
     });
   } catch {
-    res.status(409).json({ message: "El email ya está registrado" });
+    res.status(409).json({ code: "EMAIL_TAKEN", message: "That email is already registered" });
   }
 }
 
 export async function forgotPasswordController(req: Request, res: Response) {
   const parsed = forgotPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Ingresá un email válido" });
+    return res.status(400).json({ code: "INVALID_EMAIL", message: "Enter a valid email address" });
   }
 
   try {
@@ -97,8 +97,9 @@ export async function forgotPasswordController(req: Request, res: Response) {
   // Deliberately the same answer either way: telling the caller whether the
   // address exists would turn this into an account-enumeration oracle.
   res.json({
+    code: "PASSWORD_RESET_REQUESTED",
     message:
-      "Si existe una cuenta activa con ese email, la solicitud será revisada por un administrador.",
+      "If an active account exists for that email, an administrator will review the request.",
   });
 }
 
@@ -106,9 +107,10 @@ export async function changePasswordController(req: Request, res: Response) {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
+      code: "INVALID_NEW_PASSWORD",
       message:
         parsed.error.issues[0]?.message ??
-        "La contraseña nueva tiene que tener entre 8 y 72 caracteres",
+        "The new password has to be between 8 and 72 characters",
     });
   }
 
@@ -119,7 +121,7 @@ export async function changePasswordController(req: Request, res: Response) {
   );
 
   if (!changed) {
-    return res.status(400).json({ message: "La contraseña actual no coincide" });
+    return res.status(400).json({ code: "CURRENT_PASSWORD_MISMATCH", message: "The current password does not match" });
   }
 
   // The change stamps `passwordChangedAt`, which invalidates every token issued
@@ -130,6 +132,6 @@ export async function changePasswordController(req: Request, res: Response) {
       employeeId: req.auth!.employeeId,
       role: req.auth!.role,
     }),
-    message: "Contraseña actualizada",
+    code: "PASSWORD_UPDATED", message: "Password updated",
   });
 }

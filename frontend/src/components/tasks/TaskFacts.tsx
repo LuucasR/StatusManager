@@ -4,10 +4,10 @@ import { formatDuration, formatRange } from "./datetime";
 import { STATE_META, participantColor, type TaskParticipant, type TaskState } from "./types";
 
 /**
- * Deliberadamente MAS ANGOSTO que `Task`: el resumen de actividades trae los
- * datos de la tarea embebidos y no tiene `conversationId`, `chatClosed`,
- * `commentsCount` ni `archivesAt`. Exigir el `Task` completo lo obligaria a
- * pedir GET /tasks/:id una vez por tarea del periodo.
+ * Deliberately NARROWER than `Task`: the activity summary carries the task data
+ * embedded and has no `conversationId`, `chatClosed`, `commentsCount` or
+ * `archivesAt`. Demanding the full `Task` would force it to call GET /tasks/:id
+ * once per task in the period.
  */
 export type TaskFactsData = {
   description: string;
@@ -20,16 +20,16 @@ export type TaskFactsData = {
 
 type Props = {
   task: TaskFactsData;
-  /** El detalle de la tarea ya muestra el estado en su cabecera; el resumen no. */
+  /** The task detail already shows the state in its header; the summary does not. */
   showState?: boolean;
-  /** Fecha del tramo, para aclarar que los integrantes son los de HOY. */
+  /** Segment date, to make clear the participants are TODAY's. */
   asOfNote?: string;
 };
 
 /**
- * Los datos duros de una tarea: descripcion, duracion, integrantes y autoria.
- * Extraido de TaskDetailDialog para que el resumen de actividades muestre
- * exactamente lo mismo sin arrastrar el hilo de chat, que tiene su propio ACL.
+ * The hard facts of a task: description, duration, participants and authorship.
+ * Extracted from TaskDetailDialog so the activity summary shows exactly the same
+ * thing without dragging in the chat thread, which has its own ACL.
  */
 export default function TaskFacts({ task, showState = false, asOfNote }: Props) {
   const meta = STATE_META[task.state];

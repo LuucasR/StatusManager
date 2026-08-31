@@ -13,7 +13,7 @@ import {
 export type ReportActivity = {
   status: ActivityStatus;
   detail: string;
-  /** Snapshot del titulo de la tarea declarada, si hubo alguna. */
+  /** Snapshot of the declared task's title, if there was one. */
   taskTitle?: string | null;
   startedAt: Date;
   endedAt: Date | null;
@@ -24,9 +24,9 @@ export type ReportActivity = {
 };
 
 /**
- * Que va en la columna DETALLE. El comentario dejo de ser obligatorio en
- * WORKING cuando se pudo declarar la tarea: sin este fallback, la columna
- * quedaria vacia justo en el estado que mas importa del reporte.
+ * What goes in the DETAIL column. The comment stopped being mandatory for
+ * WORKING once the task could be declared: without this fallback the column
+ * would be empty for exactly the status that matters most in the report.
  */
 function detailText(row: ReportActivity) {
   if (row.detail && row.taskTitle) return `${row.taskTitle} - ${row.detail}`;
@@ -44,7 +44,7 @@ type ReportOptions = {
 const COLORS = REPORT_COLORS;
 const STATUS = STATUS_META;
 
-/** Los tramos abiertos (endedAt null) se cuentan hasta la generacion. */
+/** Open segments (endedAt null) are counted up to generation time. */
 function durationMs(row: ReportActivity, generatedAt: Date) {
   return Math.max(0, (row.endedAt ?? generatedAt).getTime() - row.startedAt.getTime());
 }
@@ -60,38 +60,38 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
     title: options.title,
     subtitle: options.subtitle,
     periodLabel: options.periodLabel,
-    footerLabel: "Status Manager - Registro de actividades",
-    continuationTitle: "Continuacion del registro",
+    footerLabel: "Status Manager - Activity log",
+    continuationTitle: "Activity log continued",
     generatedAt,
   });
 
   const drawTableHeader = () => {
     doc.roundedRect(margin, chrome.y, contentWidth, 24, 5).fill(COLORS.ink);
     doc.fillColor(COLORS.white).font("Helvetica-Bold").fontSize(7.5);
-    doc.text("EMPLEADO", margin + 10, chrome.y + 8, { width: 105 });
-    doc.text("ESTADO", margin + 120, chrome.y + 8, { width: 78 });
-    doc.text("INICIO", margin + 203, chrome.y + 8, { width: 72 });
-    doc.text("DURACION", margin + 280, chrome.y + 8, { width: 62 });
-    doc.text("DETALLE", margin + 347, chrome.y + 8, { width: 154 });
+    doc.text("EMPLOYEE", margin + 10, chrome.y + 8, { width: 105 });
+    doc.text("STATUS", margin + 120, chrome.y + 8, { width: 78 });
+    doc.text("START", margin + 203, chrome.y + 8, { width: 72 });
+    doc.text("DURATION", margin + 280, chrome.y + 8, { width: 62 });
+    doc.text("DETAIL", margin + 347, chrome.y + 8, { width: 154 });
     chrome.y += 30;
   };
 
   chrome.drawCover();
 
   chrome.drawKpiCards([
-    { label: "REGISTROS", value: String(options.rows.length) },
-    { label: "EMPLEADOS", value: String(employeeCount) },
-    { label: "TIEMPO REGISTRADO", value: formatDuration(totalDuration), highlight: true },
+    { label: "RECORDS", value: String(options.rows.length) },
+    { label: "EMPLOYEES", value: String(employeeCount) },
+    { label: "TIME LOGGED", value: formatDuration(totalDuration), highlight: true },
   ]);
 
   chrome.drawSectionTitle(
-    "Detalle de actividades",
-    "Los estados abiertos se calculan hasta la generacion del reporte. No se incluyen los periodos Desconectado."
+    "Activity detail",
+    "Open statuses are counted up to the moment the report was generated. Disconnected periods are not included."
   );
   drawTableHeader();
 
   if (options.rows.length === 0) {
-    chrome.drawEmptyState("No hay actividades registradas para el periodo seleccionado.");
+    chrome.drawEmptyState("No activity recorded for the selected period.");
   }
 
   options.rows.forEach((row, index) => {

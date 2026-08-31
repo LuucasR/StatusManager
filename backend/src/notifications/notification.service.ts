@@ -14,7 +14,7 @@ export const NOTIFICATION_SELECT = {
 
 type NotifyInput = {
   recipientIds: number[];
-  /** Quien dispara la accion. Nunca recibe su propia notificacion. */
+  /** Who triggered the action. Never receives their own notification. */
   actorId: number;
   type: NotificationType;
   title: string;
@@ -43,15 +43,15 @@ async function emitNew(row: { employeeId: number } & Record<string, unknown>) {
 }
 
 /**
- * Crea las filas y emite en una sola llamada. La regla de no auto-notificarse
- * vive aca y en ningun otro lado, para que no se olvide en un call site.
+ * Creates the rows and emits in a single call. The do-not-notify-yourself rule
+ * lives here and nowhere else, so a call site cannot forget it.
  */
 export async function notify(input: NotifyInput) {
   const recipients = [...new Set(input.recipientIds)].filter((id) => id !== input.actorId);
   if (recipients.length === 0) return;
 
-  // createMany no devuelve las filas y el payload del socket necesita el id.
-  // Con pocos destinatarios, N creates en una transaccion es lo mas simple.
+  // createMany does not return the rows and the socket payload needs the id.
+  // With few recipients, N creates inside one transaction is the simplest thing.
   const rows = await prisma.$transaction(
     recipients.map((employeeId) =>
       prisma.notification.create({
@@ -73,12 +73,12 @@ export async function notify(input: NotifyInput) {
 }
 
 /**
- * Notificacion de mensaje nuevo, con colapso: si el destinatario ya tiene una
- * notificacion sin leer de esa misma tarea, se actualiza en vez de crear otra.
- * Sin esto, treinta mensajes seguidos son treinta filas en la campana.
+ * New-message notification, with collapsing: if the recipient already has an
+ * unread notification for that same task, it is updated instead of creating
+ * another. Without this, thirty messages in a row are thirty rows in the bell.
  *
- * El canal GENERAL no notifica a proposito: spamearia a todo el equipo en cada
- * mensaje, y para eso ya esta el contador de no leidos del chat.
+ * The GENERAL channel deliberately does not notify: it would spam the whole
+ * team on every message, and the chat's own unread counter already covers it.
  */
 export async function notifyNewMessage(options: {
   conversation: { id: number; kind: ConversationKind; taskId: number | null; title: string | null };
@@ -94,7 +94,7 @@ export async function notifyNewMessage(options: {
   const recipients = [...new Set(options.recipientIds)].filter((id) => id !== actorId);
   if (recipients.length === 0) return;
 
-  const title = conversation.title ?? "Tarea";
+  const title = conversation.title ?? "Task";
   const body = `${actorName}: ${preview.slice(0, 120)}`;
 
   for (const employeeId of recipients) {

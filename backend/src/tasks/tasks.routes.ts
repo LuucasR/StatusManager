@@ -24,6 +24,7 @@ import {
   syncTaskConversationTitle,
 } from "../chat/chat.service";
 import { notify } from "../notifications/notification.service";
+import { LOCALE } from "../locale";
 
 const router = Router();
 router.use(requireAuth);
@@ -42,9 +43,9 @@ async function isParticipant(employeeId: number, taskId: number) {
 }
 
 /**
- * Mover y fijar: quien gestiona el tablero, o quien participa de la tarea. No
- * se puede resolver con un middleware a nivel router porque la regla depende
- * de la fila.
+ * Move and pin: whoever manages the board, or whoever takes part in the task.
+ * Cannot be handled by router-level middleware because the rule depends on the
+ * row.
  */
 async function canMoveTask(auth: AuthPayload, taskId: number) {
   if (canManageTasks(auth.role)) return true;
@@ -52,18 +53,19 @@ async function canMoveTask(auth: AuthPayload, taskId: number) {
 }
 
 /**
- * Escribir en el hilo. NO usa canManageTasks a proposito: el ACL de lectura
- * (chat/chat.access.ts) le niega el hilo al TASK_MANAGER que no participa, y
- * dejarlo escribir en algo que no puede leer seria incoherente — ademas
- * postMessage ni siquiera le devolveria su propio mensaje por socket, porque
- * no es ConversationMember. Escribir sigue la regla del chat, no la del tablero.
+ * Writing in the thread. Deliberately does NOT use canManageTasks: the read ACL
+ * (chat/chat.access.ts) denies the thread to a TASK_MANAGER who is not a
+ * participant, and letting them write into something they cannot read would be
+ * incoherent - postMessage would not even echo their own message back over the
+ * socket, since they are not a ConversationMember. Writing follows the chat
+ * rule, not the board rule.
  */
 async function canCommentOnTask(auth: AuthPayload, taskId: number) {
   if (isStaff(auth.role)) return true;
   return isParticipant(auth.employeeId, taskId);
 }
 
-/** Evita que un id inexistente llegue a Prisma y salga como 500 (P2003). */
+/** Stops a non-existent id reaching Prisma and surfacing as a 500 (P2003). */
 async function assertParticipantsExist(ids: number[]) {
   const unique = [...new Set(ids)];
   const found = await prisma.employee.count({
@@ -77,10 +79,10 @@ router.get("/", async (req, res) => {
   const participantId = parseId(req.query.participantId);
 
   const tasks = await prisma.task.findMany({
-    // OJO: visibleTasksWhere aporta un `OR`. Los otros dos fragmentos son
-    // claves planas, asi que Prisma los ANDea sin conflicto. Si algun filtro
-    // futuro trae su propio `OR`, hay que envolver todo en `AND: [...]` o uno
-    // pisa al otro en silencio.
+    // CAREFUL: visibleTasksWhere contributes an `OR`. The other two fragments
+    // are flat keys, so Prisma ANDs them without conflict. If some future filter
+    // brings its own `OR`, everything has to be wrapped in `AND: [...]` or one
+    // silently overwrites the other.
     where: {
       ...(state && state in TaskState ? { state: state as TaskState } : {}),
       ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
@@ -95,11 +97,11 @@ router.get("/", async (req, res) => {
 });
 
 /**
- * IMPORTANTE: esta ruta va ANTES de "/:id". Express matchea en orden de
- * registro y "/:id" capturaria "report.pdf" -> parseId -> null -> 400.
+ * IMPORTANT: this route goes BEFORE "/:id". Express matches in registration
+ * order and "/:id" would capture "report.pdf" -> parseId -> null -> 400.
  *
- * Sin requireAdmin: GET /tasks ya devuelve todas las tareas a cualquier
- * autenticado, asi que el PDF son los mismos datos con otro Content-Type.
+ * No requireAdmin: GET /tasks already returns every task to any authenticated
+ * user, so the PDF is the same data with a different Content-Type.
  */
 router.get("/report.pdf", async (req, res) => {
   const participantId = parseId(req.query.participantId);
@@ -110,9 +112,9 @@ router.get("/report.pdf", async (req, res) => {
   const from = req.query.from ? String(req.query.from) : undefined;
   const to = req.query.to ? String(req.query.to) : undefined;
 
-  // NO se spreadea visibleTasksWhere(): el reporte incluye las archivadas a
-  // proposito, es el unico lugar donde se pueden ver. Si alguien lo agregara
-  // por error, el KPI ARCHIVADAS daria 0 y se notaria.
+  // visibleTasksWhere() is deliberately NOT spread in: the report includes
+  // archived tasks on purpose, it is the only place they can be seen. If someone
+  // added it by mistake, the ARCHIVED KPI would read 0 and give it away.
   const where: Prisma.TaskWhereInput = {
     ...(state ? { state } : {}),
     ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
@@ -142,11 +144,12 @@ router.get("/report.pdf", async (req, res) => {
   if (period === "last30") periodLabel = "Ultimos 30 dias";
   if (period === "last90") periodLabel = "Ultimos 90 dias";
   if (period === "custom" && from && to) {
-    periodLabel = `${new Date(from).toLocaleDateString("es-AR")} al ${new Date(to).toLocaleDateString("es-AR")}`;
+    periodLabel = `${new Date(from).toLocaleDateString(LOCALE)} to ${new Date(to).toLocaleDateString(LOCALE)}`;
   }
 
-  // Se busca aparte y no en tasks[0]: si el filtro no matchea nada, la lista
-  // queda vacia y el subtitulo mentiria (mismo motivo que en admin.routes.ts).
+  // Looked up separately rather than from tasks[0]: if the filter matches
+  // nothing the list is empty and the subtitle would lie (same reason as in
+  // admin.routes.ts).
   const participant = participantId
     ? await prisma.employee.findUnique({
         where: { id: participantId },
@@ -156,20 +159,20 @@ router.get("/report.pdf", async (req, res) => {
 
   let subtitle = participant
     ? `Participante #${participant.employeeNumber} - ${participant.name}`
-    : "Todas las tareas del equipo";
+    : "All team tasks";
   if (state) subtitle += ` - ${TASK_STATE_META[state].label}`;
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="reporte-tareas-${new Date().toISOString().slice(0, 10)}.pdf"`
+    `inline; filename="task-report-${new Date().toISOString().slice(0, 10)}.pdf"`
   );
 
   const doc = new PDFDocument({ margin: 0, size: "A4" });
   doc.pipe(res);
 
   renderTaskReport(doc, {
-    title: "Reporte de tareas",
+    title: "Task report",
     subtitle,
     periodLabel,
     rows: tasks.map(toTaskDto),
@@ -177,17 +180,17 @@ router.get("/report.pdf", async (req, res) => {
   });
 });
 
-// Sin filtro de archivado a proposito: es el camino de recuperacion. Desde el
-// reporte se saca el #id de una tarea archivada y se abre con /tareas?task=id.
+// No archive filter on purpose: this is the recovery path. The report gives you
+// the #id of an archived task, which you then open with /tasks?task=id.
 router.get("/:id", async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const task = await prisma.task.findUnique({
     where: { id },
     include: TASK_DETAIL_INCLUDE,
   });
-  if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!task) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   res.json(toTaskDto(task));
 });
@@ -196,19 +199,20 @@ router.post("/", requireTaskManagement, async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "No se pudo validar la tarea",
+      code: "INVALID_TASK",
+      message: parsed.error.issues[0]?.message ?? "The task could not be validated",
     });
   }
 
   if (!(await assertParticipantsExist(parsed.data.participantIds))) {
     return res
       .status(400)
-      .json({ message: "Algún participante no existe o está inactivo" });
+      .json({ code: "INVALID_PARTICIPANT", message: "One of the participants does not exist or is inactive" });
   }
 
   const participantIds = [...new Set(parsed.data.participantIds)];
 
-  // Transaccion porque la conversacion necesita el id de la tarea para su key.
+  // A transaction because the conversation needs the task id for its key.
   const task = await prisma.$transaction(async (tx) => {
     const created = await tx.task.create({
       data: {
@@ -236,7 +240,7 @@ router.post("/", requireTaskManagement, async (req, res) => {
     actorId: req.auth!.employeeId,
     type: "TASK_ADDED",
     title: task.title,
-    body: `Te agregaron a la tarea "${task.title}"`,
+    body: `You were added to task "${task.title}"`,
     taskId: task.id,
   });
 
@@ -245,12 +249,13 @@ router.post("/", requireTaskManagement, async (req, res) => {
 
 router.patch("/:id", requireTaskManagement, async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const parsed = updateTaskSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "No se pudo validar la tarea",
+      code: "INVALID_TASK",
+      message: parsed.error.issues[0]?.message ?? "The task could not be validated",
     });
   }
 
@@ -261,19 +266,19 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       state: true,
       startsAt: true,
       endsAt: true,
-      // El set previo, para poder calcular altas y bajas en vez de reemplazar
-      // a ciegas.
+      // The previous set, so additions and removals can be computed instead of
+      // blindly replacing.
       participants: { select: { employeeId: true } },
     },
   });
-  if (!current) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   const startsAt = parsed.data.startsAt ?? current.startsAt;
   const endsAt = parsed.data.endsAt ?? current.endsAt;
   if (endsAt <= startsAt) {
     return res
       .status(400)
-      .json({ message: "La fecha de fin debe ser posterior a la de inicio" });
+      .json({ code: "INVALID_DATE_ORDER", message: "The end date must be after the start date" });
   }
 
   if (
@@ -282,13 +287,13 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
   ) {
     return res
       .status(400)
-      .json({ message: "Algún participante no existe o está inactivo" });
+      .json({ code: "INVALID_PARTICIPANT", message: "One of the participants does not exist or is inactive" });
   }
 
-  // Diff de participantes. Ademas de permitir notificar solo a los que
-  // cambiaron, arregla un bug visible: el deleteMany+createMany ciego reescribia
-  // el addedAt de todos, y TASK_INCLUDE ordena por addedAt, asi que los avatares
-  // de la tarjeta se reordenaban solos cada vez que el admin tocaba el titulo.
+  // Participant diff. Besides allowing only the changed people to be notified,
+  // it fixes a visible bug: the blind deleteMany+createMany rewrote everyone's
+  // addedAt, and TASK_INCLUDE orders by addedAt, so the avatars on the card
+  // reshuffled themselves every time an admin edited the title.
   const previous = new Set(current.participants.map((p) => p.employeeId));
   const next = parsed.data.participantIds
     ? new Set([...new Set(parsed.data.participantIds)])
@@ -322,11 +327,11 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     }
     await syncTaskConversationMembers(tx, id, added, removed);
 
-    // El titulo se snapshotea antes de que puedan borrar la tarea.
+    // The title is snapshotted before the task can be deleted.
     if (parsed.data.title && parsed.data.title !== current.title) {
       await syncTaskConversationTitle(tx, id, parsed.data.title);
     }
-    // Esta ruta tambien puede cambiar el estado, no solo PATCH /:id/state.
+    // This route can change the state too, not only PATCH /:id/state.
     if (parsed.data.state) {
       await syncTaskConversationState(tx, id, parsed.data.state);
     }
@@ -342,7 +347,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     actorId,
     type: "TASK_ADDED",
     title: task.title,
-    body: `Te agregaron a la tarea "${task.title}"`,
+    body: `You were added to task "${task.title}"`,
     taskId: id,
   });
   await notify({
@@ -350,7 +355,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     actorId,
     type: "TASK_REMOVED",
     title: task.title,
-    body: `Te sacaron de la tarea "${task.title}"`,
+    body: `You were removed from task "${task.title}"`,
     taskId: id,
   });
   if (stateChanged) {
@@ -359,7 +364,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       actorId,
       type: "TASK_STATE",
       title: task.title,
-      body: `"${task.title}" pasó a ${TASK_STATE_META[task.state].label}`,
+      body: `"${task.title}" moved to ${TASK_STATE_META[task.state].label}`,
       taskId: id,
     });
   }
@@ -369,12 +374,13 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
 
 router.patch("/:id/state", async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const parsed = changeTaskStateSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "Estado inválido",
+      code: "INVALID_STATE",
+      message: parsed.error.issues[0]?.message ?? "Invalid state",
     });
   }
 
@@ -382,19 +388,19 @@ router.patch("/:id/state", async (req, res) => {
     where: { id },
     select: { id: true },
   });
-  if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   if (!(await canMoveTask(req.auth!, id))) {
     return res
       .status(403)
-      .json({ message: "Solo los participantes pueden mover esta tarea" });
+      .json({ code: "MOVE_NOT_ALLOWED", message: "Only participants can move this task" });
   }
 
   const task = await prisma.$transaction(async (tx) => {
     await tx.task.update({ where: { id }, data: { state: parsed.data.state } });
-    // El chat de la tarea se cierra en DONE y se reabre al volver atras.
+    // The task chat closes on DONE and reopens when moved back.
     await syncTaskConversationState(tx, id, parsed.data.state);
-    // Se relee DESPUES del sync: si no, el DTO devuelve el chatClosed viejo.
+    // Re-read AFTER the sync: otherwise the DTO returns the stale chatClosed.
     return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
   });
 
@@ -404,7 +410,7 @@ router.patch("/:id/state", async (req, res) => {
     actorId: req.auth!.employeeId,
     type: "TASK_STATE",
     title: task.title,
-    body: `"${task.title}" pasó a ${TASK_STATE_META[task.state].label}`,
+    body: `"${task.title}" moved to ${TASK_STATE_META[task.state].label}`,
     taskId: id,
   });
 
@@ -412,29 +418,29 @@ router.patch("/:id/state", async (req, res) => {
 });
 
 /**
- * Fijar una tarea la exceptua del archivado a los 14 dias y la manda al tope
- * de su columna. Mismo permiso que mover (canMoveTask): es decision de quien
- * trabaja la tarea, y evita inventar una tercera regla de permisos.
+ * Pinning a task exempts it from the 14-day archiving and sends it to the top
+ * of its column. Same permission as moving (canMoveTask): it is a decision for
+ * whoever works the task, and it avoids inventing a third permission rule.
  */
 router.patch("/:id/pin", async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const parsed = changeTaskPinSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Valor inválido" });
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
   }
 
   const exists = await prisma.task.findUnique({
     where: { id },
     select: { id: true },
   });
-  if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   if (!(await canMoveTask(req.auth!, id))) {
     return res
       .status(403)
-      .json({ message: "Solo los participantes pueden fijar esta tarea" });
+      .json({ code: "PIN_NOT_ALLOWED", message: "Only participants can pin this task" });
   }
 
   const task = await prisma.task.update({
@@ -449,18 +455,18 @@ router.patch("/:id/pin", async (req, res) => {
 
 router.delete("/:id", requireTaskManagement, async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const exists = await prisma.task.findUnique({
     where: { id },
     select: { id: true },
   });
-  if (!exists) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   await prisma.$transaction(async (tx) => {
-    // Cerrar la conversacion ANTES de borrar: el SetNull del FK se encarga del
-    // taskId, pero no del closed, y una conversacion huerfana y escribible
-    // seria un agujero. El titulo ya viene snapshoteado.
+    // Close the conversation BEFORE deleting: the FK's SetNull handles taskId
+    // but not closed, and an orphaned writable conversation would be a hole.
+    // The title is already snapshotted.
     await tx.conversation.updateMany({ where: { taskId: id }, data: { closed: true } });
     await tx.task.delete({ where: { id } });
   });
@@ -470,19 +476,20 @@ router.delete("/:id", requireTaskManagement, async (req, res) => {
 });
 
 /**
- * Alias historico: el hilo de comentarios de la tarea ES el chat de la tarea.
- * Se conserva la ruta y la forma de la respuesta ({id, body, createdAt, author})
- * para que el frontend actual siga andando sin cambios mientras se construye la
- * ventana de chat. Escribe en Message, igual que POST /chat/.../messages.
+ * Historical alias: the task's comment thread IS the task's chat. The route and
+ * the response shape ({id, body, createdAt, author}) are kept so the current
+ * frontend keeps working unchanged while the chat window is built. Writes to
+ * Message, exactly like POST /chat/.../messages.
  */
 router.post("/:id/comments", async (req, res) => {
   const id = parseId(req.params.id);
-  if (!id) return res.status(400).json({ message: "Identificador inválido" });
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const parsed = createCommentSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "No se pudo validar el comentario",
+      code: "INVALID_COMMENT",
+      message: parsed.error.issues[0]?.message ?? "The comment could not be validated",
     });
   }
 
@@ -496,15 +503,15 @@ router.post("/:id/comments", async (req, res) => {
       participants: { select: { employeeId: true } },
     },
   });
-  if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
+  if (!task) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
   if (!(await canCommentOnTask(req.auth!, id))) {
     return res
       .status(403)
-      .json({ message: "Solo los participantes pueden comentar esta tarea" });
+      .json({ code: "COMMENT_NOT_ALLOWED", message: "Only participants can comment on this task" });
   }
 
-  // Tareas creadas antes de la migracion o por codigo viejo: idempotente.
+  // Tasks created before the migration or by older code: idempotent.
   const conversation =
     task.conversation ??
     (await prisma.$transaction((tx) =>
@@ -518,7 +525,7 @@ router.post("/:id/comments", async (req, res) => {
   if ("closed" in conversation && conversation.closed) {
     return res
       .status(409)
-      .json({ message: "El chat está cerrado porque la tarea está terminada" });
+      .json({ code: "CHAT_CLOSED_DONE", message: "The chat is closed because the task is done" });
   }
 
   const author = await prisma.employee.findUniqueOrThrow({
@@ -546,7 +553,7 @@ router.delete("/:id/comments/:commentId", async (req, res) => {
   const id = parseId(req.params.id);
   const commentId = parseId(req.params.commentId);
   if (!id || !commentId) {
-    return res.status(400).json({ message: "Identificador inválido" });
+    return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
   }
 
   const message = await prisma.message.findUnique({
@@ -554,14 +561,14 @@ router.delete("/:id/comments/:commentId", async (req, res) => {
     select: { id: true, authorId: true, conversation: { select: { id: true, taskId: true } } },
   });
   if (!message || message.conversation.taskId !== id) {
-    return res.status(404).json({ message: "Comentario no encontrado" });
+    return res.status(404).json({ code: "COMMENT_NOT_FOUND", message: "Comment not found" });
   }
 
   const isAuthor = message.authorId === req.auth!.employeeId;
   if (!isAuthor && !isStaff(req.auth!.role)) {
     return res
       .status(403)
-      .json({ message: "Solo el autor o un administrador pueden borrar el comentario" });
+      .json({ code: "COMMENT_DELETE_NOT_ALLOWED", message: "Only the author or an administrator can delete the comment" });
   }
 
   await prisma.message.delete({ where: { id: commentId } });

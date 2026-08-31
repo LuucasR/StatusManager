@@ -1,42 +1,43 @@
 import type { Role } from "@prisma/client";
 
 /**
- * Matriz de permisos, en un solo lugar.
+ * Permission matrix, in one place.
  *
- * - EMPLOYEE     : su jornada, su historial, las tareas donde participa.
- * - TASK_MANAGER : ademas gestiona el tablero (crea, edita, borra, mueve y fija
- *                  cualquier tarea). NO ve el historial ni los reportes del
- *                  equipo, no pide confirmaciones y no lee el chat de las
- *                  tareas donde no participa.
- * - SUPERVISOR   : gestion de tareas mas la visibilidad del equipo: historial,
- *                  reportes, confirmacion de actividad y el chat de cualquier
- *                  tarea. NO toca cuentas ni estados ajenos.
- * - ADMIN        : todo lo anterior mas la gestion de cuentas (alta, rol, baja,
- *                  aprobacion de altas, cambios de contrasena) y cambiar el
- *                  estado de otro empleado.
+ * - EMPLOYEE     : their own day, their own history, the tasks they take part in.
+ * - TASK_MANAGER : also runs the board (creates, edits, deletes, moves and pins
+ *                  any task). Does NOT see the team's history or reports, does
+ *                  not request confirmations and does not read the chat of
+ *                  tasks they are not part of.
+ * - SUPERVISOR   : task management plus visibility of the team: history,
+ *                  reports, activity confirmation and the chat of any task.
+ *                  Does NOT touch accounts or other people's statuses.
+ * - ADMIN        : all of the above plus account management (create, role,
+ *                  deactivate, approve sign-ups, password changes) and changing
+ *                  another employee's status.
  *
- * Son DOS capacidades distintas, no una escalera: `canManageTasks` (el tablero)
- * e `isStaff` (ver al equipo). TASK_MANAGER tiene la primera sin la segunda.
+ * These are TWO distinct capabilities, not a ladder: `canManageTasks` (the
+ * board) and `isStaff` (seeing the team). TASK_MANAGER has the first without
+ * the second.
  */
 
-/** Gestiona el tablero de tareas: admin, supervisor o gestor de tareas. */
+/** Runs the task board: admin, supervisor or task manager. */
 export function canManageTasks(role: Role | undefined) {
   return role === "ADMIN" || role === "SUPERVISOR" || role === "TASK_MANAGER";
 }
 
-/** Ve al equipo: historial, reportes y chats ajenos. Admin o supervisor. */
+/** Sees the team: history, reports and other people's chats. Admin or supervisor. */
 export function isStaff(role: Role | undefined) {
   return role === "ADMIN" || role === "SUPERVISOR";
 }
 
-/** Solo el admin: cuentas, roles y estados ajenos. */
+/** Admin only: accounts, roles and other people's statuses. */
 export function isAdmin(role: Role | undefined) {
   return role === "ADMIN";
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
-  EMPLOYEE: "Empleado",
-  TASK_MANAGER: "Gestor de tareas",
+  EMPLOYEE: "Employee",
+  TASK_MANAGER: "Task manager",
   SUPERVISOR: "Supervisor",
-  ADMIN: "Administrador",
+  ADMIN: "Administrator",
 };

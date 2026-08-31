@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { formatClock } from "../tasks/datetime";
 import { STATE_META, participantColor } from "../tasks/types";
 import { KIND_LABELS, KIND_ORDER, type Conversation } from "./types";
+import { t } from "../../i18n";
 
 type Props = {
   conversations: Conversation[];
@@ -47,7 +48,7 @@ export default function ConversationList({ conversations, unreadByConversation, 
                       sx={{
                         width: 34,
                         height: 34,
-                        bgcolor: meta?.soft ?? "#eef0f6",
+                        bgcolor: meta?.soft ?? "var(--surface-2)",
                         color: meta?.accent ?? "#6d7087",
                         fontSize: 13,
                         fontWeight: 800,
@@ -98,7 +99,7 @@ export default function ConversationList({ conversations, unreadByConversation, 
                     <Typography variant="caption" color="text.secondary" noWrap component="div">
                       {conversation.lastMessage
                         ? `${conversation.lastMessage.authorName}: ${conversation.lastMessage.body}`
-                        : "Sin mensajes"}
+                        : t("chat.noMessages")}
                     </Typography>
                   </Box>
 

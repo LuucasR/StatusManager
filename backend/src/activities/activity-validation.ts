@@ -5,16 +5,24 @@ import { statusesAllowingTask, statusesRequiringDetail } from "./activity-status
 export { statusesRequiringDetail };
 
 /**
- * Compartido por POST /activities/status y POST /admin/employees/:id/status.
+ * Shared by POST /activities/status and POST /admin/employees/:id/status.
  *
- * Solo valida la FORMA. Que la tarea exista, que el empleado participe de ella
- * y que sea obligatoria son reglas que necesitan la base: viven en
- * activity-task.ts, y las dos rutas las aplican por separado porque el admin no
- * queda sujeto a la obligatoriedad.
+ * Validates SHAPE only. Whether the task exists, whether the employee takes
+ * part in it and whether it is mandatory are rules that need the database:
+ * they live in activity-task.ts, and the two routes apply them separately
+ * because the admin is not subject to the mandatory part.
  */
 export const changeStatusSchema = z
   .object({
-    status: z.nativeEnum(ActivityStatus),
+    // AUTO_DISCONNECTED is excluded from what a caller may set: only the
+    // end-of-day job produces it. Without this, anyone could POST it and file
+    // themselves - or, through the admin route, somebody else - as having failed
+    // a check that was never sent.
+    status: z
+      .nativeEnum(ActivityStatus)
+      .refine((status) => status !== ActivityStatus.AUTO_DISCONNECTED, {
+        message: "That status is set by the system and cannot be chosen",
+      }),
     detail: z.string().trim().max(500).optional().default(""),
     taskId: z.number().int().positive().nullable().optional(),
   })
@@ -24,7 +32,7 @@ export const changeStatusSchema = z
         code: "custom",
         path: ["detail"],
         message:
-          "El comentario debe tener al menos 3 caracteres para el estado Ausente",
+          "The comment must be at least 3 characters for the Away status",
       });
     }
 
@@ -32,7 +40,7 @@ export const changeStatusSchema = z
       context.addIssue({
         code: "custom",
         path: ["taskId"],
-        message: "Solo se puede declarar una tarea al ponerse a Trabajando",
+        message: "A task can only be declared when switching to Working",
       });
     }
   });

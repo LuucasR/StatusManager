@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ROLE_META, ROLE_ORDER, type Role } from "../roles";
+import { t } from "../../i18n";
 
 type Target = { id: number; employeeNumber: number; name: string; role?: string };
 
@@ -55,7 +56,7 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
 
   return (
     <Dialog open={Boolean(employee)} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Cambiar rol</DialogTitle>
+      <DialogTitle>{t("role.changeTitle")}</DialogTitle>
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
@@ -94,7 +95,7 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
           onClick={() => void submit()}
           disabled={saving || role === employee?.role}
         >
-          {saving ? "Guardando..." : "Guardar rol"}
+          {saving ? t("common.saving") : t("role.save")}
         </Button>
       </DialogActions>
     </Dialog>

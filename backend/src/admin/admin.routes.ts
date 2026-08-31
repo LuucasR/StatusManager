@@ -11,6 +11,12 @@ import { visibleHistoryWhere } from "../activities/activity-status";
 import { WorkingTaskError, resolveWorkingTask } from "../activities/activity-task";
 import { z } from "zod";
 import { Role } from "@prisma/client";
+import { LOCALE } from "../locale";
+import {
+  WORKDAY_SETTINGS_ID,
+  isValidTimeOfDay,
+  isValidTimeZone,
+} from "../scheduler/workday";
 
 
 const createEmployeeSchema = z.object({
@@ -28,9 +34,9 @@ const changeRoleSchema = z.object({
 const router = Router();
 
 /**
- * requireAuth global, pero el nivel se decide POR RUTA: el supervisor ve al
- * equipo y sus reportes, y el admin es el unico que toca cuentas, roles y
- * estados ajenos. Antes todo el router era requireAdmin.
+ * requireAuth is global, but the level is decided PER ROUTE: a supervisor sees
+ * the team and its reports, and the admin is the only one who touches accounts,
+ * roles and other people's statuses. The whole router used to be requireAdmin.
  */
 router.use(requireAuth);
 
@@ -76,9 +82,9 @@ router.get("/employees", requireStaff, async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: employee.active,
-        // Mismo fallback que GET /activities/team: el comentario dejo de ser
-        // obligatorio en WORKING, asi que sin esto la tarjeta diria "Sin
-        // detalle" justo para todo el que esta trabajando.
+        // Same fallback as GET /activities/team: the comment stopped being
+        // mandatory for WORKING, so without this the card would read "No detail"
+        // for exactly everyone who is working.
         detail: open?.detail || open?.taskTitle || "",
         taskTitle: open?.taskTitle ?? null,
       };
@@ -115,7 +121,7 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
     !Number.isInteger(id) ||
     (decision !== "APPROVED" && decision !== "REJECTED")
   ) {
-    return res.status(400).json({ message: "Solicitud o decisión inválida" });
+    return res.status(400).json({ code: "INVALID_REQUEST_DECISION", message: "Invalid request or decision" });
   }
 
   const request = await prisma.passwordChangeRequest.findUnique({
@@ -124,7 +130,7 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
 
   if (!request || request.status !== "PENDING") {
     return res.status(404).json({
-      message: "La solicitud no existe o ya fue resuelta",
+      code: "REQUEST_ALREADY_RESOLVED", message: "That request does not exist or was already resolved",
     });
   }
 
@@ -133,7 +139,7 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
       where: { id },
       data: { status: "REJECTED", resolvedAt: new Date() },
     });
-    return res.json({ message: "Solicitud rechazada" });
+    return res.json({ code: "REQUEST_REJECTED", message: "Request rejected" });
   }
 
   // Minted here, never stored in cleartext and never written to a log. It goes
@@ -151,8 +157,9 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
 
   res.json({
     temporaryPassword,
+    code: "TEMPORARY_PASSWORD_ISSUED",
     message:
-      "Contraseña temporal generada. Dictásela al empleado: no se vuelve a mostrar.",
+      "Temporary password generated. Read it out to the employee: it will not be shown again.",
   });
 });
 
@@ -186,22 +193,23 @@ router.get("/history", requireStaff, async (req, res) => {
 });
 
 /**
- * Alta de cuenta hecha por el admin. A diferencia de POST /auth/register, la
- * cuenta nace ACTIVA (no hay nada que aprobar: la creo el admin) y con el rol
- * que él elija. El legajo es automático, el siguiente disponible.
+ * Account created by an admin. Unlike POST /auth/register, the account is born
+ * ACTIVE (there is nothing to approve: an admin made it) and with whichever
+ * role they pick. The employee number is automatic, the next one free.
  */
 router.post("/employees", requireAdmin, async (req, res) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
-      message: parsed.error.issues[0]?.message ?? "Revisá los datos ingresados",
+      code: "INVALID_INPUT",
+      message: parsed.error.issues[0]?.message ?? "Check the details you entered",
     });
   }
 
   const email = parsed.data.email.toLowerCase();
   const taken = await prisma.employee.findUnique({ where: { email }, select: { id: true } });
   if (taken) {
-    return res.status(409).json({ message: "Ya existe una cuenta con ese email" });
+    return res.status(409).json({ code: "EMAIL_TAKEN", message: "An account with that email already exists" });
   }
 
   try {
@@ -232,27 +240,28 @@ router.post("/employees", requireAdmin, async (req, res) => {
 
     res.status(201).json(employee);
   } catch {
-    // Carrera con otra alta simultánea sobre el mismo email o legajo.
-    res.status(409).json({ message: "No se pudo crear la cuenta: datos duplicados" });
+    // Race with another simultaneous sign-up on the same email or number.
+    res.status(409).json({ code: "ACCOUNT_DUPLICATE", message: "Could not create the account: duplicate details" });
   }
 });
 
-/** Cambio de rol de una cuenta existente. */
+/** Role change on an existing account. */
 router.patch("/employees/:id/role", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
-    return res.status(400).json({ message: "Empleado inválido" });
+    return res.status(400).json({ code: "INVALID_EMPLOYEE", message: "Invalid employee" });
   }
 
   const parsed = changeRoleSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ message: "Rol inválido" });
+    return res.status(400).json({ code: "INVALID_ROLE", message: "Invalid role" });
   }
 
-  // Cambiarse el rol a uno mismo es la forma más rápida de quedarse afuera:
-  // el token vigente sigue diciendo ADMIN, pero el siguiente login ya no.
+  // Changing your own role is the fastest way to lock yourself out, and since
+  // requireAuth now reads the role from the database it takes effect on the very
+  // next request rather than at the next login.
   if (id === req.auth!.employeeId) {
-    return res.status(400).json({ message: "No podés cambiar tu propio rol" });
+    return res.status(400).json({ code: "CANNOT_CHANGE_OWN_ROLE", message: "You cannot change your own role" });
   }
 
   const employee = await prisma.employee.findUnique({
@@ -260,17 +269,17 @@ router.patch("/employees/:id/role", requireAdmin, async (req, res) => {
     select: { id: true, role: true },
   });
   if (!employee) {
-    return res.status(404).json({ message: "Empleado no encontrado" });
+    return res.status(404).json({ code: "EMPLOYEE_NOT_FOUND", message: "Employee not found" });
   }
 
-  // Nadie puede dejar el sistema sin administradores: sin admin no hay forma de
-  // volver a crear uno desde la app.
+  // Nobody may leave the system without administrators: with no admin there is
+  // no way to create one again from inside the app.
   if (employee.role === Role.ADMIN && parsed.data.role !== Role.ADMIN) {
     const admins = await prisma.employee.count({ where: { role: Role.ADMIN, active: true } });
     if (admins <= 1) {
       return res
         .status(400)
-        .json({ message: "No podés quitar el último administrador activo" });
+        .json({ code: "LAST_ADMIN_ROLE", message: "You cannot remove the last active administrator" });
     }
   }
 
@@ -288,7 +297,7 @@ router.patch("/employees/:id/approve", requireAdmin, async (req, res) => {
 
   if (!Number.isInteger(id)) {
     return res.status(400).json({
-      message: "Empleado inválido",
+      code: "INVALID_EMPLOYEE", message: "Invalid employee",
     });
   }
 
@@ -317,7 +326,7 @@ router.post("/employees/:id/request-confirmation", requireStaff, async (req, res
 
   if (!Number.isInteger(employeeId)) {
     return res.status(400).json({
-      message: "Empleado inválido"
+      code: "INVALID_EMPLOYEE", message: "Invalid employee"
     });
   }
 
@@ -333,7 +342,7 @@ router.post("/employees/:id/request-confirmation", requireStaff, async (req, res
 
   if (!employee) {
     return res.status(404).json({
-      message: "Empleado no encontrado"
+      code: "EMPLOYEE_NOT_FOUND", message: "Employee not found"
     });
   }
 
@@ -341,7 +350,7 @@ router.post("/employees/:id/request-confirmation", requireStaff, async (req, res
 
   if (!sent) {
     return res.status(400).json({
-      message: "El empleado no está conectado."
+      code: "EMPLOYEE_OFFLINE", message: "That employee is not connected."
     });
   }
 
@@ -356,27 +365,28 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
 
   if (!Number.isInteger(employeeId)) {
     return res.status(400).json({
-      message: "Empleado inválido",
+      code: "INVALID_EMPLOYEE", message: "Invalid employee",
     });
   }
 
   const parsed = changeStatusSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
+      code: "INVALID_STATUS_CHANGE",
       message:
         parsed.error.issues[0]?.message ??
-        "No se pudo validar el cambio de estado",
+        "The status change could not be validated",
     });
   }
 
   const now = new Date();
 
-  // El schema es compartido con /activities/status, asi que esta ruta tambien
-  // recibe taskId. Se valida contra el empleado DESTINO: sin esto un admin
-  // podria imputarle el tiempo de cualquiera a una tarea donde no participa, y
-  // ademas guardaria el taskId sin su snapshot de titulo.
-  // `enforce: false`: corregir el estado de otro no puede quedar trabado por
-  // las tareas pendientes de esa persona.
+  // The schema is shared with /activities/status, so this route also receives
+  // taskId. It is validated against the TARGET employee: without that an admin
+  // could book anyone's time against a task they do not take part in, and would
+  // also store the taskId without its title snapshot.
+  // `enforce: false`: fixing someone else's status must not be blocked by that
+  // person's pending tasks.
   let task;
   try {
     task = await resolveWorkingTask({
@@ -389,7 +399,7 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
     });
   } catch (error) {
     if (error instanceof WorkingTaskError) {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ code: error.code, message: error.message });
     }
     throw error;
   }
@@ -437,13 +447,13 @@ router.delete("/employees/:id", requireAdmin, async (req, res) => {
 
   if (!Number.isInteger(id)) {
     return res.status(400).json({
-      message: "Empleado inválido",
+      code: "INVALID_EMPLOYEE", message: "Invalid employee",
     });
   }
 
   if (id === req.auth!.employeeId) {
     return res.status(400).json({
-      message: "No podés eliminar tu propia cuenta de administrador",
+      code: "CANNOT_DELETE_SELF", message: "You cannot delete your own administrator account",
     });
   }
 
@@ -454,18 +464,18 @@ router.delete("/employees/:id", requireAdmin, async (req, res) => {
 
   if (!employee) {
     return res.status(404).json({
-      message: "Empleado no encontrado",
+      code: "EMPLOYEE_NOT_FOUND", message: "Employee not found",
     });
   }
 
-  // Misma razón que en el cambio de rol: sin admins no hay forma de recuperar
-  // la administración desde la app.
+  // Same reason as the role change: with no admins there is no way to recover
+  // administration from inside the app.
   if (employee.role === Role.ADMIN) {
     const admins = await prisma.employee.count({ where: { role: Role.ADMIN, active: true } });
     if (admins <= 1) {
       return res
         .status(400)
-        .json({ message: "No podés eliminar el último administrador activo" });
+        .json({ code: "LAST_ADMIN_DELETE", message: "You cannot delete the last active administrator" });
     }
   }
 
@@ -547,7 +557,7 @@ if (from && to) {
 
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="reporte-actividades-${new Date()
+    `inline; filename="activity-report-${new Date()
       .toISOString()
       .slice(0, 10)}.pdf"`
   );
@@ -559,16 +569,17 @@ if (from && to) {
 
   doc.pipe(res);
 
-  let periodLabel = "Historial completo";
-  if (period === "today") periodLabel = "Hoy";
-  if (period === "last7") periodLabel = "Ultimos 7 dias";
+  let periodLabel = "Full history";
+  if (period === "today") periodLabel = "Today";
+  if (period === "last7") periodLabel = "Last 7 days";
   if (from && to) {
-    periodLabel = `${new Date(from).toLocaleDateString("es-AR")} al ${new Date(to).toLocaleDateString("es-AR")}`;
+    periodLabel = `${new Date(from).toLocaleDateString(LOCALE)} to ${new Date(to).toLocaleDateString(LOCALE)}`;
   }
 
-  // Se busca el empleado aparte y no en rows[0]: si en el periodo solo tuvo
-  // registros ocultos (Desconectado), rows queda vacio y el subtitulo caeria
-  // a "Resumen general del equipo" aunque haya un empleado filtrado.
+  // The employee is looked up separately rather than from rows[0]: if during the
+  // period they only had hidden records (Disconnected), rows is empty and the
+  // subtitle would fall back to "Team overview" even though one employee is
+  // filtered.
   const selectedEmployee = employeeId && employeeId !== "all"
     ? await prisma.employee.findUnique({
         where: { id: Number(employeeId) },
@@ -577,13 +588,71 @@ if (from && to) {
     : undefined;
 
   renderActivityReport(doc, {
-    title: "Reporte de actividades",
+    title: "Activity report",
     subtitle: selectedEmployee
-      ? `Empleado #${selectedEmployee.employeeNumber} - ${selectedEmployee.name}`
-      : "Resumen general del equipo",
+      ? `Employee #${selectedEmployee.employeeNumber} - ${selectedEmployee.name}`
+      : "Team overview",
     periodLabel,
     rows,
   });
+});
+
+/**
+ * Working-day automation settings. Admin-only, and the only supported way to
+ * change when the end-of-day check and the task pause/resume run.
+ *
+ * Validated here rather than trusted from the row: the scheduler reads these
+ * every minute, and a malformed time would otherwise silently disable a job.
+ */
+const workdaySettingsSchema = z
+  .object({
+    startTime: z
+      .string()
+      .refine(isValidTimeOfDay, "Start time must be HH:MM in 24-hour format"),
+    endTime: z
+      .string()
+      .refine(isValidTimeOfDay, "End time must be HH:MM in 24-hour format"),
+    timezone: z
+      .string()
+      .refine(isValidTimeZone, "That timezone is not recognised"),
+    // Floor of 30s so nobody can set a window too short to notice, ceiling of
+    // an hour because the timer is in-process and would not survive longer.
+    confirmationTimeoutSeconds: z.number().int().min(30).max(3600),
+    enabled: z.boolean(),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "There are no changes to apply",
+  });
+
+router.get("/workday-settings", requireAdmin, async (_req, res) => {
+  const settings = await prisma.workdaySettings.upsert({
+    where: { id: WORKDAY_SETTINGS_ID },
+    create: { id: WORKDAY_SETTINGS_ID },
+    update: {},
+  });
+  res.json(settings);
+});
+
+router.patch("/workday-settings", requireAdmin, async (req, res) => {
+  const parsed = workdaySettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      code: "VALIDATION_ERROR",
+      message:
+        parsed.error.issues[0]?.message ??
+        "The working-day settings could not be validated",
+    });
+  }
+
+  const settings = await prisma.workdaySettings.upsert({
+    where: { id: WORKDAY_SETTINGS_ID },
+    create: { id: WORKDAY_SETTINGS_ID, ...parsed.data },
+    update: parsed.data,
+  });
+
+  // No restart needed: the scheduler re-reads this row on every tick.
+  res.json(settings);
 });
 
 export default router;

@@ -5,7 +5,7 @@ import { logger } from "../logger";
 
 /** Catch-all for unmatched routes. Mounted after every router. */
 export const notFoundHandler: RequestHandler = (_req, res) => {
-  res.status(404).json({ code: "NOT_FOUND", message: "Ruta no encontrada" });
+  res.status(404).json({ code: "NOT_FOUND", message: "Route not found" });
 };
 
 type Mapped = { status: number; code: string; message: string };
@@ -20,7 +20,7 @@ function mapError(error: unknown): Mapped {
     return {
       status: 400,
       code: "VALIDATION_ERROR",
-      message: error.issues[0]?.message ?? "Datos inválidos",
+      message: error.issues[0]?.message ?? "Invalid data",
     };
   }
 
@@ -30,31 +30,31 @@ function mapError(error: unknown): Mapped {
         return {
           status: 409,
           code: "DUPLICATE_VALUE",
-          message: "Ya existe un registro con esos datos",
+          message: "A record with those details already exists",
         };
       case "P2025":
         return {
           status: 404,
           code: "NOT_FOUND",
-          message: "El registro no existe",
+          message: "That record does not exist",
         };
       case "P2003":
         return {
           status: 409,
           code: "RELATED_RECORD_MISSING",
-          message: "El registro relacionado no existe",
+          message: "The related record does not exist",
         };
     }
   }
 
   if (error instanceof Prisma.PrismaClientValidationError) {
-    return { status: 400, code: "VALIDATION_ERROR", message: "Datos inválidos" };
+    return { status: 400, code: "VALIDATION_ERROR", message: "Invalid data" };
   }
 
   return {
     status: 500,
     code: "INTERNAL_ERROR",
-    message: "Ocurrió un error inesperado",
+    message: "Something went wrong",
   };
 }
 

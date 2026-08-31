@@ -22,7 +22,7 @@ export function useNotifications() {
       setHasMore(page.hasMore);
       setCursor(page.nextBefore);
     } catch {
-      // Un fallo de la campana no puede romper la app; se reintenta al reconectar.
+      // A failure of the bell must not break the app; it retries on reconnect.
     } finally {
       setLoading(false);
     }
@@ -40,8 +40,8 @@ export function useNotifications() {
       setUnread(payload.unreadCount);
       setItems((current) => [
         payload.notification,
-        // El colapso del backend puede actualizar una notificación existente:
-        // se saca la vieja para que no quede duplicada.
+        // The backend's collapsing can update an existing notification: the old
+        // one is removed so it does not end up duplicated.
         ...current.filter((n) => n.id !== payload.notification.id),
       ]);
     }
@@ -56,7 +56,7 @@ export function useNotifications() {
   }, [cursor]);
 
   const markRead = useCallback(async (id: number) => {
-    // Optimista: el badge baja al instante y la request va en paralelo.
+    // Optimistic: the badge drops instantly and the request goes in parallel.
     setItems((current) =>
       current.map((n) => (n.readAt ? n : n.id === id ? { ...n, readAt: new Date().toISOString() } : n))
     );

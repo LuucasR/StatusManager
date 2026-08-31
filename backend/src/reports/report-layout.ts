@@ -1,11 +1,13 @@
+import { LOCALE } from "../locale";
+
 /**
- * Chrome compartido por los reportes PDF: banda de marca, bloque de periodo,
- * tarjetas de resumen, titulo de seccion, estado vacio, footer y salto de
- * pagina. El cuerpo de la tabla NO vive aca: cada reporte tiene sus propias
- * columnas y las dibuja usando `chrome.y` como cursor vertical.
+ * Chrome shared by the PDF reports: brand band, period block, summary cards,
+ * section title, empty state, footer and page break. The table body does NOT
+ * live here: each report has its own columns and draws them using `chrome.y`
+ * as the vertical cursor.
  *
- * `doc` va tipado `any` porque asi esta declarado pdfkit en este proyecto
- * (ver backend/src/pdfkit.d.ts).
+ * `doc` is typed `any` because that is how pdfkit is declared in this project
+ * (see backend/src/pdfkit.d.ts).
  */
 
 export const REPORT_COLORS = {
@@ -26,7 +28,7 @@ export const PAGE = {
 } as const;
 
 export function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("es-AR", {
+  return new Intl.DateTimeFormat(LOCALE, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -34,7 +36,7 @@ export function formatDate(date: Date) {
 }
 
 export function formatTime(date: Date) {
-  return new Intl.DateTimeFormat("es-AR", {
+  return new Intl.DateTimeFormat(LOCALE, {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
@@ -56,7 +58,7 @@ export function truncate(value: string, maxLength: number) {
 export type KpiCard = {
   label: string;
   value: string;
-  /** Pinta el valor en violeta en vez de negro. Una sola por reporte. */
+  /** Paints the value violet instead of black. One per report only. */
   highlight?: boolean;
 };
 
@@ -64,29 +66,29 @@ export type ReportChromeOptions = {
   title: string;
   subtitle: string;
   periodLabel: string;
-  /** Texto del pie de pagina, a la izquierda del numero de pagina. */
+  /** Footer text, to the left of the page number. */
   footerLabel: string;
-  /** Titulo de las paginas 2+. */
+  /** Title used on page 2 onwards. */
   continuationTitle: string;
   generatedAt: Date;
 };
 
 export type ReportChrome = {
-  /** Cursor vertical. Cada reporte lo avanza al dibujar sus propias filas. */
+  /** Vertical cursor. Each report advances it as it draws its own rows. */
   y: number;
-  /** Banda de marca + bloque PERIODO + "Generado el". Deja y = 195. */
+  /** Brand band + PERIOD block + "Generated on". Leaves y = 195. */
   drawCover(): void;
-  /** Fila de 3 tarjetas de resumen. Avanza y += 78. */
+  /** Row of 3 summary cards. Advances y += 78. */
   drawKpiCards(cards: KpiCard[]): void;
-  /** Titulo 14pt + nota 8pt opcional. Avanza y += 42. */
+  /** 14pt title + optional 8pt note. Advances y += 42. */
   drawSectionTitle(title: string, note?: string): void;
-  /** Caja gris con mensaje centrado. Avanza y += 82. */
+  /** Grey box with a centred message. Advances y += 82. */
   drawEmptyState(message: string): void;
   drawFooter(): void;
   /**
-   * Si la fila no entra en lo que queda de pagina, cierra la actual, abre otra
-   * y vuelve a dibujar la cabecera de tabla que le pasan. Devuelve true si
-   * hubo salto.
+   * If the row does not fit in what is left of the page, closes the current one,
+   * opens another and redraws the table header it is handed. Returns true when a
+   * break happened.
    */
   ensureRoom(rowHeight: number, drawTableHeader: () => void): boolean;
 };
@@ -118,12 +120,12 @@ export function createReportChrome(doc: any, options: ReportChromeOptions): Repo
       chrome.y = 150;
 
       doc.fillColor(REPORT_COLORS.muted).font("Helvetica-Bold").fontSize(7.5);
-      doc.text("PERIODO DEL REPORTE", margin, chrome.y, { characterSpacing: 0.8 });
+      doc.text("REPORT PERIOD", margin, chrome.y, { characterSpacing: 0.8 });
       doc.fillColor(REPORT_COLORS.ink).font("Helvetica-Bold").fontSize(11);
       doc.text(options.periodLabel, margin, chrome.y + 12, { width: contentWidth - 180 });
       doc.fillColor(REPORT_COLORS.muted).font("Helvetica").fontSize(8);
       doc.text(
-        `Generado el ${formatDate(options.generatedAt)} a las ${formatTime(options.generatedAt)}`,
+        `Generated on ${formatDate(options.generatedAt)} at ${formatTime(options.generatedAt)}`,
         width - margin - 190,
         chrome.y + 4,
         { width: 190, align: "right" }
@@ -180,7 +182,7 @@ export function createReportChrome(doc: any, options: ReportChromeOptions): Repo
         .stroke(REPORT_COLORS.line);
       doc.fillColor(REPORT_COLORS.muted).font("Helvetica").fontSize(7.5);
       doc.text(options.footerLabel, margin, footerY, { width: 280 });
-      doc.text(`Pagina ${pageNumber}`, width - margin - 90, footerY, {
+      doc.text(`Page ${pageNumber}`, width - margin - 90, footerY, {
         width: 90,
         align: "right",
       });

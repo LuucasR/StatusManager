@@ -6,7 +6,7 @@ import { getSocket } from "./socket";
 type SocketContextValue = {
   socket: Socket;
   connected: boolean;
-  /** Se incrementa en cada reconexión: sirve para re-sincronizar datos. */
+  /** Bumped on every reconnect: used to re-sync data. */
   reconnectCount: number;
 };
 
@@ -14,7 +14,7 @@ const SocketContext = createContext<SocketContextValue | null>(null);
 
 export function useSocketContext() {
   const value = useContext(SocketContext);
-  if (!value) throw new Error("useSocketContext debe usarse dentro de SocketProvider");
+  if (!value) throw new Error("useSocketContext must be used inside SocketProvider");
   return value;
 }
 
@@ -29,13 +29,13 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
 
     const onConnectError = (error: Error) => {
       setConnected(false);
-      // socket.active === true significa que socket.io va a reintentar solo
-      // (backend caído, red). Desloguear ahí expulsaría a todo el equipo cada
-      // vez que se reinicia el server.
+      // socket.active === true means socket.io will retry on its own (backend
+      // down, network). Signing out there would kick the whole team out every
+      // time the server restarts.
       if (socket.active) return;
-      // active === false es un rechazo del servidor: el middleware de auth
-      // devolvió "unauthorized". El JWT dura un día, así que el caso típico es
-      // la pestaña abierta desde ayer.
+      // active === false is a rejection from the server: the auth middleware
+      // answered "unauthorized". The JWT lasts a day, so the typical case is a
+      // tab left open since yesterday.
       if (error.message === "unauthorized") expireSession();
     };
 
@@ -44,7 +44,7 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
-    // `reconnect` vive en el Manager, no en el socket.
+    // `reconnect` lives on the Manager, not on the socket.
     socket.io.on("reconnect", onReconnect);
 
     if (!socket.connected) socket.connect();
@@ -54,10 +54,10 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
       socket.io.off("reconnect", onReconnect);
-      // NO se desconecta acá a propósito: en React.StrictMode el efecto corre
-      // dos veces en desarrollo y un disconnect produciría un ciclo
-      // connect/disconnect/connect. AppLayout solo se desmonta al desloguear, y
-      // logout() llama closeSocket() antes del replace.
+      // Deliberately NOT disconnecting here: under React.StrictMode the effect
+      // runs twice in development and a disconnect would produce a
+      // connect/disconnect/connect loop. AppLayout only unmounts on sign-out,
+      // and logout() calls closeSocket() before the replace.
     };
   }, [socket]);
 

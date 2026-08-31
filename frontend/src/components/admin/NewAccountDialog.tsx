@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ROLE_META, ROLE_ORDER, type Role } from "../roles";
+import { t } from "../../i18n";
 
 type Props = {
   open: boolean;
@@ -42,9 +43,9 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
 
   async function submit() {
     setError("");
-    if (name.trim().length < 2) return setError("Ingresá el nombre completo");
-    if (!email.trim()) return setError("Ingresá un email");
-    if (password.length < 8) return setError("La contraseña necesita al menos 8 caracteres");
+    if (name.trim().length < 2) return setError(t("account.nameRequired"));
+    if (!email.trim()) return setError(t("account.emailRequired"));
+    if (password.length < 8) return setError(t("account.passwordTooShort"));
 
     setSaving(true);
     try {
@@ -65,37 +66,37 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Nueva cuenta</DialogTitle>
+      <DialogTitle>{t("account.newTitle")}</DialogTitle>
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
 
           <TextField
-            label="Nombre completo"
+            label={t("register.fullName")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
 
           <TextField
-            label="Email"
+            label={t("common.email")}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <TextField
-            label="Contraseña inicial"
+            label={t("account.initialPassword")}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            helperText="Mínimo 8 caracteres. Se la tenés que pasar vos: la app no manda mails."
+            helperText={t("account.passwordHint")}
           />
 
           <FormControl fullWidth>
-            <InputLabel>Rol</InputLabel>
-            <Select value={role} label="Rol" onChange={(e) => setRole(e.target.value as Role)}>
+            <InputLabel>{t("common.role")}</InputLabel>
+            <Select value={role} label={t("common.role")} onChange={(e) => setRole(e.target.value as Role)}>
               {ROLE_ORDER.map((value) => (
                 <MenuItem key={value} value={value}>
                   {ROLE_META[value].label}
@@ -117,7 +118,7 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
       <DialogActions>
         <Button onClick={onClose}>Cancelar</Button>
         <Button variant="contained" onClick={() => void submit()} disabled={saving}>
-          {saving ? "Creando..." : "Crear cuenta"}
+          {saving ? t("account.creating") : t("account.create")}
         </Button>
       </DialogActions>
     </Dialog>

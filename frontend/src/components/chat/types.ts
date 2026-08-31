@@ -1,3 +1,5 @@
+import { lazyLabels, t } from "../../i18n";
+
 export type ConversationKind = "DIRECT" | "GENERAL" | "TASK";
 
 export type ChatPeer = {
@@ -17,7 +19,7 @@ export type ChatMessage = {
     name: string;
     deleted: boolean;
   };
-  /** Solo en el optimista, hasta que vuelve el id real del servidor. */
+  /** Only on the optimistic message, until the real server id arrives. */
   pending?: boolean;
 };
 
@@ -38,17 +40,13 @@ export type Conversation = {
 
 export const KIND_ORDER: ConversationKind[] = ["GENERAL", "TASK", "DIRECT"];
 
-export const KIND_LABELS: Record<ConversationKind, string> = {
-  GENERAL: "Equipo",
-  TASK: "Tareas",
-  DIRECT: "Directos",
-};
+export const KIND_LABELS = lazyLabels(KIND_ORDER, (kind) => `chat.kind.${kind}` as const);
 
-/** Por qué está cerrada, para el aviso del composer. */
+/** Why it is closed, for the notice above the composer. */
 export function closedReason(conversation: Conversation) {
   if (!conversation.closed) return null;
   if (conversation.taskDeleted) {
-    return "La tarea fue eliminada. El historial queda como solo lectura.";
+    return t("chat.closed.taskDeleted");
   }
-  return "El chat se cerró cuando la tarea pasó a Terminada. Movela a otro estado para volver a escribir.";
+  return t("chat.closed.taskDone");
 }

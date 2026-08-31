@@ -40,7 +40,7 @@ export default function TaskBoard({
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
-    // Un umbral chico evita que un click en la tarjeta se interprete como drag.
+    // A small threshold stops a click on the card being read as a drag.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor)
   );
@@ -77,7 +77,7 @@ export default function TaskBoard({
               key={state}
               state={state}
               count={columnTasks.length}
-              // La columna origen no se ilumina: soltar ahí es un no-op.
+              // The source column does not light up: dropping there is a no-op.
               dropHint={Boolean(activeTask) && activeTask?.state !== state}
             >
               {columnTasks.map((task) => (

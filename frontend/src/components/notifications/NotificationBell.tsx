@@ -13,8 +13,9 @@ import {
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatClock, relativeDay } from "../tasks/datetime";
-import { NOTIFICATION_META, type AppNotification } from "./types";
+import { notificationMeta, type AppNotification } from "./types";
 import { useNotifications } from "./useNotifications";
+import { t } from "../../i18n";
 
 export default function NotificationBell() {
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
@@ -24,7 +25,7 @@ export default function NotificationBell() {
   function handleClick(notification: AppNotification) {
     setAnchor(null);
     if (!notification.readAt) void markRead(notification.id);
-    if (notification.taskId) navigate(`/tareas?task=${notification.taskId}`);
+    if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
   }
 
   let lastDay = "";
@@ -99,12 +100,12 @@ export default function NotificationBell() {
           {!loading && items.length === 0 && (
             <Stack sx={{ alignItems: "center", gap: 1, py: 5, color: "#9296ab" }}>
               <NotificationsNoneRounded sx={{ fontSize: 30 }} />
-              <Typography variant="body2">No tenés notificaciones</Typography>
+              <Typography variant="body2">{t("notifications.empty")}</Typography>
             </Stack>
           )}
 
           {items.map((notification) => {
-            const meta = NOTIFICATION_META[notification.type];
+            const meta = notificationMeta(notification.type);
             const day = relativeDay(notification.createdAt);
             const showDay = day !== lastDay;
             lastDay = day;

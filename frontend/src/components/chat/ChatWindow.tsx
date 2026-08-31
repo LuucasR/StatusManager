@@ -15,6 +15,7 @@ import NewDirectDialog from "./NewDirectDialog";
 import { useChat } from "./ChatProvider";
 import { useConversation } from "./useConversation";
 import { closedReason } from "./types";
+import { t, tf } from "../../i18n";
 
 type Props = {
   me: { id: number; name: string } | null;
@@ -37,7 +38,7 @@ export default function ChatWindow({ me, onMinimize }: Props) {
     <Paper className="chat-window chat-window" elevation={0} role="dialog" aria-label="Mensajes">
       <Stack direction="row" spacing={1} className="chat-head">
         {active && (
-          <IconButton size="small" onClick={chat.backToList} aria-label="Volver a la lista">
+          <IconButton size="small" onClick={chat.backToList} aria-label={t("chat.backToList")}>
             <ArrowBackRounded fontSize="small" />
           </IconButton>
         )}
@@ -48,22 +49,22 @@ export default function ChatWindow({ me, onMinimize }: Props) {
           </Typography>
           <Typography variant="caption" color="text.secondary" noWrap component="div">
             {!connected
-              ? "Reconectando…"
+              ? t("chat.reconnecting")
               : active
                 ? active.kind === "TASK"
                   ? active.taskDeleted
-                    ? "Tarea eliminada"
-                    : `Tarea · ${active.taskState ? STATE_META[active.taskState].label : ""}`
+                    ? t("chat.taskDeleted")
+                    : `${t("common.task")} · ${active.taskState ? STATE_META[active.taskState].label : ""}`
                   : active.kind === "GENERAL"
-                    ? "Canal del equipo"
+                    ? t("chat.teamChannel")
                     : `#${active.peer?.employeeNumber ?? ""}`
-                : `${chat.conversations.length} conversaciones`}
+                : tf("chat.conversationCount", { count: chat.conversations.length })}
           </Typography>
         </Box>
 
         {!active && (
-          <Tooltip title="Nuevo mensaje directo">
-            <IconButton size="small" onClick={() => setNewDirectOpen(true)} aria-label="Nuevo mensaje">
+          <Tooltip title={t("chat.newDirect")}>
+            <IconButton size="small" onClick={() => setNewDirectOpen(true)} aria-label={t("chat.newMessage")}>
               <AddCommentRounded fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -75,7 +76,7 @@ export default function ChatWindow({ me, onMinimize }: Props) {
         <IconButton
           size="small"
           onClick={onMinimize}
-          aria-label="Cerrar chat"
+          aria-label={t("chat.close")}
           sx={{ display: { xs: "inline-flex", sm: "none" } }}
         >
           <CloseRounded fontSize="small" />

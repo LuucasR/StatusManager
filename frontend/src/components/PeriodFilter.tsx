@@ -7,18 +7,15 @@ import {
   TextField,
 } from "@mui/material";
 import { useEffect, useState } from "react";
+import { lazyLabels, t } from "../i18n";
 
 export type Period = "all" | "today" | "last7" | "last30" | "custom";
 
-const PERIOD_LABELS: Record<Period, string> = {
-  all: "Todo el historial",
-  today: "Hoy",
-  last7: "Últimos 7 días",
-  last30: "Últimos 30 días",
-  custom: "Rango personalizado",
-};
+const PERIOD_ORDER: Period[] = ['all', 'today', 'last7', 'last30', 'custom'];
 
-/** Medianoche LOCAL del día de `date`, desplazada `days` días. */
+const PERIOD_LABELS = lazyLabels(PERIOD_ORDER, (period) => `period.${period}` as const);
+
+/** LOCAL midnight of `date`, shifted by `days` days. */
 function localMidnight(days = 0, date = new Date()) {
   const result = new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
   result.setHours(0, 0, 0, 0);
@@ -26,16 +23,16 @@ function localMidnight(days = 0, date = new Date()) {
 }
 
 /**
- * Traduce el período a `from`/`to` en ISO **con el huso del navegador**.
+ * Turns the period into `from`/`to` as ISO strings **in the browser's timezone**.
  *
- * `new Date("2026-08-01")` es medianoche UTC, no local: en Argentina el rango
- * arrancaba el día anterior a las 21:00, y el backend no tiene forma de
- * adivinar el huso de quien consulta. Por eso el rango se arma acá, a partir
- * de las piezas de la fecha local, y viaja como ISO completo.
+ * `new Date("2026-08-01")` is midnight UTC, not local: in Argentina the range
+ * started the previous day at 21:00, and the backend has no way of guessing the
+ * timezone of whoever is asking. So the range is built here, out of the pieces
+ * of the local date, and travels as a full ISO string.
  *
- * `to` es EXCLUSIVO (medianoche del día siguiente), que es lo que espera
- * `overlappingWhere` del backend con su `startedAt < to`. Usar 23:59:59 dejaba
- * afuera el último segundo del día.
+ * `to` is EXCLUSIVE (midnight of the following day), which is what the
+ * backend's `overlappingWhere` expects with its `startedAt < to`. Using
+ * 23:59:59 dropped the last second of the day.
  */
 function periodToParams(period: Period, from: string, to: string) {
   const params = new URLSearchParams();
@@ -49,12 +46,12 @@ function periodToParams(period: Period, from: string, to: string) {
     params.set("to", localMidnight(1).toISOString());
   }
   if (period === "custom" && from && to) {
-    // Los <input type="date"> dan "YYYY-MM-DD". Se parsean por partes para que
-    // no los interprete como UTC.
+    // <input type="date"> yields "YYYY-MM-DD". Parsed piece by piece so it is
+    // not interpreted as UTC.
     const [fy, fm, fd] = from.split("-").map(Number);
     const [ty, tm, td] = to.split("-").map(Number);
     params.set("from", new Date(fy, fm - 1, fd).toISOString());
-    // +1 día: el rango "hasta el 5" tiene que incluir el 5 entero.
+    // +1 day: the range "up to the 5th" has to include the whole 5th.
     params.set("to", new Date(ty, tm - 1, td + 1).toISOString());
   }
 
@@ -62,7 +59,7 @@ function periodToParams(period: Period, from: string, to: string) {
 }
 
 type Props = {
-  /** Solo se dispara cuando el rango está completo (custom exige ambas fechas). */
+  /** Only fires once the range is complete (custom needs both dates). */
   onChange: (params: URLSearchParams) => void;
   initialPeriod?: Period;
   label?: string;
@@ -71,16 +68,16 @@ type Props = {
 export default function PeriodFilter({
   onChange,
   initialPeriod = "all",
-  label = "Período",
+  label = t("period.label"),
 }: Props) {
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
   useEffect(() => {
-    // Un rango custom a medio completar no dispara la consulta: mandarlo
-    // significaría pedir "desde siempre" y mostrar un total que no es el que
-    // se está por elegir.
+    // A half-filled custom range does not fire the query: sending it would mean
+    // asking for "since forever" and showing a total that is not the one about
+    // to be chosen.
     if (period === "custom" && (!from || !to)) return;
     onChange(periodToParams(period, from, to));
   }, [period, from, to, onChange]);
@@ -111,7 +108,7 @@ export default function PeriodFilter({
         <Stack direction="row" spacing={2}>
           <TextField
             size="small"
-            label="Desde"
+            label={t("period.from")}
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
@@ -119,7 +116,7 @@ export default function PeriodFilter({
           />
           <TextField
             size="small"
-            label="Hasta"
+            label={t("period.to")}
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}

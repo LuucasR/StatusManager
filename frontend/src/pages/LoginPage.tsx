@@ -3,6 +3,7 @@ import { Alert, Box, Button, Container, Paper, Stack, TextField, Typography } fr
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { t } from "../i18n";
 
 export default function LoginPage() {
   const [employeeNumber, setEmployeeNumber] = useState("");
@@ -31,25 +32,25 @@ export default function LoginPage() {
           <Box className="brand-panel">
             <Box className="brand-mark"><AccessTimeRounded /></Box>
             <Typography className="eyebrow">STATUS MANAGER - Heroic Spirit Games</Typography>
-            <Typography variant="h2">Tu jornada,<br />en tiempo real.</Typography>
+            <Typography variant="h2">{t("auth.brandTagline1")}<br />{t("auth.brandTagline2")}</Typography>
             <Typography color="text.secondary" className="hero-copy">
-             Registrá tu actividad, mantenete en contacto con tu equipo y accedé a tu historial desde cualquier dispositivo.
+              {t("auth.heroCopy")}
             </Typography>
           </Box>
           <Paper className="auth-card" elevation={0}>
-            <Typography variant="h4">Bienvenido</Typography>
-            <Typography color="text.secondary">Ingresá con los datos que te asignó tu administrador.</Typography>
+            <Typography variant="h4">{t("auth.welcome")}</Typography>
+            <Typography color="text.secondary">{t("auth.signInHint")}</Typography>
             <Stack component="form" onSubmit={submit} spacing={2.4} sx={{ mt: 4 }}>
               {error && <Alert severity="error">{error}</Alert>}
-              <TextField label="Número de empleado" inputMode="numeric" value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} required />
-              <TextField label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <TextField label={t("common.employeeNumber")} inputMode="numeric" value={employeeNumber} onChange={(e) => setEmployeeNumber(e.target.value)} required />
+              <TextField label={t("common.password")} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               <Typography align="right" variant="body2">
-                <Link to="/recuperar-clave">¿Olvidaste tu contraseña?</Link>
+                <Link to="/forgot-password">{t("auth.forgotPassword")}</Link>
               </Typography>
               <Button type="submit" size="large" variant="contained" endIcon={<ArrowForwardRounded />} disabled={loading}>
-                {loading ? "Ingresando…" : "Iniciar sesión"}
+                {loading ? t("auth.signingIn") : t("auth.signIn")}
               </Button>
-              <Typography align="center" variant="body2">¿Todavía no tenés cuenta? <Link to="/registro">Solicitar acceso</Link></Typography>
+              <Typography align="center" variant="body2">{t("auth.noAccount")} <Link to="/register">{t("auth.requestAccess")}</Link></Typography>
             </Stack>
           </Paper>
         </Box>

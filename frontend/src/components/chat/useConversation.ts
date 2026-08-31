@@ -3,7 +3,7 @@ import { listMessages, sendMessage } from "./chatApi";
 import { addPending, getEntry, prependPage, resolvePending, setPage, subscribe } from "./messageStore";
 import type { ChatMessage } from "./types";
 
-/** Ids negativos para los optimistas: nunca chocan con los del servidor. */
+/** Negative ids for optimistic messages: they never collide with server ids. */
 let tempSeq = -1;
 
 export function useConversation(conversationId: number | null) {
@@ -70,8 +70,8 @@ export function useConversation(conversationId: number | null) {
 
       try {
         const saved = await sendMessage(conversationId, body);
-        // El mismo mensaje vuelve además por socket; el store descarta el
-        // duplicado por id.
+        // The same message also comes back over the socket; the store drops the
+        // duplicate by id.
         resolvePending(conversationId, tempId, saved);
       } catch (err) {
         resolvePending(conversationId, tempId, null);

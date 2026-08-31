@@ -27,8 +27,8 @@ type TaskReportOptions = {
   periodLabel: string;
   rows: ReportTask[];
   /**
-   * Corte de archivado, calculado por el router. Se pasa como parametro para
-   * que este modulo no dependa de las reglas de negocio de tasks/.
+   * Archive cutoff, computed by the router. Passed in as a parameter so this
+   * module does not depend on the business rules in tasks/.
    */
   archiveCutoff: Date;
   generatedAt?: Date;
@@ -37,7 +37,7 @@ type TaskReportOptions = {
 const COLORS = REPORT_COLORS;
 const STATE = TASK_STATE_META;
 
-/** Solo el primer nombre, para que entren varios participantes en 100pt. */
+/** First name only, so several participants fit in 100pt. */
 function shortName(name: string) {
   return truncate(name.split(" ")[0] ?? name, 12);
 }
@@ -55,38 +55,38 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     title: options.title,
     subtitle: options.subtitle,
     periodLabel: options.periodLabel,
-    footerLabel: "Status Manager - Tareas del equipo",
-    continuationTitle: "Continuacion del listado",
+    footerLabel: "Status Manager - Team tasks",
+    continuationTitle: "Task list continued",
     generatedAt,
   });
 
   const drawTableHeader = () => {
     doc.roundedRect(margin, chrome.y, contentWidth, 24, 5).fill(COLORS.ink);
     doc.fillColor(COLORS.white).font("Helvetica-Bold").fontSize(7.5);
-    doc.text("TAREA", margin + 10, chrome.y + 8, { width: 158 });
-    doc.text("ESTADO", margin + 176, chrome.y + 8, { width: 78 });
-    doc.text("INICIO", margin + 259, chrome.y + 8, { width: 66 });
-    doc.text("FIN", margin + 330, chrome.y + 8, { width: 66 });
-    doc.text("PARTICIPANTES", margin + 401, chrome.y + 8, { width: 100 });
+    doc.text("TASK", margin + 10, chrome.y + 8, { width: 158 });
+    doc.text("STATE", margin + 176, chrome.y + 8, { width: 78 });
+    doc.text("START", margin + 259, chrome.y + 8, { width: 66 });
+    doc.text("END", margin + 330, chrome.y + 8, { width: 66 });
+    doc.text("PARTICIPANTS", margin + 401, chrome.y + 8, { width: 100 });
     chrome.y += 30;
   };
 
   chrome.drawCover();
 
   chrome.drawKpiCards([
-    { label: "TAREAS", value: String(options.rows.length) },
-    { label: "TERMINADAS", value: `${doneCount} de ${options.rows.length}` },
-    { label: "ARCHIVADAS", value: String(archivedCount), highlight: true },
+    { label: "TASKS", value: String(options.rows.length) },
+    { label: "DONE", value: `${doneCount} of ${options.rows.length}` },
+    { label: "ARCHIVED", value: String(archivedCount), highlight: true },
   ]);
 
   chrome.drawSectionTitle(
-    "Detalle de tareas",
-    "Incluye las tareas archivadas (fondo gris): las que superaron los 14 dias desde su fecha de fin y ya no aparecen en la pizarra. La barra violeta marca las tareas fijadas, que nunca se archivan."
+    "Task detail",
+    "Includes archived tasks (grey background): those more than 14 days past their end date, which no longer appear on the board. The violet bar marks pinned tasks, which are never archived."
   );
   drawTableHeader();
 
   if (options.rows.length === 0) {
-    chrome.drawEmptyState("No hay tareas para los filtros seleccionados.");
+    chrome.drawEmptyState("No tasks match the selected filters.");
   }
 
   options.rows.forEach((row, index) => {
@@ -94,8 +94,8 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     chrome.ensureRoom(rowHeight, drawTableHeader);
 
     const archived = isArchived(row);
-    // Las archivadas rompen el cebreado con el gris de superficie: se leen como
-    // una banda distinta sin necesidad de leer la etiqueta.
+    // Archived rows break the zebra striping with the surface grey: they read as
+    // a distinct band without having to read the label.
     const background = archived ? COLORS.surface : index % 2 === 0 ? COLORS.white : "#FAFAFD";
     doc.roundedRect(margin, chrome.y, contentWidth, rowHeight - 4, 5).fill(background);
     doc
@@ -112,7 +112,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     doc.text(truncate(row.title, 34), margin + 10, chrome.y + 10, { width: 158 });
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(7);
     doc.text(
-      row.createdBy ? `#${row.id} · creada por ${truncate(row.createdBy.name, 20)}` : `#${row.id}`,
+      row.createdBy ? `#${row.id} · created by ${truncate(row.createdBy.name, 20)}` : `#${row.id}`,
       margin + 10,
       chrome.y + 25,
       { width: 158 }
@@ -123,7 +123,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     doc.fillColor(state.color).font("Helvetica-Bold").fontSize(7);
     doc.text(state.label.toUpperCase(), margin + 182, chrome.y + 15, { width: 64, align: "center" });
 
-    const marks = [row.pinned ? "FIJADA" : "", archived ? "ARCHIVADA" : ""].filter(Boolean);
+    const marks = [row.pinned ? "PINNED" : "", archived ? "ARCHIVED" : ""].filter(Boolean);
     if (marks.length) {
       doc.fillColor(row.pinned ? COLORS.primary : COLORS.muted).font("Helvetica-Bold").fontSize(6.5);
       doc.text(marks.join(" · "), margin + 176, chrome.y + 32, { width: 78, align: "center" });
@@ -149,7 +149,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(7);
     doc.text(
       row.participants.length === 0
-        ? "Sin participantes"
+        ? "No participants"
         : names.join(", ") + (extra > 0 ? ` +${extra}` : ""),
       margin + 401,
       chrome.y + 12,

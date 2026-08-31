@@ -4,9 +4,16 @@ import { env } from "./env";
 import { logger } from "./logger";
 import app from "./app";
 import { initializeRealtime } from "./realtime";
+import { registerConfirmationHandlers } from "./activities/activity-confirmation";
+import { startScheduler } from "./scheduler";
 
 const server = createServer(app);
 initializeRealtime(server);
+
+// Before the scheduler: the end-of-day job can auto-disconnect an offline
+// employee on its very first tick, and that path goes through this handler.
+registerConfirmationHandlers();
+startScheduler();
 server.listen(env.PORT, () =>
   logger.info({ port: env.PORT, env: env.NODE_ENV }, "server listening")
 );

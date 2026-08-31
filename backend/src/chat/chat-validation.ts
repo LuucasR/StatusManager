@@ -5,7 +5,7 @@ export const createDirectSchema = z.object({
 });
 
 export const sendMessageSchema = z.object({
-  body: z.string().trim().min(1, "El mensaje no puede estar vacío").max(2000),
+  body: z.string().trim().min(1, "The message cannot be empty").max(2000),
 });
 
 export const messagesQuerySchema = z.object({

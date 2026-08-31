@@ -1,75 +1,80 @@
 import { ActivityStatus, Prisma } from "@prisma/client";
 
 /**
- * Estados que se ven en vivo pero NO se registran en el historial ni en los
- * reportes. "Desconectado" significa que la persona no esta y no hay nada que
- * reportar, a diferencia de "Ausente" (OFFLINE), que es una ausencia
- * justificada y si queda auditada.
+ * Statuses that show up live but are NOT recorded in the history or the
+ * reports. "Disconnected" means the person is not there and there is nothing to
+ * report, unlike "Away" (OFFLINE), which is a justified absence and does get
+ * audited.
+ *
+ * AUTO_DISCONNECTED is deliberately NOT in this list. It is the outcome of the
+ * end-of-day check, so hiding it would file the result of a control into the
+ * one place the reports do not look.
  */
 export const HIDDEN_FROM_HISTORY: readonly ActivityStatus[] = [
   ActivityStatus.DISCONNECTED,
 ];
 
 /**
- * Fragmento de `where` para spreadear en cualquier consulta de ActivityHistory
- * que alimente historiales o reportes. Usa `notIn` para que agregar un estado
- * oculto a HIDDEN_FROM_HISTORY alcance, sin tocar las consultas.
+ * `where` fragment to spread into any ActivityHistory query that feeds a
+ * history or a report. Uses `notIn` so that adding a hidden status to
+ * HIDDEN_FROM_HISTORY is enough, without touching the queries.
  */
 export const visibleHistoryWhere = {
   status: { notIn: [...HIDDEN_FROM_HISTORY] },
 } satisfies Prisma.ActivityHistoryWhereInput;
 
 /**
- * Estados que exigen un comentario de al menos 3 caracteres.
+ * Statuses that require a comment of at least 3 characters.
  *
- * WORKING salio de esta lista cuando se pudo declarar la tarea: el "en que
- * estoy trabajando" ya lo dice el tablero, y escribirlo de nuevo a mano era
- * ruido. El comentario vuelve a ser obligatorio para WORKING solo cuando se
- * elige trabajar SIN tarea (ver activity-task.ts): ahi es el unico dato que
- * queda.
+ * WORKING left this list once the task could be declared: the board already
+ * says what someone is working on, and typing it again by hand was noise. The
+ * comment becomes mandatory for WORKING again only when working WITHOUT a task
+ * (see activity-task.ts): there it is the only detail left.
  */
 export const statusesRequiringDetail = new Set<ActivityStatus>([
   ActivityStatus.OFFLINE,
 ]);
 
-/** Estados en los que tiene sentido declarar una tarea. */
+/** Statuses where declaring a task makes sense. */
 export const statusesAllowingTask = new Set<ActivityStatus>([
   ActivityStatus.WORKING,
 ]);
 
 /**
- * Tramos que SOLAPAN el rango, no los que EMPIEZAN dentro.
+ * Segments that OVERLAP the range, not the ones that START inside it.
  *
- * Filtrar por `startedAt: { gte: from }` pierde el caso mas comun de todos: el
- * tramo abierto desde antes del rango. Consultar "hoy" a las 09:05 con el
- * estado puesto a las 08:55 no devolvia nada, y el total del resumen subcontaba
- * en silencio. La duracion se recorta despues, en segmentMs (activity-summary).
+ * Filtering by `startedAt: { gte: from }` misses the most common case of all:
+ * the segment left open from before the range. Querying "today" at 09:05 with
+ * the status set at 08:55 returned nothing, and the summary total silently
+ * undercounted. The duration is clipped later, in segmentMs (activity-summary).
  */
 export function overlappingWhere(
   from?: Date,
   to?: Date
 ): Prisma.ActivityHistoryWhereInput {
   const conditions: Prisma.ActivityHistoryWhereInput[] = [];
-  // `to` es exclusivo: el frontend manda la medianoche local del dia siguiente.
+  // `to` is exclusive: the frontend sends local midnight of the next day.
   if (to) conditions.push({ startedAt: { lt: to } });
   if (from) conditions.push({ OR: [{ endedAt: null }, { endedAt: { gt: from } }] });
   return conditions.length ? { AND: conditions } : {};
 }
 
 /**
- * Etiquetas y colores por estado. Al tiparlo como Record<ActivityStatus, ...>
- * el compilador exige exhaustividad: agregar un estado al enum sin sumarlo aca
- * deja de compilar, en vez de fallar en runtime al generar el PDF.
+ * Labels and colours per status. Typing it as Record<ActivityStatus, ...> makes
+ * the compiler demand exhaustiveness: adding a status to the enum without
+ * adding it here stops compiling, instead of failing at runtime while
+ * generating the PDF.
  */
 export const STATUS_META: Record<
   ActivityStatus,
   { label: string; color: string; pale: string }
 > = {
-  AVAILABLE: { label: "Disponible", color: "#208454", pale: "#E5F6ED" },
-  WORKING: { label: "Trabajando", color: "#4C4DC9", pale: "#ECECFF" },
-  BREAK: { label: "Descanso", color: "#A66A00", pale: "#FFF2D8" },
-  LUNCH: { label: "Almuerzo", color: "#8C4EA3", pale: "#F5E9FA" },
-  MEETING: { label: "Reunion", color: "#16738B", pale: "#E2F5F8" },
-  OFFLINE: { label: "Ausente", color: "#666A7D", pale: "#ECEEF2" },
-  DISCONNECTED: { label: "Desconectado", color: "#B23C4A", pale: "#FBE7EA" },
+  AVAILABLE: { label: "Available", color: "#208454", pale: "#E5F6ED" },
+  WORKING: { label: "Working", color: "#4C4DC9", pale: "#ECECFF" },
+  BREAK: { label: "Break", color: "#A66A00", pale: "#FFF2D8" },
+  LUNCH: { label: "Lunch", color: "#8C4EA3", pale: "#F5E9FA" },
+  MEETING: { label: "Meeting", color: "#16738B", pale: "#E2F5F8" },
+  OFFLINE: { label: "Away", color: "#666A7D", pale: "#ECEEF2" },
+  DISCONNECTED: { label: "Disconnected", color: "#B23C4A", pale: "#FBE7EA" },
+  AUTO_DISCONNECTED: { label: "Auto-disconnected", color: "#C2410C", pale: "#FDEBE0" },
 };

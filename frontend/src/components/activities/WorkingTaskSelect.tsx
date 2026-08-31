@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import { formatRange } from "../tasks/datetime";
 import { STATE_META, type TaskState } from "../tasks/types";
+import { t } from "../../i18n";
 
 export type AssignableTask = {
   id: number;
@@ -20,41 +21,41 @@ export type AssignableTask = {
   endsAt: string;
 };
 
-/** Valor del <Select> cuando se trabaja en algo que no está en la pizarra. */
+/** <Select> value for working on something that is not on the board. */
 export const NO_TASK = "none";
 
 type Props = {
   tasks: AssignableTask[];
   loading: boolean;
-  /** null = "Sin tarea"; un número = el id elegido. */
+  /** null = "no task"; a number = the chosen id. */
   value: number | null;
   onChange: (taskId: number | null) => void;
 };
 
 /**
- * Selector de la tarea que se declara al pasar a "Trabajando".
+ * Picker for the task declared when switching to "Working".
  *
- * La opción "Sin tarea" es deliberada y no un escape gratuito: sin ella, quien
- * participa de una tarea que arranca el mes que viene quedaría obligado a
- * imputarle el trabajo de hoy, y ese dato sucio contamina el resumen para
- * siempre. Elegirla exige comentario (lo controla el diálogo que lo contiene).
+ * The "no task" option is deliberate and not a free escape hatch: without it,
+ * someone who takes part in a task starting next month would be forced to book
+ * today's work against it, and that dirty data pollutes the summary forever.
+ * Choosing it requires a comment (enforced by the dialog that contains this).
  */
 export default function WorkingTaskSelect({ tasks, loading, value, onChange }: Props) {
   const empty = !loading && tasks.length === 0;
 
   return (
     <FormControl fullWidth disabled={loading || empty}>
-      <InputLabel>{loading ? "Cargando tus tareas…" : "Tarea"}</InputLabel>
+      <InputLabel>{loading ? t("taskSelect.loading") : t("common.task")}</InputLabel>
       <Select
         value={value === null ? NO_TASK : String(value)}
-        label={loading ? "Cargando tus tareas…" : "Tarea"}
+        label={loading ? t("taskSelect.loading") : t("common.task")}
         onChange={(e) => onChange(e.target.value === NO_TASK ? null : Number(e.target.value))}
         renderValue={(selected) => {
-          if (selected === NO_TASK) return "Sin tarea — otro trabajo";
-          return tasks.find((task) => String(task.id) === selected)?.title ?? "Tarea";
+          if (selected === NO_TASK) return t("taskSelect.noTask");
+          return tasks.find((task) => String(task.id) === selected)?.title ?? t("common.task");
         }}
       >
-        <MenuItem value={NO_TASK}>Sin tarea — otro trabajo</MenuItem>
+        <MenuItem value={NO_TASK}>{t("taskSelect.noTask")}</MenuItem>
         {tasks.map((task) => (
           <MenuItem key={task.id} value={String(task.id)}>
             <Stack sx={{ py: 0.25 }}>
@@ -82,9 +83,9 @@ export default function WorkingTaskSelect({ tasks, loading, value, onChange }: P
 
       <FormHelperText component="div">
         {empty ? (
-          <Box>No tenés tareas asignadas en la pizarra. Contá en el comentario en qué trabajás.</Box>
+          <Box>{t("taskSelect.empty")}</Box>
         ) : (
-          <Box>Solo tus tareas sin terminar que siguen en la pizarra.</Box>
+          <Box>{t("taskSelect.help")}</Box>
         )}
       </FormHelperText>
     </FormControl>

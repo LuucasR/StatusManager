@@ -16,7 +16,7 @@ async function main() {
     },
     create: {
       employeeNumber: 1000,
-      name: "Administrador",
+      name: "Administrator",
       email,
       password: hashedPassword,
       role: "ADMIN",
@@ -24,7 +24,7 @@ async function main() {
     },
   });
 
-  console.log(`Administrador listo: #1000 / ${email}`);
+  console.log(`Administrator ready: #1000 / ${email}`);
 }
 
 main()

@@ -2,9 +2,9 @@ import { useEffect, useRef } from "react";
 import { useSocketContext } from "./SocketProvider";
 
 /**
- * Suscribe un handler a un evento del socket compartido. El handler se guarda
- * en un ref, así puede leer estado fresco sin re-suscribirse en cada render y
- * sin obligar a quien lo usa a estabilizarlo con useCallback.
+ * Subscribes a handler to an event on the shared socket. The handler is kept in
+ * a ref, so it can read fresh state without re-subscribing on every render and
+ * without forcing callers to stabilise it with useCallback.
  */
 export function useSocketEvent<T = unknown>(event: string, handler: (payload: T) => void) {
   const { socket } = useSocketContext();
@@ -20,7 +20,7 @@ export function useSocketEvent<T = unknown>(event: string, handler: (payload: T)
   }, [socket, event]);
 }
 
-/** Dispara el callback cada vez que el socket se reconecta, para re-sincronizar. */
+/** Fires the callback every time the socket reconnects, to re-sync. */
 export function useOnReconnect(callback: () => void) {
   const { reconnectCount } = useSocketContext();
   const callbackRef = useRef(callback);

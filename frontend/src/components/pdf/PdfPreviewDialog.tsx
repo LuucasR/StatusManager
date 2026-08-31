@@ -1,5 +1,6 @@
 import { DownloadRounded } from "@mui/icons-material";
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle } from "@mui/material";
+import { t } from "../../i18n";
 
 type Props = {
   url: string;
@@ -8,15 +9,16 @@ type Props = {
   onDownload: () => void;
 };
 
-export default function PdfPreviewDialog({ url, title = "Previsualización", onClose, onDownload }: Props) {
+export default function PdfPreviewDialog({ url, title, onClose, onDownload }: Props) {
+  const heading = title ?? t("pdf.previewTitle");
   return (
     <Dialog open={Boolean(url)} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>{title}</DialogTitle>
+      <DialogTitle>{heading}</DialogTitle>
 
       <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
         <Box
           component="iframe"
-          title={title}
+          title={heading}
           src={url}
           sx={{
             width: "100%",
@@ -29,9 +31,9 @@ export default function PdfPreviewDialog({ url, title = "Previsualización", onC
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
+        <Button onClick={onClose}>{t("common.close")}</Button>
         <Button variant="contained" startIcon={<DownloadRounded />} onClick={onDownload}>
-          Descargar PDF
+          {t("pdf.download")}
         </Button>
       </DialogActions>
     </Dialog>

@@ -10,10 +10,11 @@ datasource db {
 enum Role {
   EMPLOYEE
   ADMIN
-  // Van al final, en orden de incorporacion: ALTER TYPE ... ADD VALUE appendea
-  // al final del orden fisico en Postgres, y ponerlos en el medio haria
-  // divergir el orden logico del fisico. El orden de PRESENTACION vive en
-  // ROLE_ORDER (frontend/src/components/roles.ts), no aca.
+  // These go at the end, in the order they were introduced: ALTER TYPE ... ADD
+  // VALUE appends to the end of the physical order in Postgres, and putting
+  // them in the middle would make the logical order diverge from the physical
+  // one. The PRESENTATION order lives in ROLE_ORDER
+  // (frontend/src/components/roles.ts), not here.
   SUPERVISOR
   TASK_MANAGER
 }
@@ -26,6 +27,14 @@ enum ActivityStatus {
   MEETING
   OFFLINE
   DISCONNECTED
+  /// Set by the end-of-day check when someone working does not answer.
+  ///
+  /// Deliberately NOT the same value as DISCONNECTED: that one means the tab
+  /// was closed and is hidden from history on purpose, whereas this one is the
+  /// finding the whole check exists to record. Reusing DISCONNECTED would have
+  /// filed the result of the control into the one status the reports ignore.
+  /// Appended at the end for the same reason the Role values are.
+  AUTO_DISCONNECTED
 }
 
 enum TaskState {
@@ -51,6 +60,8 @@ enum NotificationType {
   TASK_REMOVED
   TASK_STATE
   TASK_MESSAGE
+  /// Someone was auto-disconnected for not answering the end-of-day check.
+  ACTIVITY_NO_RESPONSE
 }
 
 model Employee {
@@ -107,13 +118,13 @@ model ActivityHistory {
   endedAt    DateTime?
   employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  /// Tarea declarada al pasar a WORKING. SetNull: borrar una tarea no puede
-  /// borrar el tiempo que alguien le imputo.
+  /// Task declared when switching to WORKING. SetNull: deleting a task must not
+  /// delete the time somebody booked against it.
   taskId Int?
   task   Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  /// Snapshot del titulo, mismo criterio que Conversation.title y
-  /// Message.authorName: el resumen tiene que seguir diciendo en que se
-  /// trabajo aunque la tarea ya no exista.
+  /// Title snapshot, same reasoning as Conversation.title and
+  /// Message.authorName: the summary has to keep saying what was worked on even
+  /// once the task no longer exists.
   taskTitle String?
 
   @@index([employeeId, startedAt])
@@ -129,6 +140,13 @@ model Task {
   startsAt    DateTime
   endsAt      DateTime
   pinned      Boolean   @default(false)
+  /// Stamped when the end-of-day job moves a task out of IN_PROGRESS, cleared
+  /// when the next working morning puts it back.
+  ///
+  /// The flag is what makes the pair reversible: at 09:00 the state alone
+  /// cannot tell a task the job paused last night from one nobody ever started,
+  /// and resuming every PENDING task would start work on its own.
+  autoPausedAt DateTime?
   createdById Int?
   createdBy   Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
@@ -159,9 +177,9 @@ model TaskParticipant {
 model Conversation {
   id   Int              @id @default(autoincrement())
   kind ConversationKind
-  /// Idempotencia del get-or-create: "general" | "d:<minId>:<maxId>" | "t:<taskId>"
+  /// get-or-create idempotency: "general" | "d:<minId>:<maxId>" | "t:<taskId>"
   key  String           @unique
-  /// Snapshot del titulo: sobrevive al borrado de la tarea
+  /// Title snapshot: survives the task being deleted
   title  String?
   closed Boolean @default(false)
   taskId Int?    @unique
@@ -193,8 +211,8 @@ model Message {
   id             Int  @id @default(autoincrement())
   conversationId Int
   authorId       Int?
-  /// Snapshot: el historial tiene que seguir diciendo QUIEN hablo aunque
-  /// borren la cuenta. Por eso authorId es SetNull y no Cascade.
+  /// Snapshot: the history has to keep saying WHO spoke even after the account
+  /// is deleted. That is why authorId is SetNull and not Cascade.
   authorName     String
   body           String
   createdAt      DateTime @default(now())
@@ -203,6 +221,46 @@ model Message {
   author       Employee?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, id])
+}
+
+/**
+ * One row per recurring job, holding the last working day it ran.
+ *
+ * Kept in the database rather than in memory because that buys three things a
+ * bare setInterval does not: the job still runs after a restart that straddled
+ * its scheduled time (catch-up), it cannot run twice in one day, and a second
+ * instance cannot duplicate it, since claiming the day is a single conditional
+ * UPDATE.
+ */
+model ScheduledJobRun {
+  job       String   @id
+  /// Working day already processed, as YYYY-MM-DD in the configured timezone.
+  /// A date string and not a DateTime: the question is always "did this run
+  /// today, in the team's timezone", and storing an instant would make that a
+  /// conversion on every read instead of a string compare.
+  lastRunOn String
+  ranAt     DateTime @default(now())
+}
+
+/**
+ * Single-row configuration for the working day, editable by an admin.
+ *
+ * A typed single row rather than a key/value table so the times keep their
+ * shape and a typo cannot be stored as a valid setting.
+ */
+model WorkdaySettings {
+  /// Always 1. Enforced by the routes, which only ever upsert this id.
+  id                         Int      @id @default(1)
+  /// HH:MM in `timezone`. Resume paused tasks at this time.
+  startTime                  String   @default("09:00")
+  /// HH:MM in `timezone`. Run the activity check and pause tasks at this time.
+  endTime                    String   @default("17:30")
+  timezone                   String   @default("America/Argentina/Buenos_Aires")
+  /// Seconds someone has to accept the check before being auto-disconnected.
+  confirmationTimeoutSeconds Int      @default(120)
+  /// Master switch, so the automation can be stopped without a deploy.
+  enabled                    Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
 }
 
 model Notification {

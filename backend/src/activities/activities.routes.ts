@@ -13,18 +13,19 @@ import {
   resolveWorkingTask,
 } from "./activity-task";
 import { summarize } from "./activity-summary";
+import { LOCALE } from "../locale";
 
 const router = Router();
 router.use(requireAuth);
 
-/** Tope del historial en pantalla. Se avisa cuando se recorta. */
+/** Cap on the on-screen history. The client is told when it gets trimmed. */
 const HISTORY_TAKE = 500;
 
 /**
- * `new Date("2026-08-01")` es medianoche UTC, no local: en AR el rango
- * arrancaba el dia anterior a las 21:00. El frontend manda ISO completos con
- * offset; aca solo se valida, para que un `?from=basura` sea 400 y no un 500 de
- * Prisma con `Invalid Date`.
+ * `new Date("2026-08-01")` is midnight UTC, not local: in Argentina the range
+ * started the previous day at 21:00. The frontend sends full ISO strings with
+ * an offset; here it is only validated, so that `?from=garbage` is a 400 and
+ * not a Prisma 500 over an `Invalid Date`.
  */
 const rangeSchema = z.object({
   from: z.coerce.date().optional(),
@@ -35,7 +36,7 @@ function parseRange(query: unknown) {
   return rangeSchema.safeParse(query);
 }
 
-/** Datos de tarea que acompañan a un tramo del historial. */
+/** Task fields that travel alongside a history segment. */
 const HISTORY_TASK_INCLUDE = {
   select: { id: true, title: true, state: true },
 } as const;
@@ -78,9 +79,9 @@ router.get("/team", async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: true,
-        // Fallback al titulo de la tarea: el comentario dejo de ser obligatorio
-        // en WORKING, y sin esto la tarjeta diria "Sin detalle" justo para todo
-        // el que esta trabajando.
+        // Falls back to the task title: the comment stopped being mandatory for
+        // WORKING, and without this the card would read "No detail" for exactly
+        // everyone who is working.
         detail: open?.detail || open?.taskTitle || "",
         taskTitle: open?.taskTitle ?? null,
       };
@@ -88,7 +89,7 @@ router.get("/team", async (_req, res) => {
   );
 });
 
-/** Tareas que el empleado puede declarar al ponerse a Trabajar. */
+/** Tasks the employee can declare when switching to Working. */
 router.get("/assignable-tasks", async (req, res) => {
   res.json(await listAssignableTasks(req.auth!.employeeId));
 });
@@ -96,7 +97,7 @@ router.get("/assignable-tasks", async (req, res) => {
 router.get("/history", async (req, res) => {
   const range = parseRange(req.query);
   if (!range.success) {
-    return res.status(400).json({ message: "Rango de fechas inválido" });
+    return res.status(400).json({ code: "INVALID_DATE_RANGE", message: "Invalid date range" });
   }
   const { from, to } = range.data;
 
@@ -111,22 +112,22 @@ router.get("/history", async (req, res) => {
     take: HISTORY_TAKE + 1,
   });
 
-  // Se pide uno de mas para poder AVISAR que se recorto: con un tope mudo, la
-  // tabla y el resumen mostraban totales distintos para el mismo rango sin
-  // ninguna forma de darse cuenta.
+  // One extra row is fetched so the client can be TOLD it was trimmed: with a
+  // silent cap, the table and the summary showed different totals for the same
+  // range with no way to notice.
   const truncated = rows.length > HISTORY_TAKE;
   res.json({ rows: truncated ? rows.slice(0, HISTORY_TAKE) : rows, truncated });
 });
 
 /**
- * Resumen agregado del periodo. Siempre del empleado autenticado: NO acepta
- * `employeeId`, el resumen de equipo no existe y agregar el parametro sin un
- * requireStaff seria una fuga.
+ * Aggregated summary for the period. Always the authenticated employee's: it
+ * does NOT accept `employeeId`. There is no team summary, and adding the
+ * parameter without a requireStaff would be a leak.
  */
 router.get("/summary", async (req, res) => {
   const range = parseRange(req.query);
   if (!range.success) {
-    return res.status(400).json({ message: "Rango de fechas inválido" });
+    return res.status(400).json({ code: "INVALID_DATE_RANGE", message: "Invalid date range" });
   }
   const { from, to } = range.data;
 
@@ -137,9 +138,9 @@ router.get("/summary", async (req, res) => {
       ...overlappingWhere(from, to),
     },
     include: {
-      // Sin filtro de archivado a proposito: el resumen es historia, no
-      // pizarra. Si filtrara por visibleTasksWhere, todo lo anterior a 14 dias
-      // del fin de la tarea aparecería sin integrantes ni estado.
+      // No archive filter on purpose: the summary is history, not the board. If
+      // it filtered by visibleTasksWhere, anything older than 14 days past the
+      // task's end would show up with no participants and no state.
       task: {
         select: {
           id: true,
@@ -169,7 +170,7 @@ router.get("/summary", async (req, res) => {
 router.get("/report.pdf", async (req, res) => {
   const range = parseRange(req.query);
   if (!range.success) {
-    return res.status(400).json({ message: "Rango de fechas inválido" });
+    return res.status(400).json({ code: "INVALID_DATE_RANGE", message: "Invalid date range" });
   }
   const { from, to } = range.data;
 
@@ -184,16 +185,16 @@ router.get("/report.pdf", async (req, res) => {
   });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", 'inline; filename="mi-actividad.pdf"');
+  res.setHeader("Content-Disposition", 'inline; filename="my-activity.pdf"');
   const doc = new PDFDocument({ margin: 0, size: "A4" });
   doc.pipe(res);
   const periodLabel = from || to
-    ? `${from ? from.toLocaleDateString("es-AR") : "Inicio"} al ${to ? to.toLocaleDateString("es-AR") : "presente"}`
-    : "Historial completo";
+    ? `${from ? from.toLocaleDateString(LOCALE) : "Start"} to ${to ? to.toLocaleDateString(LOCALE) : "now"}`
+    : "Full history";
 
   renderActivityReport(doc, {
-    title: "Mi registro de actividades",
-    subtitle: `Empleado #${employee.employeeNumber} - ${employee.name}`,
+    title: "My activity log",
+    subtitle: `Employee #${employee.employeeNumber} - ${employee.name}`,
     periodLabel,
     rows: rows.map((row) => ({
       ...row,
@@ -212,7 +213,7 @@ router.post("/confirm-activity", (req, res) => {
 
   if (!confirmed) {
     return res.status(400).json({
-      message: "No hay ninguna confirmación pendiente."
+      code: "NO_PENDING_CONFIRMATION", message: "There is no pending confirmation."
     });
   }
 
@@ -227,16 +228,18 @@ router.post("/status", async (req, res) => {
   const parsed = changeStatusSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
+      code: "INVALID_STATUS_CHANGE",
       message:
         parsed.error.issues[0]?.message ??
-        "No se pudo validar el cambio de estado",
+        "The status change could not be validated",
     });
   }
 
   const now = new Date();
 
-  // Fuera de la transaccion: son lecturas, y si rechaza no hay nada que
-  // deshacer. `enforce` solo aca — el admin no queda atado a las tareas ajenas.
+  // Outside the transaction: these are reads, and if it rejects there is
+  // nothing to undo. `enforce` only here - an admin is not bound by someone
+  // else's task list.
   let task;
   try {
     task = await resolveWorkingTask({
@@ -249,7 +252,7 @@ router.post("/status", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof WorkingTaskError) {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ code: error.code, message: error.message });
     }
     throw error;
   }

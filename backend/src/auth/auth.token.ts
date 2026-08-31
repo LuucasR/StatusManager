@@ -2,8 +2,9 @@ import jwt from "jsonwebtoken";
 
 import type { Role } from "@prisma/client";
 
-// El rol sale del enum de Prisma y no de una union escrita a mano: agregar un
-// rol nuevo al schema obliga a revisar los chequeos, en vez de pasar en silencio.
+// The role comes from the Prisma enum rather than a hand-written union: adding
+// a new role to the schema forces the checks to be revisited instead of
+// slipping through silently.
 export type AuthPayload = { employeeId: number; role: Role };
 
 /**

@@ -1,36 +1,36 @@
 import { Prisma, TaskState } from "@prisma/client";
 
 /**
- * Dias que una tarea sigue en la pizarra despues de su fecha de fin. Pasado el
- * corte se "archiva": deja de listarse en GET /tasks, pero sigue existiendo,
- * sigue siendo accesible por GET /tasks/:id y sigue apareciendo en el reporte.
- * Fijar la tarea (pinned) la exceptua para siempre.
+ * Days a task stays on the board after its end date. Past the cutoff it is
+ * "archived": it stops being listed by GET /tasks, but it still exists, is
+ * still reachable through GET /tasks/:id and still appears in the report.
+ * Pinning a task exempts it forever.
  */
 export const TASK_ARCHIVE_AFTER_DAYS = 14;
 
 const DAY_MS = 86_400_000;
 
-/** Momento a partir del cual una tarea sin fijar deja de verse. */
+/** Instant from which an unpinned task stops being visible. */
 export function taskArchiveCutoff(now: Date = new Date()) {
   return new Date(now.getTime() - TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
 }
 
-/** Momento exacto en que esta tarea se archivara, si no la fijan. */
+/** Exact instant this task will be archived, if nobody pins it. */
 export function taskArchivesAt(endsAt: Date) {
   return new Date(endsAt.getTime() + TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
 }
 
 /**
- * Fragmento de `where` para la pizarra. Es una FUNCION y no una const como
- * `visibleHistoryWhere`: el corte depende de `now`, y una const evaluada al
- * importar el modulo congelaria el corte al arranque del proceso.
+ * `where` fragment for the board. It is a FUNCTION and not a const like
+ * `visibleHistoryWhere`: the cutoff depends on `now`, and a const evaluated at
+ * import time would freeze the cutoff at process start.
  *
- * Ventana deslizante de 14x24h, sin normalizar a medianoche, para que el
- * predicado del backend y el chip "se archiva en N dias" del frontend sean
- * exactamente el mismo: visible <=> endsAt >= now - 14d <=> archivesAt >= now.
+ * A 14x24h sliding window, not normalised to midnight, so that the backend
+ * predicate and the frontend's "archived in N days" chip are exactly the same:
+ * visible <=> endsAt >= now - 14d <=> archivesAt >= now.
  *
- * OJO: no usar en GET /tasks/report.pdf. El reporte incluye las archivadas a
- * proposito; es el unico lugar donde se pueden ver.
+ * CAREFUL: do not use in GET /tasks/report.pdf. The report includes archived
+ * tasks on purpose; it is the only place they can be seen.
  */
 export function visibleTasksWhere(now: Date = new Date()) {
   return {
@@ -39,17 +39,16 @@ export function visibleTasksWhere(now: Date = new Date()) {
 }
 
 /**
- * Etiquetas y colores por estado para el PDF. Tipado Record<TaskState, ...>
- * para que agregar un estado al enum rompa la compilacion en vez de fallar en
- * runtime a mitad del stream. Los hex son los mismos de STATUS_META
- * (activities/activity-status.ts) para que los dos reportes se lean como el
- * mismo sistema.
+ * Labels and colours per state for the PDF. Typed Record<TaskState, ...> so
+ * that adding a state to the enum breaks compilation instead of failing at
+ * runtime halfway through the stream. The hexes are the same as STATUS_META
+ * (activities/activity-status.ts) so both reports read as the same system.
  */
 export const TASK_STATE_META: Record<
   TaskState,
   { label: string; color: string; pale: string }
 > = {
-  PENDING: { label: "Pendiente", color: "#666A7D", pale: "#ECEEF2" },
-  IN_PROGRESS: { label: "En curso", color: "#4C4DC9", pale: "#ECECFF" },
-  DONE: { label: "Terminada", color: "#208454", pale: "#E5F6ED" },
+  PENDING: { label: "Pending", color: "#666A7D", pale: "#ECEEF2" },
+  IN_PROGRESS: { label: "In progress", color: "#4C4DC9", pale: "#ECECFF" },
+  DONE: { label: "Done", color: "#208454", pale: "#E5F6ED" },
 };

@@ -1,8 +1,8 @@
 let redirecting = false;
 
 /**
- * Sesión vencida o inválida: limpia el token y manda al login. El guard evita
- * que varias respuestas 401 simultáneas disparen N redirecciones.
+ * Expired or invalid session: clears the token and sends the user to the login
+ * screen. The guard stops several simultaneous 401s from firing N redirects.
  */
 export function expireSession() {
   if (redirecting) return;

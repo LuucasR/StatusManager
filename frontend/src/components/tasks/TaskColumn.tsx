@@ -2,11 +2,12 @@ import { useDroppable } from "@dnd-kit/core";
 import { Box, Paper, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import { STATE_META, stateVars, type TaskState } from "./types";
+import { tf } from "../../i18n";
 
 type Props = {
   state: TaskState;
   count: number;
-  /** true cuando se está arrastrando una tarjeta que viene de otra columna. */
+  /** true while dragging a card that comes from another column. */
   dropHint: boolean;
   children: ReactNode;
 };
@@ -44,7 +45,7 @@ export default function TaskColumn({ state, count, dropHint, children }: Props) 
           )}
 
           {isOver && dropHint && (
-            <Box className="task-drop-hint">Soltar en {meta.label}</Box>
+            <Box className="task-drop-hint">{tf("board.dropInto", { state: meta.label })}</Box>
           )}
         </Stack>
       </Box>

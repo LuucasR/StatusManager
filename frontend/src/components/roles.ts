@@ -1,60 +1,65 @@
+import { t, type TranslationKey } from "../i18n";
+
 export type Role = "EMPLOYEE" | "TASK_MANAGER" | "SUPERVISOR" | "ADMIN";
 
 /**
- * Orden de PRESENTACION (selectores de rol), por privilegio percibido. No tiene
- * por qué coincidir con el orden del enum en Postgres, que appendea los valores
- * nuevos al final por como funciona ALTER TYPE ... ADD VALUE.
+ * PRESENTATION order (role pickers), by perceived privilege. It does not have
+ * to match the enum order in Postgres, which appends new values at the end
+ * because of how ALTER TYPE ... ADD VALUE works.
  */
 export const ROLE_ORDER: Role[] = ["EMPLOYEE", "TASK_MANAGER", "SUPERVISOR", "ADMIN"];
 
-export const ROLE_META: Record<Role, { label: string; help: string; color: string; soft: string }> = {
-  EMPLOYEE: {
-    label: "Empleado",
-    help: "Ve la pizarra, su historial y chatea. Solo mueve las tareas donde participa.",
-    color: "#4a4d63",
-    soft: "#eef0f6",
-  },
-  TASK_MANAGER: {
-    label: "Gestor de tareas",
-    help: "Además crea, edita, borra y mueve cualquier tarea. No ve el historial del equipo ni los chats de las tareas donde no participa: para seguir su propia tarea, tiene que agregarse como participante.",
-    color: "#a35b12",
-    soft: "#fdf0e0",
-  },
-  SUPERVISOR: {
-    label: "Supervisor",
-    help: "Además gestiona tareas, ve el historial y los reportes del equipo, y pide confirmación de actividad.",
-    color: "#16738b",
-    soft: "#e2f5f8",
-  },
-  ADMIN: {
-    label: "Administrador",
-    help: "Todo lo anterior más crear cuentas, cambiar roles, aprobar altas y cambiar el estado de otros.",
-    color: "#4c4dc9",
-    soft: "#ecebff",
-  },
+/**
+ * Only the hue is fixed. `soft` is mixed against var(--surface) at paint time
+ * so the role chips stay legible in dark mode instead of keeping a pale
+ * hardcoded background.
+ */
+const ROLE_COLORS: Record<Role, string> = {
+  EMPLOYEE: "#4a4d63",
+  TASK_MANAGER: "#a35b12",
+  SUPERVISOR: "#16738b",
+  ADMIN: "#4c4dc9",
 };
 
 /**
- * Lookup tolerante. `Role` es una union escrita a mano y no derivada de Prisma,
- * asi que un rol nuevo en el backend no rompe la compilacion del frontend: sin
- * este fallback, un solo empleado con un rol desconocido tumbaba el dashboard
- * de TODOS con "Cannot read properties of undefined".
+ * `label` and `help` are getters so they follow the active language while
+ * call sites keep reading ROLE_META[role].label unchanged.
+ */
+export const ROLE_META = ROLE_ORDER.reduce((all, role) => {
+  all[role] = {
+    color: ROLE_COLORS[role],
+    soft: `color-mix(in srgb, ${ROLE_COLORS[role]} 16%, var(--surface))`,
+    get label() {
+      return t(`role.${role}` as TranslationKey);
+    },
+    get help() {
+      return t(`role.${role}.help` as TranslationKey);
+    },
+  };
+  return all;
+}, {} as Record<Role, { label: string; help: string; color: string; soft: string }>);
+
+/**
+ * Forgiving lookup. `Role` is a hand-written union rather than one derived from
+ * Prisma, so a new role in the backend does not break the frontend build:
+ * without this fallback, a single employee with an unknown role took down
+ * EVERYONE's dashboard with "Cannot read properties of undefined".
  */
 export function roleMeta(role?: string) {
   return (role && ROLE_META[role as Role]) || ROLE_META.EMPLOYEE;
 }
 
-/** Gestiona el tablero de tareas. Espeja canManageTasks del backend. */
+/** Runs the task board. Mirrors canManageTasks in the backend. */
 export function canManageTasks(role?: string) {
   return role === "ADMIN" || role === "SUPERVISOR" || role === "TASK_MANAGER";
 }
 
-/** Ve al equipo: historial, reportes y chats ajenos. Espeja isStaff. */
+/** Sees the team: history, reports and other people's chats. Mirrors isStaff. */
 export function isStaff(role?: string) {
   return role === "ADMIN" || role === "SUPERVISOR";
 }
 
-/** Solo el admin: cuentas, roles y estados ajenos. */
+/** Admin only: accounts, roles and other people's statuses. */
 export function isAdminRole(role?: string) {
   return role === "ADMIN";
 }
