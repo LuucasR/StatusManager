@@ -96,6 +96,9 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .status-dot.meeting { background: #16738b; box-shadow: 0 0 0 6px color-mix(in srgb, #16738b 22%, var(--surface)); }
 .status-dot.offline { background: #8a8da0; box-shadow: 0 0 0 6px color-mix(in srgb, #8a8da0 22%, var(--surface)); }
 .status-dot.disconnected { background: #b23c4a; box-shadow: 0 0 0 6px color-mix(in srgb, #b23c4a 22%, var(--surface)); }
+/* Its own colour, not the grey default: this is the one status the app itself
+   decides, and #C2410C is what STATUS_COLORS and the PDF palette already use. */
+.status-dot.auto_disconnected { background: #C2410C; box-shadow: 0 0 0 6px color-mix(in srgb, #C2410C 22%, var(--surface)); }
 .employee-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0 56px; }
 /* Padding and radius now come from .emp-note; this only sets the grid child. */
 .employee-card { padding: 20px; }

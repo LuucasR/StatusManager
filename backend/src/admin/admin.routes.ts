@@ -354,6 +354,15 @@ router.post("/employees/:id/request-confirmation", requireStaff, async (req, res
     });
   }
 
+  // Stamped for the same reason the recurring check stamps it: this IS a
+  // prompt, so it starts an answer window the check must not talk over with a
+  // second one, and the timeout stays resolvable from the database if the
+  // in-process timer is lost to a restart.
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: { lastPromptedAt: new Date() }
+  });
+
   res.json({
     success: true
   });
@@ -599,7 +608,7 @@ if (from && to) {
 
 /**
  * Working-day automation settings. Admin-only, and the only supported way to
- * change when the end-of-day check and the task pause/resume run.
+ * change when the activity check and the task pause/resume run.
  *
  * Validated here rather than trusted from the row: the scheduler reads these
  * every minute, and a malformed time would otherwise silently disable a job.
@@ -628,6 +637,11 @@ const workdaySettingsSchema = z
     // Floor of 30s so nobody can set a window too short to notice, ceiling of
     // an hour because the timer is in-process and would not survive longer.
     confirmationTimeoutSeconds: z.number().int().min(30).max(3600),
+    // How often the check comes back while someone stays WORKING out of hours.
+    // Floor of one minute because that is the scheduler's own resolution -
+    // anything smaller would just round up to it; ceiling of 12 hours, past
+    // which the check would not come round again before the next working day.
+    recheckIntervalMinutes: z.number().int().min(1).max(720),
     enabled: z.boolean(),
   })
   .partial()

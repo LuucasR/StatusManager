@@ -1,12 +1,23 @@
 import { ActivityStatus, TaskState } from "@prisma/client";
 import prisma from "../prisma/client";
-import { emitTaskChanged, isEmployeeOnline, sendConfirmationRequest } from "../realtime";
+import {
+  emitTaskChanged,
+  hasPendingConfirmation,
+  sendConfirmationRequest,
+} from "../realtime";
 import { handleMissedConfirmation } from "../activities/activity-confirmation";
 import { logger } from "../logger";
-import type { WorkdayConfig } from "./workday";
+import {
+  checkDue,
+  checkExpired,
+  isOffHours,
+  type ResolvedDay,
+  type WorkdayConfig,
+  type ZonedNow,
+} from "./workday";
 
 /**
- * The three points of the working day.
+ * The points of the working day, plus the check that runs between them.
  *
  * The bulk moves are deliberately written with `updateMany` rather than by going
  * through the task routes: the routes emit a TASK_STATE notification per
@@ -27,98 +38,108 @@ async function disconnectQuietly(employeeId: number) {
 }
 
 /**
- * End of day, part one: ask everyone still WORKING whether they still are.
+ * The out-of-hours check: ask everyone still WORKING whether they still are,
+ * and keep asking every `recheckIntervalMinutes` until they stop being WORKING.
+ *
+ * Runs on EVERY tick, including on closed days, because the window it cares
+ * about - `isOffHours` - spans the night, the weekend and a holiday. That is
+ * also why it is not one of the JOBS in index.ts: those claim a calendar day and
+ * fire once, and a check that repeats and crosses midnight cannot be expressed
+ * that way. Its idempotency is per employee instead, `lastPromptedAt` plus the
+ * interval, which two instances ticking at the same second cannot both pass.
  *
  * Only WORKING is asked. Someone on Break, at Lunch, in a Meeting or already
  * Away has told the system what they are doing; the check exists for the status
  * that claims active work.
  *
- * Nothing is paused here. That happens in runClose, after people have had the
- * chance to answer - which is the whole point of asking.
+ * Nothing is paused here. Pausing is a consequence of not answering, and lives
+ * in handleMissedConfirmation, next to the disconnect it belongs to.
  */
-export async function runPrompt(config: WorkdayConfig) {
+export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, now: ZonedNow) {
+  if (!isOffHours(day, config, now.minutes)) return;
+
   const working = await prisma.employee.findMany({
     where: { active: true, currentStatus: ActivityStatus.WORKING },
-    select: { id: true },
+    select: { id: true, lastPromptedAt: true, lastConfirmedAt: true },
   });
 
+  const at = new Date();
   let prompted = 0;
   let disconnected = 0;
 
   for (const employee of working) {
-    if (isEmployeeOnline(employee.id)) {
-      sendConfirmationRequest(employee.id, config.confirmationTimeoutSeconds * 1000);
-      prompted += 1;
-    } else {
-      // No tab open, so there is nothing to accept. Waiting out a timer they
-      // could not possibly beat would only delay the same outcome.
-      if (await disconnectQuietly(employee.id)) disconnected += 1;
+    const { id, lastPromptedAt, lastConfirmedAt } = employee;
+
+    // Asked, never answered, out of time. Skipped while realtime.ts still holds
+    // a live timer for them: that one is about to resolve this same check, and
+    // running both would disconnect the person twice. What is left is exactly
+    // the case this backstop is for - the restart that dropped the timer.
+    if (
+      checkExpired(lastPromptedAt, lastConfirmedAt, config.confirmationTimeoutSeconds, at) &&
+      !hasPendingConfirmation(id)
+    ) {
+      if (await disconnectQuietly(id)) disconnected += 1;
+      continue;
     }
+
+    // Asked, still inside their answer window: leave them alone. Without this,
+    // a short interval would stack a second prompt on top of an unanswered one.
+    const answered = !lastPromptedAt || (lastConfirmedAt !== null && lastConfirmedAt >= lastPromptedAt);
+    if (!answered) continue;
+
+    if (!checkDue(lastPromptedAt, config.recheckIntervalMinutes, at)) continue;
+
+    // Its own return value reports "no tab open" - asking it rather than
+    // checking presence separately closes the gap where they disconnect between
+    // the two calls, which would stamp a deadline against a prompt never sent.
+    if (!sendConfirmationRequest(id, config.confirmationTimeoutSeconds * 1000)) {
+      // Nothing there to accept it. Waiting out a timer they could not possibly
+      // beat would only delay the same outcome.
+      if (await disconnectQuietly(id)) disconnected += 1;
+      continue;
+    }
+
+    // Stamped only once the prompt has actually gone out, so the answer window
+    // starts when the question did.
+    await prisma.employee.update({ where: { id }, data: { lastPromptedAt: at } });
+    prompted += 1;
   }
 
-  logger.info({ prompted, autoDisconnected: disconnected }, "workday prompt finished");
+  if (prompted > 0 || disconnected > 0) {
+    logger.info({ prompted, autoDisconnected: disconnected }, "activity check finished");
+  }
 }
 
 /**
- * End of day, part two: resolve the unanswered checks and pause the board.
+ * End of day: pause the board.
  *
- * Who counts as having answered is read from the database, not from the
- * in-memory timer: `lastConfirmedAt` against the moment the prompt job ran,
- * which the scheduler already records as that job's `ranAt`. A restart between
- * the two jobs therefore loses nothing.
+ * Disconnecting whoever ignored the check is no longer this job's business -
+ * runActivityCheck owns that, per employee and on its own timer. What is left
+ * is the board sweep, and dropping the confirmation bookkeeping made its rule
+ * simpler: by the time this runs, anybody who answered is still WORKING and
+ * anybody who did not has already been auto-disconnected out of it. So the live
+ * status IS the answer, and no window of `lastConfirmedAt` against some job's
+ * `ranAt` has to be reconstructed.
+ *
+ * A task has participants, not an owner, so a single person still working keeps
+ * it alive: it is paused only when NONE of its participants is WORKING.
  */
 export async function runClose(_config: WorkdayConfig) {
-  const promptRun = await prisma.scheduledJobRun.findUnique({
-    where: { job: "workday-prompt" },
-    select: { ranAt: true },
-  });
-
-  // No prompt on record (first deploy, or the row was cleared): treat nobody as
-  // having confirmed rather than everybody.
-  const since = promptRun?.ranAt ?? new Date();
-
-  const confirmed = await prisma.employee.findMany({
-    where: { active: true, lastConfirmedAt: { gte: since } },
-    select: { id: true },
-  });
-  const confirmedIds = confirmed.map((employee) => employee.id);
-
-  // Still claiming to work and never answered.
-  const silent = await prisma.employee.findMany({
-    where: {
-      active: true,
-      currentStatus: ActivityStatus.WORKING,
-      id: { notIn: confirmedIds },
-    },
-    select: { id: true },
-  });
-
-  let disconnected = 0;
-  for (const employee of silent) {
-    if (await disconnectQuietly(employee.id)) disconnected += 1;
-  }
-
-  // A task has participants, not an owner, so "pause the tasks of whoever did
-  // not answer" is ambiguous the moment two people share one. The rule is that
-  // a single confirmation keeps the task alive: it is paused only when NONE of
-  // its participants confirmed.
-  //
-  // An empty confirmedIds makes the inner `some` match nothing, so the NOT
-  // matches everything - which is exactly right when nobody answered.
   const paused = await prisma.task.updateMany({
     where: {
       state: TaskState.IN_PROGRESS,
-      NOT: { participants: { some: { employeeId: { in: confirmedIds } } } },
+      NOT: {
+        participants: {
+          some: { employee: { active: true, currentStatus: ActivityStatus.WORKING } },
+        },
+      },
     },
     data: { state: TaskState.PENDING, autoPausedAt: new Date() },
   });
 
   if (paused.count > 0) emitTaskChanged({ type: "bulk" });
 
-  logger.info(
-    { confirmed: confirmedIds.length, autoDisconnected: disconnected, tasksPaused: paused.count },
-    "workday close finished"
-  );
+  logger.info({ tasksPaused: paused.count }, "workday close finished");
 }
 
 /**

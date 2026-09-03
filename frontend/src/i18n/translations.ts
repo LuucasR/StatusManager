@@ -433,6 +433,9 @@ export const en = {
   "workday.timeout": "Time to answer (s)",
   "workday.timeoutHelp":
     "Whoever does not answer in this window is disconnected, and their tasks go back to Pending.",
+  "workday.recheck": "Ask again every (min)",
+  "workday.recheckHelp":
+    "Out of hours the question keeps coming back this often, all night and through weekends and holidays, until the person stops being marked as working.",
   "workday.saved": "Schedule saved",
   "workday.calendar": "Exceptions",
   "workday.calendarHelp":
@@ -882,6 +885,9 @@ const es: Record<TranslationKey, string> = {
   "workday.timeout": "Tiempo para responder (s)",
   "workday.timeoutHelp":
     "A quien no responda en esa ventana se lo desconecta, y sus tareas vuelven a Pendiente.",
+  "workday.recheck": "Volver a preguntar cada (min)",
+  "workday.recheckHelp":
+    "Fuera de horario la pregunta vuelve con esta frecuencia, toda la noche y también fines de semana y feriados, hasta que la persona deje de estar marcada como trabajando.",
   "workday.saved": "Horarios guardados",
   "workday.calendar": "Excepciones",
   "workday.calendarHelp":

@@ -76,12 +76,19 @@ model Employee {
   /// Tokens issued before this instant are rejected. Without it, changing a
   /// password left every already-issued JWT valid for up to a day.
   passwordChangedAt  DateTime?
-  /// When they last answered an end-of-day activity check.
+  /// When they last answered an activity check.
   ///
-  /// Persisted rather than held in memory so the closing job can tell who
-  /// answered even if the process restarted mid-window. Compared against the
-  /// prompt job's own ranAt, so no per-day table is needed.
+  /// Persisted rather than held in memory so the check can tell who answered
+  /// even if the process restarted mid-window. Compared against
+  /// `lastPromptedAt`: an answer counts only if it came AFTER the question.
   lastConfirmedAt    DateTime?
+  /// When the app last asked them whether they were still working.
+  ///
+  /// This is what makes the off-hours check both recurrent and restart-proof.
+  /// The interval is measured from here, so the cadence cannot drift, and the
+  /// answer timeout is re-derivable from the database after a restart drops the
+  /// in-process timer. Null means never asked, which is due immediately.
+  lastPromptedAt     DateTime?
   role           Role             @default(EMPLOYEE)
   currentStatus  ActivityStatus   @default(OFFLINE)
   statusSince    DateTime         @default(now())
@@ -271,6 +278,12 @@ model WorkdaySettings {
   confirmationDelayMinutes   Int      @default(0)
   /// Seconds someone has to accept the check before being auto-disconnected.
   confirmationTimeoutSeconds Int      @default(120)
+  /// Minutes between checks while someone is still WORKING out of hours.
+  ///
+  /// The check is not a one-off at the end of the day: as long as the status
+  /// claims active work outside the calendar's hours, the question comes back
+  /// this often - through the night, the weekend and a holiday alike.
+  recheckIntervalMinutes     Int      @default(30)
   /// Master switch, so the automation can be stopped without a deploy.
   enabled                    Boolean  @default(true)
   updatedAt                  DateTime @updatedAt

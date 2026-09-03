@@ -58,6 +58,7 @@ import {
   type Status,
 } from "../components/activities/statuses";
 import { LOCALE } from "../locale";
+import { getSettings } from "../components/workday/workdayApi";
 
 
 type Employee = {
@@ -152,7 +153,18 @@ export default function DashboardPage() {
 
   const [error, setError] = useState("");
   const [confirmationDialog, setConfirmationDialog] = useState(false);
-const [confirmationCountdown, setConfirmationCountdown] = useState(120);
+const [confirmationCountdown, setConfirmationCountdown] = useState(0);
+/*
+ * How long the server will actually wait, read from the workday settings.
+ *
+ * Held in a ref rather than in state because the socket handler needs the
+ * current value at the instant a prompt lands, and it must not re-subscribe
+ * when the number changes. It used to be hardcoded to 120 here while the
+ * server read `confirmationTimeoutSeconds`, so an admin lowering the window
+ * left the dialog counting down to a moment that had already passed - much
+ * more visible now that the same prompt comes back all evening.
+ */
+const confirmationSeconds = useRef(120);
 const [confirming, setConfirming] = useState(false);
 const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
@@ -192,6 +204,14 @@ const [notice, setNotice] = useState("");
     const current = await api<Employee>("/activities/me");
 
     setMe(current);
+
+    // Best effort: a failure here must not take the dashboard down with it,
+    // since the countdown is cosmetic and the server enforces the real window.
+    try {
+      confirmationSeconds.current = (await getSettings()).confirmationTimeoutSeconds;
+    } catch {
+      // Keep whatever we had; the default matches the server's own.
+    }
 
     await loadHistory(historyParamsRef.current);
 
@@ -282,7 +302,7 @@ useSocketEvent("status:changed", () => load());
 
 useSocketEvent("confirmation:request", () => {
   setConfirmationDialog(true);
-  setConfirmationCountdown(120);
+  setConfirmationCountdown(confirmationSeconds.current);
   // A fresh prompt has to clear the previous one's in-flight flag, or a
   // failed attempt would leave the new dialog's button permanently disabled.
   setConfirming(false);

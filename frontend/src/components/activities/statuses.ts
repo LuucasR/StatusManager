@@ -82,7 +82,7 @@ export const requiresDetail = new Set<Status>(["OFFLINE"]);
 /**
  * What a person may pick for themselves.
  *
- * AUTO_DISCONNECTED is excluded because only the end-of-day job produces it;
+ * AUTO_DISCONNECTED is excluded because only the activity check produces it;
  * offering it would let someone file themselves as having failed a check they
  * were never shown. The backend refuses it too (activity-validation.ts) - this
  * list only keeps it out of the menu.

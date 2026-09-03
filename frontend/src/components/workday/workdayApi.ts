@@ -7,6 +7,8 @@ export type WorkdaySettings = {
   timezone: string;
   confirmationDelayMinutes: number;
   confirmationTimeoutSeconds: number;
+  /** Minutes between checks while someone is still working out of hours. */
+  recheckIntervalMinutes: number;
   enabled: boolean;
 };
 

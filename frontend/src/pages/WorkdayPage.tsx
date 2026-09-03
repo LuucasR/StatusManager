@@ -234,6 +234,22 @@ export default function WorkdayPage() {
                 void persist({ confirmationTimeoutSeconds: Number(e.target.value) })
               }
             />
+            <TextField
+              label={t("workday.recheck")}
+              type="number"
+              disabled={!canEdit}
+              value={settings.recheckIntervalMinutes}
+              helperText={t("workday.recheckHelp")}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  recheckIntervalMinutes: Number(e.target.value),
+                })
+              }
+              onBlur={(e) =>
+                void persist({ recheckIntervalMinutes: Number(e.target.value) })
+              }
+            />
           </Stack>
 
           <TextField

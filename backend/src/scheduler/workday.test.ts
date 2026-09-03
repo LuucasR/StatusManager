@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  checkDue,
+  checkExpired,
   closeMinutes,
+  isOffHours,
   promptMinutes,
   resolveWorkday,
   zonedNow,
@@ -26,6 +29,7 @@ const config: WorkdayConfig = {
   timezone: BA,
   confirmationDelayMinutes: 0,
   confirmationTimeoutSeconds: 120,
+  recheckIntervalMinutes: 30,
   enabled: true,
 };
 
@@ -150,5 +154,101 @@ describe("derived prompt and close times", () => {
     const day = resolveWorkday(broken, 3, null);
     assert.equal(promptMinutes(day, broken), null);
     assert.equal(closeMinutes(day, broken), null);
+  });
+});
+
+describe("isOffHours", () => {
+  it("covers a closed day end to end", () => {
+    const weekend = resolveWorkday(config, 6, null);
+    assert.equal(isOffHours(weekend, config, 0), true);
+    assert.equal(isOffHours(weekend, config, 12 * 60), true);
+    assert.equal(isOffHours(weekend, config, 23 * 60 + 59), true);
+  });
+
+  it("is false inside a working day's own hours", () => {
+    const day = resolveWorkday(config, 3, null);
+    assert.equal(isOffHours(day, config, 9 * 60), false);
+    assert.equal(isOffHours(day, config, 13 * 60), false);
+    // 17:29 is still inside; the prompt goes out at 17:30.
+    assert.equal(isOffHours(day, config, 17 * 60 + 29), false);
+  });
+
+  it("starts at the prompt time, grace period included", () => {
+    const withDelay = { ...config, confirmationDelayMinutes: 15 };
+    const day = resolveWorkday(withDelay, 3, null);
+    assert.equal(isOffHours(day, withDelay, 17 * 60 + 40), false);
+    assert.equal(isOffHours(day, withDelay, 17 * 60 + 45), true);
+  });
+
+  it("still reports off-hours after midnight on a working day", () => {
+    // The case the whole recurring check turns on: 02:00 on a Tuesday is a
+    // working day by the calendar, but nobody's hours have started, so someone
+    // who has been "working" since Monday evening still gets asked.
+    const day = resolveWorkday(config, 2, null);
+    assert.equal(isOffHours(day, config, 2 * 60), true);
+    assert.equal(isOffHours(day, config, 8 * 60 + 59), true);
+    assert.equal(isOffHours(day, config, 9 * 60), false);
+  });
+
+  it("reports false for malformed hours instead of prompting everybody", () => {
+    // An unusable configuration must not read as "out of hours for the whole
+    // roster", which would ask everyone at once and disconnect whoever missed it.
+    const broken = { ...config, endTime: "nope" };
+    assert.equal(isOffHours(resolveWorkday(broken, 3, null), broken, 3 * 60), false);
+  });
+});
+
+describe("checkDue", () => {
+  const now = new Date("2026-03-10T23:00:00Z");
+
+  it("is due when nobody has ever been asked", () => {
+    assert.equal(checkDue(null, 30, now), true);
+  });
+
+  it("is not due before the interval has elapsed", () => {
+    const asked = new Date(now.getTime() - 29 * 60_000);
+    assert.equal(checkDue(asked, 30, now), false);
+  });
+
+  it("is due exactly on the interval", () => {
+    const asked = new Date(now.getTime() - 30 * 60_000);
+    assert.equal(checkDue(asked, 30, now), true);
+  });
+
+  it("fires immediately on a stamp from a previous stretch", () => {
+    // This is what makes the first prompt of an evening need no special case:
+    // yesterday's stamp is older than any interval.
+    const yesterday = new Date(now.getTime() - 20 * 60 * 60_000);
+    assert.equal(checkDue(yesterday, 30, now), true);
+  });
+});
+
+describe("checkExpired", () => {
+  const now = new Date("2026-03-10T23:00:00Z");
+  const asked = new Date(now.getTime() - 5 * 60_000);
+
+  it("is not expired when there is no prompt outstanding", () => {
+    assert.equal(checkExpired(null, null, 120, now), false);
+  });
+
+  it("is not expired once they answered after being asked", () => {
+    const answered = new Date(asked.getTime() + 10_000);
+    assert.equal(checkExpired(asked, answered, 120, now), false);
+  });
+
+  it("ignores an answer that predates the question", () => {
+    // Yesterday's confirmation must not clear today's check.
+    const stale = new Date(asked.getTime() - 60_000);
+    assert.equal(checkExpired(asked, stale, 120, now), true);
+  });
+
+  it("is not expired while still inside the answer window", () => {
+    const justAsked = new Date(now.getTime() - 30_000);
+    assert.equal(checkExpired(justAsked, null, 120, now), false);
+  });
+
+  it("expires exactly on the timeout", () => {
+    const onTheDot = new Date(now.getTime() - 120_000);
+    assert.equal(checkExpired(onTheDot, null, 120, now), true);
   });
 });

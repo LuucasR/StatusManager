@@ -173,6 +173,19 @@ export function sendConfirmationRequest(
   return true;
 }
 
+/**
+ * Whether a check is still ticking in this process for that employee.
+ *
+ * The recurring check asks before falling back to its own database deadline: an
+ * entry here means the setTimeout above is still going to resolve this person,
+ * and both firing would disconnect them twice - two AUTO_DISCONNECTED segments
+ * and two notifications for one missed check. A missing entry is precisely the
+ * case the backstop exists for, since a restart drops the map.
+ */
+export function hasPendingConfirmation(employeeId: number) {
+  return pendingConfirmations.has(employeeId);
+}
+
 export function confirmActivity(employeeId: number) {
   const pending = pendingConfirmations.get(employeeId);
 

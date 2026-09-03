@@ -16,6 +16,8 @@ export type WorkdayConfig = {
   timezone: string;
   confirmationDelayMinutes: number;
   confirmationTimeoutSeconds: number;
+  /** Minutes between checks while someone is still WORKING out of hours. */
+  recheckIntervalMinutes: number;
   enabled: boolean;
 };
 
@@ -35,6 +37,7 @@ const DEFAULTS: WorkdayConfig = {
   timezone: "America/Argentina/Buenos_Aires",
   confirmationDelayMinutes: 0,
   confirmationTimeoutSeconds: 120,
+  recheckIntervalMinutes: 30,
   enabled: true,
 };
 
@@ -59,6 +62,7 @@ export async function getWorkdayConfig(): Promise<WorkdayConfig> {
     timezone: row.timezone,
     confirmationDelayMinutes: row.confirmationDelayMinutes,
     confirmationTimeoutSeconds: row.confirmationTimeoutSeconds,
+    recheckIntervalMinutes: row.recheckIntervalMinutes,
     enabled: row.enabled,
   };
 }
@@ -189,6 +193,75 @@ export function closeMinutes(day: ResolvedDay, config: WorkdayConfig) {
   if (prompt === null) return null;
   const timeout = Math.ceil(config.confirmationTimeoutSeconds / 60);
   return Math.min(prompt + timeout, LAST_MINUTE);
+}
+
+/**
+ * Whether `minutes` falls outside the working hours of `day`.
+ *
+ * This is the window in which someone still marked as WORKING gets asked
+ * whether they really are. Three cases, and the middle one is the one that is
+ * easy to miss:
+ *
+ *  - A closed day (weekend, holiday) is off-hours end to end.
+ *  - On an open day, AFTER the prompt time - the end of the day plus its grace
+ *    period - which is where the old once-a-day check used to fire.
+ *  - On an open day, BEFORE it starts. That is what makes the check survive
+ *    midnight: at 02:00 on a Tuesday the calendar says Tuesday is a working
+ *    day, but nobody's hours have begun, so somebody who has been "working"
+ *    since Monday evening is still out of hours and still gets asked.
+ *
+ * Malformed times return false rather than true. An unusable configuration must
+ * not read as "out of hours for everyone", which would prompt the whole roster
+ * at once and auto-disconnect anybody who missed it.
+ */
+export function isOffHours(day: ResolvedDay, config: WorkdayConfig, minutes: number) {
+  if (!day.working) return true;
+
+  const prompt = promptMinutes(day, config);
+  if (prompt === null || day.startMinutes === null) return false;
+
+  return minutes >= prompt || minutes < day.startMinutes;
+}
+
+/**
+ * Whether it is time to ask this employee again.
+ *
+ * Measured from the PROMPT and not from the answer, so the cadence stays on a
+ * fixed grid: answering thirty seconds after being asked does not push the next
+ * question thirty seconds later, and a slow answer cannot walk the schedule
+ * forward all night.
+ *
+ * Never asked reads as due, which is also what makes the first prompt of an
+ * evening need no special case: `lastPromptedAt` is either null or from a
+ * previous stretch, and either way it is older than the interval.
+ */
+export function checkDue(
+  lastPromptedAt: Date | null,
+  intervalMinutes: number,
+  now: Date = new Date()
+) {
+  if (!lastPromptedAt) return true;
+  return now.getTime() - lastPromptedAt.getTime() >= intervalMinutes * 60_000;
+}
+
+/**
+ * Whether an unanswered check has run out of time.
+ *
+ * An answer counts only when it came after the question: comparing the two
+ * timestamps is what stops yesterday's confirmation from clearing today's
+ * check. This is the database-backed twin of the in-process timer in
+ * realtime.ts, which a restart inside the answer window would otherwise drop -
+ * leaving somebody prompted forever and never resolved.
+ */
+export function checkExpired(
+  lastPromptedAt: Date | null,
+  lastConfirmedAt: Date | null,
+  timeoutSeconds: number,
+  now: Date = new Date()
+) {
+  if (!lastPromptedAt) return false;
+  if (lastConfirmedAt && lastConfirmedAt >= lastPromptedAt) return false;
+  return now.getTime() - lastPromptedAt.getTime() >= timeoutSeconds * 1000;
 }
 
 /** Human "DD/MM/YYYY at HH:MM" in the configured zone, for notification text. */

@@ -1,6 +1,6 @@
-import { ActivityStatus } from "@prisma/client";
+import { ActivityStatus, TaskState } from "@prisma/client";
 import prisma from "../prisma/client";
-import { emitStatusChanged, setConfirmationTimeoutHandler } from "../realtime";
+import { emitStatusChanged, emitTaskChanged, setConfirmationTimeoutHandler } from "../realtime";
 import { notify } from "../notifications/notification.service";
 import { getWorkdayConfig, formatZoned } from "../scheduler/workday";
 import { logger } from "../logger";
@@ -66,8 +66,46 @@ async function autoDisconnect(employeeId: number, detail: string) {
       select: EMPLOYEE_PUBLIC,
     });
 
-    return { employee, taskTitle: open?.taskTitle ?? null, at: now };
+    return {
+      employee,
+      taskTitle: open?.taskTitle ?? null,
+      taskId: open?.taskId ?? null,
+      at: now,
+    };
   });
+}
+
+/**
+ * Pauses the task they had declared, so the board stops claiming work nobody is
+ * doing and the next working morning can put it back.
+ *
+ * A task has participants, not an owner, so it is paused only when NOBODY is
+ * left working on it. Disconnecting one person must not stop a colleague's task
+ * out from under them, and the end-of-day sweep in jobs.ts applies the same
+ * rule for the same reason.
+ *
+ * `autoPausedAt` is what makes this reversible: runStartOfDay resumes exactly
+ * the tasks carrying that stamp and leaves alone the ones nobody ever started.
+ */
+async function pauseDeclaredTask(taskId: number, employeeId: number) {
+  const paused = await prisma.task.updateMany({
+    where: {
+      id: taskId,
+      state: TaskState.IN_PROGRESS,
+      NOT: {
+        participants: {
+          some: {
+            employeeId: { not: employeeId },
+            employee: { active: true, currentStatus: ActivityStatus.WORKING },
+          },
+        },
+      },
+    },
+    data: { state: TaskState.PENDING, autoPausedAt: new Date() },
+  });
+
+  if (paused.count > 0) emitTaskChanged({ type: "bulk" });
+  return paused.count > 0;
 }
 
 /** Active administrators, who are the ones told about a missed check. */
@@ -88,12 +126,16 @@ async function adminIds() {
 export async function handleMissedConfirmation(employeeId: number) {
   const config = await getWorkdayConfig();
 
-  const { employee, taskTitle, at } = await autoDisconnect(
+  // Not "end-of-day" any more: the same check repeats through the night, the
+  // weekend and a holiday, so the detail has to read correctly at 03:00 too.
+  const { employee, taskTitle, taskId, at } = await autoDisconnect(
     employeeId,
-    "Did not answer the end-of-day activity check"
+    "Did not answer the activity check"
   );
 
   emitStatusChanged(employee);
+
+  const taskPaused = taskId !== null && (await pauseDeclaredTask(taskId, employeeId));
 
   const { date, time } = formatZoned(config.timezone, at);
   const task = taskTitle
@@ -113,7 +155,7 @@ export async function handleMissedConfirmation(employeeId: number) {
   });
 
   logger.info(
-    { employeeId, employeeNumber: employee.employeeNumber, taskTitle },
+    { employeeId, employeeNumber: employee.employeeNumber, taskTitle, taskPaused },
     "employee auto-disconnected after missing the activity check"
   );
 }
