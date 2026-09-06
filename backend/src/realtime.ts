@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import prisma from "./prisma/client";
-import { env } from "./env";
+import { allowedOrigins } from "./http/cors";
 import { verifyToken } from "./auth/auth.token";
 import { logger } from "./logger";
 
@@ -45,7 +45,7 @@ export function setConfirmationTimeoutHandler(handler: ConfirmationTimeoutHandle
 let io: Server;
 
 export function initializeRealtime(server: HttpServer) {
-  io = new Server(server, { cors: { origin: env.FRONTEND_URL ?? "http://localhost:5173" } });
+  io = new Server(server, { cors: { origin: allowedOrigins } });
 
   /**
    * Same rule as requireAuth: the signature proves who is connecting, the

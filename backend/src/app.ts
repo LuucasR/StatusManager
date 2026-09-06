@@ -5,9 +5,12 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 
 // Imported first: it validates the environment and throws on a bad deploy
-// before any of the modules below read process.env.
-import { env } from "./env";
+// before any of the modules below read process.env. Nothing here reads a value
+// off it any more - http/cors.ts owns the only one this file used - but the
+// ordering guarantee is still the point, so the side effect is imported alone.
+import "./env";
 import { httpLogger } from "./logger";
+import { allowedOrigins } from "./http/cors";
 import { errorHandler, notFoundHandler } from "./http/error-handler";
 import prisma from "./prisma/client";
 
@@ -24,11 +27,6 @@ app.set("trust proxy", 1);
 
 // Before everything else so that even a rejected CORS preflight is logged.
 app.use(httpLogger);
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  env.FRONTEND_URL,
-].filter((origin): origin is string => Boolean(origin));
 
 app.use(
   cors({

@@ -22,9 +22,24 @@ const schema = z.object({
   // so nothing else would have caught it missing.
   DATABASE_URL: required("DATABASE_URL"),
   JWT_SECRET: required("JWT_SECRET"),
-  // Origin allowed by CORS and by the Socket.IO handshake. Optional because
-  // localhost is always allowed, which is enough for local development.
-  FRONTEND_URL: z.string().url().optional(),
+  // Origins allowed by CORS and by the Socket.IO handshake. A comma-separated
+  // list rather than a single value, because there is now more than one client:
+  // the browser deployment and the Android app, whose WebView origin is
+  // localhost rather than the site's. Optional because the origins that never
+  // vary by deployment are baked into http/cors.ts instead.
+  FRONTEND_URL: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    )
+    .refine(
+      (origins) => origins.every((origin) => z.string().url().safeParse(origin).success),
+      { error: "FRONTEND_URL must be a comma-separated list of absolute URLs" }
+    ),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });

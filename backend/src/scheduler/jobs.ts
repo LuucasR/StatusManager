@@ -60,21 +60,30 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
 
   const working = await prisma.employee.findMany({
     where: { active: true, currentStatus: ActivityStatus.WORKING },
-    select: { id: true, lastPromptedAt: true, lastConfirmedAt: true },
+    select: { id: true, lastPromptedAt: true, lastConfirmedAt: true, missedChecks: true },
   });
 
   const at = new Date();
   let prompted = 0;
+  let missed = 0;
   let disconnected = 0;
 
   for (const employee of working) {
-    const { id, lastPromptedAt, lastConfirmedAt } = employee;
+    const { id, lastPromptedAt, lastConfirmedAt, missedChecks } = employee;
+
+    // Their stamp has no prompt behind it: the previous run found nobody
+    // listening and granted a grace interval instead of disconnecting. They
+    // are not "asked and silent", so the expiry branch below must not claim
+    // them - the due branch owns this case, and it is the only thing that can
+    // clear the counter.
+    const awaitingRetry = missedChecks > 0;
 
     // Asked, never answered, out of time. Skipped while realtime.ts still holds
     // a live timer for them: that one is about to resolve this same check, and
     // running both would disconnect the person twice. What is left is exactly
     // the case this backstop is for - the restart that dropped the timer.
     if (
+      !awaitingRetry &&
       checkExpired(lastPromptedAt, lastConfirmedAt, config.confirmationTimeoutSeconds, at) &&
       !hasPendingConfirmation(id)
     ) {
@@ -85,7 +94,7 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
     // Asked, still inside their answer window: leave them alone. Without this,
     // a short interval would stack a second prompt on top of an unanswered one.
     const answered = !lastPromptedAt || (lastConfirmedAt !== null && lastConfirmedAt >= lastPromptedAt);
-    if (!answered) continue;
+    if (!answered && !awaitingRetry) continue;
 
     if (!checkDue(lastPromptedAt, config.recheckIntervalMinutes, at)) continue;
 
@@ -93,20 +102,39 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
     // checking presence separately closes the gap where they disconnect between
     // the two calls, which would stamp a deadline against a prompt never sent.
     if (!sendConfirmationRequest(id, config.confirmationTimeoutSeconds * 1000)) {
-      // Nothing there to accept it. Waiting out a timer they could not possibly
-      // beat would only delay the same outcome.
-      if (await disconnectQuietly(id)) disconnected += 1;
+      // Nothing there to accept it. In a browser that reliably means no tab is
+      // open, but Android tears the socket down about a minute after the screen
+      // goes off, and disconnecting on that alone auto-disconnected anyone who
+      // pocketed their phone - without ever asking them. So the first miss only
+      // costs them another interval; the second one in a row is what counts.
+      if (awaitingRetry) {
+        if (await disconnectQuietly(id)) disconnected += 1;
+        continue;
+      }
+
+      // Stamped exactly like a real prompt, so the retry lands one interval
+      // from now instead of on the very next tick a minute later - which would
+      // spend the whole grace before the phone had any chance to come back.
+      await prisma.employee.update({
+        where: { id },
+        data: { lastPromptedAt: at, missedChecks: { increment: 1 } },
+      });
+      missed += 1;
       continue;
     }
 
     // Stamped only once the prompt has actually gone out, so the answer window
-    // starts when the question did.
-    await prisma.employee.update({ where: { id }, data: { lastPromptedAt: at } });
+    // starts when the question did. Reachable again also settles any earlier
+    // miss: whatever it saw was temporary.
+    await prisma.employee.update({
+      where: { id },
+      data: { lastPromptedAt: at, missedChecks: 0 },
+    });
     prompted += 1;
   }
 
-  if (prompted > 0 || disconnected > 0) {
-    logger.info({ prompted, autoDisconnected: disconnected }, "activity check finished");
+  if (prompted > 0 || missed > 0 || disconnected > 0) {
+    logger.info({ prompted, missed, autoDisconnected: disconnected }, "activity check finished");
   }
 }
 

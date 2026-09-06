@@ -1,0 +1,11 @@
+-- Consecutive activity checks that found no live socket for the employee.
+--
+-- The check used to auto-disconnect on the first miss. That is correct for a
+-- browser, where no socket means no tab open, but not for the Android app: the
+-- OS drops the socket about a minute after the screen goes off, so anyone who
+-- pocketed their phone was disconnected without ever being prompted. The job
+-- now requires two consecutive misses.
+--
+-- Defaults to 0, so every existing employee starts with a clean slate and the
+-- first check after this deploy can only ever increment, never disconnect.
+ALTER TABLE "Employee" ADD COLUMN "missedChecks" INTEGER NOT NULL DEFAULT 0;

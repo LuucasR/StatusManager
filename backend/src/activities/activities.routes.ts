@@ -221,7 +221,7 @@ router.post("/confirm-activity", async (req, res) => {
   // pause list.
   await prisma.employee.update({
     where: { id: req.auth!.employeeId },
-    data: { lastConfirmedAt: new Date() },
+    data: { lastConfirmedAt: new Date(), missedChecks: 0 },
   });
 
   res.json({ success: true });
@@ -278,7 +278,10 @@ router.post("/status", async (req, res) => {
     });
     const employee = await tx.employee.update({
       where: { id: req.auth!.employeeId },
-      data: { currentStatus: parsed.data.status, statusSince: now },
+      // missedChecks resets here too: acting on their own status is proof they
+      // are present, and leaving a stale count behind would spend a mobile
+      // user's grace on the very first check after they came back.
+      data: { currentStatus: parsed.data.status, statusSince: now, missedChecks: 0 },
       select: { id: true, employeeNumber: true, name: true, currentStatus: true, statusSince: true },
     });
     return { activity, employee };

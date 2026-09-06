@@ -62,6 +62,9 @@ async function autoDisconnect(employeeId: number, detail: string) {
       data: {
         currentStatus: ActivityStatus.AUTO_DISCONNECTED,
         statusSince: now,
+        // The count has done its job; clearing it here means a return to
+        // WORKING starts from a full grace rather than one miss in.
+        missedChecks: 0,
       },
       select: EMPLOYEE_PUBLIC,
     });

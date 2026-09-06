@@ -77,6 +77,39 @@ The API URL comes from `VITE_API_URL`, which Vite inlines **at build time**. A
 production build without it fails loudly rather than silently pointing at
 localhost.
 
+### Android app
+
+The same frontend ships as an Android app through Capacitor. It is the web app
+in a WebView, not a rewrite, so a change to `frontend/src` reaches both.
+
+```bash
+cd frontend
+npm run android:apk
+```
+
+That builds the web assets, copies them into `frontend/android`, and produces
+`android/app/build/outputs/apk/debug/app-debug.apk`. It needs JDK 21 and the
+Android SDK (`compileSdk 36`, `build-tools;36.0.0`) with `JAVA_HOME` and
+`ANDROID_HOME` set; the first Gradle run downloads a lot and takes minutes.
+
+Three things about the app are worth knowing before changing them:
+
+- **It has no `VITE_API_URL`.** One APK has to work against any server, so the
+  address is asked for on first launch and stored, and `src/serverConfig.ts`
+  owns that. The web build is unchanged: a baked-in `VITE_API_URL` still wins
+  and a production web build without one still throws.
+- **`androidScheme` is `http`,** so the app's origin is `http://localhost`.
+  On the default `https` a LAN backend on plain http would be blocked as mixed
+  content before the request left the WebView. `backend/src/http/cors.ts` has
+  to keep allowing that origin, and the scheme must not change afterwards -
+  localStorage is keyed by origin, so flipping it signs everyone out.
+- **PDFs cannot render in a WebView.** `components/pdf/pdfFile.ts` writes the
+  report to storage and hands it to the OS viewer; the blob-URL iframe is the
+  web path only.
+
+The backend has to be reachable from the phone: on a LAN that means the right
+address and a firewall rule for its port.
+
 ## Conventions
 
 - **Code, comments and commit messages are in English.** UI text is not
@@ -95,7 +128,12 @@ localhost.
 
 ## Known gaps
 
-- No test suite and no CI.
+- No test suite beyond `backend/src/scheduler/workday.test.ts`, and no CI.
+- The app has no push notifications. Everything live is Socket.IO, and Android
+  drops the socket about a minute after the screen goes off, so nothing arrives
+  while it is backgrounded. The activity check forgives one missed round
+  (`Employee.missedChecks`) so a pocketed phone is not auto-disconnected, but a
+  long enough absence still is.
 - Realtime is single-instance: the pending-confirmation map lives in process
   memory and there is no Socket.IO Redis adapter, so the app cannot scale past
   one instance without breaking presence.

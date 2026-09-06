@@ -89,6 +89,18 @@ model Employee {
   /// answer timeout is re-derivable from the database after a restart drops the
   /// in-process timer. Null means never asked, which is due immediately.
   lastPromptedAt     DateTime?
+  /// Consecutive activity checks that found nobody listening.
+  ///
+  /// A single miss no longer disconnects. On the web "no socket" reliably means
+  /// "no tab open", but on Android the OS tears the socket down about a minute
+  /// after the screen goes off, so an employee who pocketed their phone looked
+  /// exactly like one who had gone home - and was disconnected without ever
+  /// being asked. Two consecutive misses are required instead, which costs one
+  /// recheck interval of accuracy and buys the whole mobile app.
+  ///
+  /// Reset by anything that proves they are there: answering a check, changing
+  /// their own status, or simply being reachable when the check runs.
+  missedChecks       Int          @default(0)
   role           Role             @default(EMPLOYEE)
   currentStatus  ActivityStatus   @default(OFFLINE)
   statusSince    DateTime         @default(now())
