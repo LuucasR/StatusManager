@@ -1,22 +1,30 @@
 import {
   CheckRounded,
   DarkModeRounded,
+  DnsRounded,
   LightModeRounded,
   TranslateRounded,
 } from "@mui/icons-material";
 import {
+  Alert,
   Box,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
   Tooltip,
+  Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { LANGUAGES, LANGUAGE_NAMES, t } from "../i18n";
+import { LANGUAGES, LANGUAGE_NAMES, t, tf } from "../i18n";
 import { useI18n } from "../i18n/I18nProvider";
 import { useThemeMode } from "../theme/ThemeModeProvider";
+import ServerAddressForm from "./ServerAddressForm";
+import { getApiUrl, isRuntimeConfigurable, switchServer } from "../serverConfig";
 
 /**
  * Language picker and light/dark switch.
@@ -29,6 +37,11 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
   const { language, setLanguage } = useI18n();
   const { mode, toggle } = useThemeMode();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const [serverOpen, setServerOpen] = useState(false);
+
+  // Only the app can change this. A web build has its API baked in, and a
+  // control that cannot change anything is worse than no control.
+  const canChangeServer = isRuntimeConfigurable();
 
   const nextModeLabel =
     mode === "dark" ? t("settings.theme.light") : t("settings.theme.dark");
@@ -59,6 +72,31 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
           {mode === "dark" ? <LightModeRounded /> : <DarkModeRounded />}
         </IconButton>
       </Tooltip>
+
+      {canChangeServer && (
+        <Tooltip title={t("server.change")}>
+          <IconButton
+            color="inherit"
+            onClick={() => setServerOpen(true)}
+            aria-label={t("server.change")}
+          >
+            <DnsRounded />
+          </IconButton>
+        </Tooltip>
+      )}
+
+      <Dialog open={serverOpen} onClose={() => setServerOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>{t("server.change")}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {tf("server.current", { url: getApiUrl() })}
+          </Typography>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {t("server.signsYouOut")}
+          </Alert>
+          <ServerAddressForm onAccepted={switchServer} initialValue={getApiUrl()} />
+        </DialogContent>
+      </Dialog>
 
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
         {LANGUAGES.map((value) => (

@@ -68,6 +68,7 @@ export const en = {
   "nav.tasks": "Tasks",
   "nav.summary": "Summary",
   "nav.logout": "Log out",
+  "nav.menu": "Menu",
 
   // --- Settings control
   "settings.language": "Language",
@@ -329,7 +330,6 @@ export const en = {
     "You chose to work without a task from the board: say what you are on.",
   "dashboard.configureReport": "Configure PDF report",
   "dashboard.reportPreviewTitle": "Report preview",
-  "dashboard.reportPreviewFrameTitle": "PDF report preview",
   "dashboard.temporaryPassword": "Temporary password",
   "dashboard.temporaryPasswordNote":
     "Pass it to {name}. It is not stored anywhere and will not be shown again. When they sign in, they will have to choose a new one.",
@@ -480,6 +480,28 @@ export const en = {
   // --- Route vs record 404
   "error.ROUTE_NOT_FOUND":
     "That endpoint does not exist. The app may be newer than the server it is talking to.",
+
+  // --- Server address, Android app only
+  //
+  // The web build knows its API at compile time; the app cannot, so it asks.
+  // These are deliberately not under the "error." prefix - they describe a
+  // connection attempt the app made itself, not a code the backend returned,
+  // and check:codes only tolerates error.* keys the server can actually emit.
+  "server.title": "Server",
+  "server.intro":
+    "Enter the address of the Status Manager server you connect to. Your administrator can give it to you.",
+  "server.field": "Server address",
+  "server.hint": "For example: 192.168.1.20:3000",
+  "server.connect": "Connect",
+  "server.checking": "Checking…",
+  "server.change": "Change server",
+  "server.current": "Connected to {url}",
+  "server.signsYouOut": "Changing the server signs you out.",
+  "server.invalidUrl": "That is not a valid address.",
+  "server.unreachable":
+    "No answer from that address. Check that the server is running and that you are on the same network.",
+  "server.notAServer": "Something answered, but it is not a Status Manager server.",
+  "server.databaseDown": "The server answered, but its database is down. Try again shortly.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -535,6 +557,7 @@ const es: Record<TranslationKey, string> = {
   "nav.tasks": "Tareas",
   "nav.summary": "Resumen",
   "nav.logout": "Salir",
+  "nav.menu": "Menú",
 
   "settings.language": "Idioma",
   "settings.appearance": "Apariencia",
@@ -784,7 +807,6 @@ const es: Record<TranslationKey, string> = {
     "Elegiste trabajar sin una tarea de la pizarra: contá en qué estás.",
   "dashboard.configureReport": "Configurar reporte PDF",
   "dashboard.reportPreviewTitle": "Previsualización del reporte",
-  "dashboard.reportPreviewFrameTitle": "Previsualización del reporte PDF",
   "dashboard.temporaryPassword": "Contraseña temporal",
   "dashboard.temporaryPasswordNote":
     "Pasásela a {name}. No se guarda en ningún lado y no se vuelve a mostrar. Al entrar, va a tener que elegir una nueva.",
@@ -927,6 +949,22 @@ const es: Record<TranslationKey, string> = {
 
   "error.ROUTE_NOT_FOUND":
     "Ese endpoint no existe. Puede que la app sea más nueva que el servidor al que le habla.",
+
+  "server.title": "Servidor",
+  "server.intro":
+    "Ingresá la dirección del servidor de Status Manager al que te conectás. Tu administrador puede dártela.",
+  "server.field": "Dirección del servidor",
+  "server.hint": "Por ejemplo: 192.168.1.20:3000",
+  "server.connect": "Conectar",
+  "server.checking": "Verificando…",
+  "server.change": "Cambiar de servidor",
+  "server.current": "Conectado a {url}",
+  "server.signsYouOut": "Cambiar de servidor cierra tu sesión.",
+  "server.invalidUrl": "Esa no es una dirección válida.",
+  "server.unreachable":
+    "No hubo respuesta desde esa dirección. Fijate que el servidor esté encendido y que estés en la misma red.",
+  "server.notAServer": "Algo respondió, pero no es un servidor de Status Manager.",
+  "server.databaseDown": "El servidor respondió, pero su base de datos está caída. Probá de nuevo en un rato.",
 };
 
 export const CATALOGUES = { en, es };

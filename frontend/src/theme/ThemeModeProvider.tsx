@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { TOKENS, buildTheme, type ThemeMode } from "./theme";
+import { StatusBar, Style } from "@capacitor/status-bar";
+import { isNative } from "../native/platform";
 
 const STORAGE_KEY = "theme-mode";
 
@@ -69,6 +71,15 @@ export default function ThemeModeProvider({ children }: { children: ReactNode })
     // Lets the browser paint native widgets (scrollbars, date pickers, form
     // controls) to match. Without it a dark page keeps white scrollbars.
     root.style.colorScheme = mode;
+
+    // Same idea one layer out, for the app: the Android status bar is not part
+    // of the page, so it keeps its own colours and dark mode would otherwise
+    // put black icons on a near-black bar. Style.Dark means "dark background,
+    // light icons", which is the opposite of how it reads.
+    if (isNative()) {
+      void StatusBar.setStyle({ style: mode === "dark" ? Style.Dark : Style.Light });
+      void StatusBar.setBackgroundColor({ color: TOKENS[mode]["--surface"] });
+    }
   }, [mode]);
 
   const theme = useMemo(() => buildTheme(mode), [mode]);

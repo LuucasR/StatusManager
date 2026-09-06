@@ -2,7 +2,6 @@ import {
   AdminPanelSettingsRounded,
   BadgeRounded,
   DeleteForeverRounded,
-  DownloadRounded,
   PersonAddAlt1Rounded,
   UpdateRounded,
   VisibilityRounded,
@@ -36,7 +35,10 @@ import {
 } from "@mui/material";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, API_URL } from "../api";
+import { api } from "../api";
+import { getApiUrl } from "../serverConfig";
+import PdfPreviewDialog from "../components/pdf/PdfPreviewDialog";
+import { usePdfPreview } from "../components/pdf/usePdfPreview";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 import { isAdminRole, isStaff, roleMeta, type Role } from "../components/roles";
 import NewAccountDialog from "../components/admin/NewAccountDialog";
@@ -179,9 +181,7 @@ const [reportPeriod, setReportPeriod] = useState<
 const [reportFrom, setReportFrom] = useState("");
 
 const [reportTo, setReportTo] = useState("");
-const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
-const [pdfPreviewName, setPdfPreviewName] = useState("");
-const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+const pdf = usePdfPreview();
 const [newAccountOpen, setNewAccountOpen] = useState(false);
 const [roleTarget, setRoleTarget] = useState<Employee | null>(null);
 const [notice, setNotice] = useState("");
@@ -443,58 +443,30 @@ useEffect(() => {
     return params;
   }
 
+  /**
+   * Wraps the shared hook with what this page adds on top of it: the hook
+   * rethrows so its caller decides, and here that means surfacing the message
+   * and closing the configuration dialog behind the preview.
+   */
   async function openPdfPreview(url: string, filename: string) {
     try {
-      setPdfPreviewLoading(true);
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message ?? t("pdf.failed"));
-      }
-
-      const blob = await response.blob();
-      const href = URL.createObjectURL(blob);
-
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-      setPdfPreviewUrl(href);
-      setPdfPreviewName(filename);
+      await pdf.open(url, filename);
       setReportDialog(false);
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setPdfPreviewLoading(false);
     }
-  }
-
-  function closePdfPreview() {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-    setPdfPreviewUrl("");
-    setPdfPreviewName("");
-  }
-
-  function downloadPreviewedPdf() {
-    if (!pdfPreviewUrl) return;
-    const anchor = document.createElement("a");
-    anchor.href = pdfPreviewUrl;
-    anchor.download = pdfPreviewName;
-    anchor.click();
   }
 
   async function previewReport() {
     await openPdfPreview(
-      `${API_URL}/admin/report.pdf?${buildReportParams().toString()}`,
+      `${getApiUrl()}/admin/report.pdf?${buildReportParams().toString()}`,
       t("dashboard.reportFilename")
     );
   }
 
   async function previewPersonalReport() {
     await openPdfPreview(
-      `${API_URL}/activities/report.pdf`,
+      `${getApiUrl()}/activities/report.pdf`,
       t("dashboard.personalReportFilename")
     );
   }
@@ -1303,12 +1275,12 @@ useEffect(() => {
     <Button
       variant="contained"
       startIcon={
-        pdfPreviewLoading
+        pdf.loading
           ? <CircularProgress size={18} color="inherit" />
           : <VisibilityRounded />
       }
       disabled={
-        pdfPreviewLoading ||
+        pdf.loading ||
         (reportPeriod === "custom" && (!reportFrom || !reportTo))
       }
       onClick={previewReport}
@@ -1318,40 +1290,12 @@ useEffect(() => {
   </DialogActions>
 </Dialog>
 
-<Dialog
-  open={Boolean(pdfPreviewUrl)}
-  onClose={closePdfPreview}
-  fullWidth
-  maxWidth="lg"
->
-  <DialogTitle>{t("dashboard.reportPreviewTitle")}</DialogTitle>
-  <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
-    {pdfPreviewUrl && (
-      <Box
-        component="iframe"
-        title={t("dashboard.reportPreviewFrameTitle")}
-        src={pdfPreviewUrl}
-        sx={{
-          width: "100%",
-          height: { xs: "68vh", md: "76vh" },
-          border: 0,
-          borderRadius: 1,
-          bgcolor: "var(--surface-2)",
-        }}
-      />
-    )}
-  </DialogContent>
-  <DialogActions>
-    <Button onClick={closePdfPreview}>{t("common.close")}</Button>
-    <Button
-      variant="contained"
-      startIcon={<DownloadRounded />}
-      onClick={downloadPreviewedPdf}
-    >
-      {t("pdf.download")}
-    </Button>
-  </DialogActions>
-</Dialog>
+<PdfPreviewDialog
+  url={pdf.url}
+  title={t("dashboard.reportPreviewTitle")}
+  onClose={pdf.close}
+  onDownload={pdf.download}
+/>
 
 {/* One-time reveal: the temporary password is not stored anywhere, so if this
     is closed without copying it, it has to be regenerated. */}

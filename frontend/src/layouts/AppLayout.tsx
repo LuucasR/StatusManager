@@ -1,5 +1,18 @@
-import { AccessTimeRounded, LogoutRounded } from "@mui/icons-material";
-import { AppBar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
+import { AccessTimeRounded, LogoutRounded, MenuRounded } from "@mui/icons-material";
+import {
+  AppBar,
+  Box,
+  Button,
+  Divider,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  Stack,
+  Toolbar,
+  Typography,
+} from "@mui/material";
 import { useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
@@ -41,6 +54,7 @@ const links = [
 export default function AppLayout() {
   const { pathname } = useLocation();
   const [me, setMe] = useState<SessionEmployee | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     api<SessionEmployee>("/activities/me")
@@ -58,15 +72,42 @@ export default function AppLayout() {
     <SocketProvider>
     <ChatProvider>
     <Box>
-      <AppBar color="inherit" elevation={0} position="sticky">
+      {/* The inset padding is for the app: the Android WebView draws edge to
+          edge, so without it the toolbar sits underneath the clock. */}
+      <AppBar
+        color="inherit"
+        elevation={0}
+        position="sticky"
+        sx={{ pt: "env(safe-area-inset-top, 0px)" }}
+      >
         <Toolbar>
-          <Box className="brand-mark small">
+          {/* Below md the four nav buttons, the name and the logout label
+              cannot share a phone-width row - they used to squash into an
+              unreadable smear - so they move into a drawer and only the icon
+              controls stay on the bar. */}
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={() => setNavOpen(true)}
+            aria-label={t("nav.menu")}
+            sx={{ display: { xs: "inline-flex", md: "none" }, mr: 1 }}
+          >
+            <MenuRounded />
+          </IconButton>
+
+          <Box className="brand-mark small" sx={{ display: { xs: "none", sm: "grid" } }}>
             <AccessTimeRounded />
           </Box>
 
-          <Typography variant="h6">Status Manager</Typography>
+          <Typography variant="h6" noWrap>
+            Status Manager
+          </Typography>
 
-          <Stack direction="row" spacing={1} sx={{ flex: 1, ml: 3 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ flex: 1, ml: 3, display: { xs: "none", md: "flex" } }}
+          >
             {links.map((link) => {
               const active = pathname.startsWith(link.to);
               return (
@@ -83,19 +124,67 @@ export default function AppLayout() {
             })}
           </Stack>
 
+          {/* Pushes the icon cluster right once the nav row above is hidden. */}
+          <Box sx={{ flex: 1, display: { xs: "block", md: "none" } }} />
+
           <AppSettings />
 
           <NotificationBell />
 
-          <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ ml: 1, display: { xs: "none", lg: "block" } }}
+          >
             {me?.name} · #{me?.employeeNumber}
           </Typography>
 
-          <Button color="inherit" startIcon={<LogoutRounded />} onClick={logout}>
+          <Button
+            color="inherit"
+            startIcon={<LogoutRounded />}
+            onClick={logout}
+            sx={{ display: { xs: "none", md: "inline-flex" } }}
+          >
             {t("nav.logout")}
           </Button>
         </Toolbar>
       </AppBar>
+
+      <Drawer
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        sx={{ display: { xs: "block", md: "none" } }}
+      >
+        <Box sx={{ width: 260, pt: "env(safe-area-inset-top, 0px)" }} role="presentation">
+          <Box sx={{ px: 2, py: 2 }}>
+            <Typography variant="h6">Status Manager</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {me?.name} · #{me?.employeeNumber}
+            </Typography>
+          </Box>
+
+          <Divider />
+
+          <List onClick={() => setNavOpen(false)}>
+            {links.map((link) => (
+              <ListItemButton
+                key={link.to}
+                component={RouterLink}
+                to={link.to}
+                selected={pathname.startsWith(link.to)}
+              >
+                <ListItemText primary={t(link.key)} />
+              </ListItemButton>
+            ))}
+
+            <Divider sx={{ my: 1 }} />
+
+            <ListItemButton onClick={logout}>
+              <ListItemText primary={t("nav.logout")} />
+            </ListItemButton>
+          </List>
+        </Box>
+      </Drawer>
 
       <Outlet context={{ me } satisfies AppOutletContext} />
 

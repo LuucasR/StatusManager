@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Socket } from "socket.io-client";
+import { App as CapacitorApp } from "@capacitor/app";
 import { expireSession } from "../session";
+import { isNative } from "../native/platform";
 import { getSocket } from "./socket";
 
 type SocketContextValue = {
@@ -58,6 +60,27 @@ export default function SocketProvider({ children }: { children: ReactNode }) {
       // runs twice in development and a disconnect would produce a
       // connect/disconnect/connect loop. AppLayout only unmounts on sign-out,
       // and logout() calls closeSocket() before the replace.
+    };
+  }, [socket]);
+
+  // Coming back to the foreground on Android.
+  //
+  // The OS tears the socket down within about a minute of the screen going off,
+  // and socket.io's own retry is asleep with the rest of the app, so returning
+  // to it showed a live-looking board built from whatever was true before the
+  // phone was pocketed. Reconnecting and bumping the counter re-runs the
+  // existing useOnReconnect subscribers, which is exactly the re-sync needed.
+  useEffect(() => {
+    if (!isNative()) return;
+
+    const pending = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) return;
+      if (!socket.connected) socket.connect();
+      setReconnectCount((value) => value + 1);
+    });
+
+    return () => {
+      void pending.then((handle) => handle.remove());
     };
   }, [socket]);
 

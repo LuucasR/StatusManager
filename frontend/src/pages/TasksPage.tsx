@@ -10,7 +10,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import { API_URL, api } from "../api";
+import { api } from "../api";
+import { getApiUrl } from "../serverConfig";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 import PdfPreviewDialog from "../components/pdf/PdfPreviewDialog";
 import { usePdfPreview } from "../components/pdf/usePdfPreview";
@@ -199,7 +200,7 @@ export default function TasksPage() {
 
   async function handlePreviewReport(params: URLSearchParams) {
     try {
-      await pdf.open(`${API_URL}/tasks/report.pdf?${params.toString()}`, t("taskReport.filename"));
+      await pdf.open(`${getApiUrl()}/tasks/report.pdf?${params.toString()}`, t("taskReport.filename"));
       setReportOpen(false);
     } catch (err) {
       handleError(err);

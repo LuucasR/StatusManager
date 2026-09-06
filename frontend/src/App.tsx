@@ -7,8 +7,11 @@ import WorkdayPage from "./pages/WorkdayPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import ServerSetupPage from "./pages/ServerSetupPage";
 import AppLayout from "./layouts/AppLayout";
 import AppSettings from "./components/AppSettings";
+import { hasApiUrl, isRuntimeConfigurable } from "./serverConfig";
+import { useBackButton } from "./native/useBackButton";
 
 /**
  * Redirect that carries the query string and hash across.
@@ -23,6 +26,21 @@ function LegacyRedirect({ to }: { to: string }) {
 }
 
 export default function App() {
+  useBackButton();
+
+  // The app cannot do anything - not even show the login form, which posts to
+  // the API - until it knows which server it belongs to. Handled before the
+  // router rather than as a route, so the web build, where the address is baked
+  // in at build time, gains no path that would 404 on a refresh.
+  if (isRuntimeConfigurable() && !hasApiUrl()) {
+    return (
+      <>
+        <AppSettings floating />
+        <ServerSetupPage />
+      </>
+    );
+  }
+
   const authenticated = Boolean(localStorage.getItem("token"));
   return (
     <>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Allows plain http:// traffic, which Android has blocked by default since
+    API 28 and which this app needs.
+
+    The server address is typed in by the user at first launch, so it cannot be
+    known here - the usual <domain-config> allowlist has nothing to list. The
+    realistic first deployment is a backend on the office LAN reached over http,
+    and without this the request fails as ERR_CLEARTEXT_NOT_PERMITTED, which
+    reaches JavaScript as an ordinary "failed to fetch" with no hint of the real
+    cause.
+
+    Written as a config file rather than android:usesCleartextTraffic on the
+    <application> tag so that, once the backend has a fixed https address, this
+    can be narrowed to that host instead of being deleted and re-derived.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

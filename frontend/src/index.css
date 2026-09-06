@@ -76,7 +76,10 @@ body {
   box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent) !important;
 }
 a { color: var(--accent); font-weight: 700; text-decoration: none; }
-.auth-shell { min-height: 100vh; display: flex; align-items: center; padding: 40px 0; background: radial-gradient(circle at 15% 15%, var(--auth-glow) 0, transparent 30%), var(--auth-bg); }
+/* dvh and the insets are for the Android shell: 100vh ignores the browser
+   chrome that comes and goes, and without the insets the card sits under the
+   status bar. Both are no-ops in a desktop browser, where the insets are 0. */
+.auth-shell { min-height: 100dvh; display: flex; align-items: center; padding: calc(40px + env(safe-area-inset-top, 0px)) 0 calc(40px + env(safe-area-inset-bottom, 0px)); background: radial-gradient(circle at 15% 15%, var(--auth-glow) 0, transparent 30%), var(--auth-bg); }
 .auth-grid { display: grid; grid-template-columns: 1.1fr .9fr; align-items: center; gap: 10%; }
 .brand-panel { padding: 40px 0; max-width: 600px; }
 .brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 32%, transparent); margin-bottom: 28px; }
@@ -280,7 +283,8 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
    the task detail or the blocking activity-confirmation dialog. */
 /* Doubled class: MuiBadge-root brings position:relative and Emotion injects
    after this file, so with a single class the FAB stays in the flow. */
-.chat-launcher.chat-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 1200; }
+/* Offset by the gesture bar, which would otherwise swallow the tap. */
+.chat-launcher.chat-launcher { position: fixed; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 1200; }
 .chat-window.chat-window { position: fixed; right: 24px; bottom: 24px; z-index: 1200; width: 360px; height: 520px; max-height: calc(100dvh - 120px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 24px 80px var(--shadow-strong); }
 .chat-head { align-items: center; padding: 12px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex: none; }
 .chat-body { flex: 1; min-height: 0; overflow-y: auto; }
@@ -303,7 +307,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 1100px) { .task-board { gap: 12px; } .task-column-body { padding: 12px; } }
-@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } .task-column.task-column { min-height: 0; max-height: none; } /* Both axes, not just overflow-y: a `visible` paired with a non-visible value on the other axis computes to `auto`, so the column would have kept its own scroller here. */ .task-column-body { overflow: visible; } .task-column-head { position: sticky; top: 0; z-index: 2; } .chat-window.chat-window { inset: 0; width: 100%; height: 100dvh; max-height: none; border-radius: 0; } }
+@media (max-width: 800px) { .auth-grid { grid-template-columns: 1fr; gap: 20px; } .brand-panel { display: none; } .auth-card { padding: 28px; } .status-grid, .employee-grid, .task-board { grid-template-columns: 1fr; } .page-heading { align-items: start; flex-direction: column; } .timer { font-size: 38px; } .task-column.task-column { min-height: 0; max-height: none; } /* Both axes, not just overflow-y: a `visible` paired with a non-visible value on the other axis computes to `auto`, so the column would have kept its own scroller here. */ .task-column-body { overflow: visible; } .task-column-head { position: sticky; top: 0; z-index: 2; } .chat-window.chat-window { inset: 0; width: 100%; height: 100dvh; max-height: none; border-radius: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); } }
 @media (prefers-reduced-motion: reduce) { .task-card.task-card, .task-column.task-column, .task-column-body, .chat-window.chat-window, .chat-launcher, .chat-row { transition: none; animation: none; } .task-card.task-card:hover, .task-card.task-card:active, .task-card.task-card-overlay { transform: none; } }
 
 /* Working calendar (admin). HUD language, not cork: this is configuration, not
