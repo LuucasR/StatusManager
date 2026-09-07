@@ -13,6 +13,27 @@ const participantIds = z
   .min(1, "The task needs at least one participant")
   .max(50);
 
+/**
+ * The whole checklist, sent as an ordered array: the index IS the position.
+ *
+ * An item carrying an `id` is one that already exists and whose `done` has to
+ * survive the edit; one without is new. That distinction is what lets the update
+ * route diff instead of replacing, the same lesson TaskParticipant already
+ * learned - except here a blind rewrite would not just reshuffle the order, it
+ * would untick every box each time somebody fixed a typo in the title.
+ */
+const checklist = z
+  .array(
+    z.object({
+      id: z.number().int().positive().optional(),
+      text: z.string().trim().min(1).max(200),
+      // null clears it, absent leaves it alone. Nullable and not just optional
+      // because "nobody is in charge" has to be sendable.
+      assigneeId: z.number().int().positive().nullable().optional(),
+    })
+  )
+  .max(50);
+
 export const createTaskSchema = z
   .object({
     title: z.string().trim().min(3).max(120),
@@ -21,6 +42,8 @@ export const createTaskSchema = z
     endsAt: dateInput,
     state: z.nativeEnum(TaskState).optional().default(TaskState.PENDING),
     participantIds,
+    checklist: checklist.optional().default([]),
+    autoCompleteOnChecklist: z.boolean().optional().default(false),
   })
   .superRefine((value, context) => {
     if (value.endsAt <= value.startsAt) {
@@ -45,6 +68,8 @@ export const updateTaskSchema = z
     endsAt: dateInput.optional(),
     state: z.nativeEnum(TaskState).optional(),
     participantIds: participantIds.optional(),
+    checklist: checklist.optional(),
+    autoCompleteOnChecklist: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "There are no changes to apply",
@@ -60,6 +85,15 @@ export const changeTaskStateSchema = z.object({
  */
 export const changeTaskPinSchema = z.object({
   pinned: z.boolean(),
+});
+
+/**
+ * Ticking one checklist item. An explicit boolean rather than a toggle, for the
+ * same reason as changeTaskPinSchema: with a socket broadcast and an optimistic
+ * UI, two clicks would leave the state undetermined.
+ */
+export const setChecklistItemSchema = z.object({
+  done: z.boolean(),
 });
 
 export const createCommentSchema = z.object({

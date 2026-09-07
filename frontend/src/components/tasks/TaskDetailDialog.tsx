@@ -1,8 +1,10 @@
 import { PushPinOutlined, PushPinRounded } from "@mui/icons-material";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -10,7 +12,9 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
+  LinearProgress,
   Stack,
   Tooltip,
   Typography,
@@ -20,7 +24,14 @@ import MessageComposer from "../chat/MessageComposer";
 import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
 import TaskFacts from "./TaskFacts";
-import { STATE_META, type Task } from "./types";
+import { formatCommentDate } from "./datetime";
+import {
+  STATE_META,
+  checklistProgress,
+  participantColor,
+  type Task,
+  type TaskChecklistItem,
+} from "./types";
 import { t, tf } from "../../i18n";
 
 type Props = {
@@ -36,9 +47,16 @@ type Props = {
   canComment: boolean;
   /** Pinning uses the same permission as moving: admin or participant. */
   canPin: boolean;
+  /**
+   * Ticking an item is the SAME rule as pinning and moving - whoever may drag
+   * the task says which part of it is finished. Kept as its own prop anyway, so
+   * the two cannot silently drift apart at the call site.
+   */
+  canCheck: boolean;
   me: { id: number; name: string } | null;
   onClose: () => void;
   onPin: (task: Task, pinned: boolean) => void;
+  onToggleChecklistItem: (task: Task, item: TaskChecklistItem, done: boolean) => void;
 };
 
 export default function TaskDetailDialog({
@@ -48,9 +66,11 @@ export default function TaskDetailDialog({
   canReadChat,
   canComment,
   canPin,
+  canCheck,
   me,
   onClose,
   onPin,
+  onToggleChecklistItem,
 }: Props) {
   // The thread comes from the same store as the floating window: what is typed
   // in one appears in the other with no round-trip. null is passed when there is
@@ -143,6 +163,101 @@ export default function TaskDetailDialog({
           <DialogContent dividers>
             <Stack spacing={2.5}>
               <TaskFacts task={task} />
+
+              {/* Only when there is a list: an empty heading with a 0% bar under
+                  it reads as something broken rather than as nothing to show. */}
+              {task.checklist.length > 0 &&
+                (() => {
+                  const { done, total } = checklistProgress(task);
+                  return (
+                    <Box>
+                      <Typography variant="overline" color="text.secondary">
+                        {tf("taskDetail.checklist", { done, total })}
+                      </Typography>
+
+                      <LinearProgress
+                        variant="determinate"
+                        value={(done / total) * 100}
+                        sx={{ height: 6, borderRadius: 3, my: 1 }}
+                      />
+
+                      <Stack>
+                        {task.checklist.map((item) => (
+                          <FormControlLabel
+                            key={item.id}
+                            control={
+                              <Checkbox
+                                checked={item.done}
+                                disabled={!canCheck}
+                                onChange={(event) =>
+                                  onToggleChecklistItem(task, item, event.target.checked)
+                                }
+                              />
+                            }
+                            // The label is two lines high, so the box has to sit
+                            // at the top of it rather than centre on the pair.
+                            sx={{ alignItems: "flex-start", mb: 0.5 }}
+                            label={
+                              <Box sx={{ pt: 1 }}>
+                                <Typography
+                                  sx={{
+                                    textDecoration: item.done ? "line-through" : "none",
+                                    color: item.done ? "text.secondary" : "text.primary",
+                                  }}
+                                >
+                                  {item.text}
+                                </Typography>
+
+                                <Stack
+                                  direction="row"
+                                  spacing={1}
+                                  sx={{ alignItems: "center", flexWrap: "wrap" }}
+                                  useFlexGap
+                                >
+                                  {item.assignee && (
+                                    <Chip
+                                      size="small"
+                                      avatar={
+                                        <Avatar
+                                          sx={{
+                                            bgcolor: participantColor(item.assignee.id),
+                                            color: "#fff !important",
+                                          }}
+                                        >
+                                          {item.assignee.name.slice(0, 1).toUpperCase()}
+                                        </Avatar>
+                                      }
+                                      label={tf("taskDetail.checklistAssigned", {
+                                        name: item.assignee.name,
+                                      })}
+                                    />
+                                  )}
+
+                                  {/* Only once it is done: doneBy is cleared
+                                      when an item is unticked. */}
+                                  {item.done && item.doneBy && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      {tf("taskDetail.checklistDoneBy", {
+                                        name: item.doneBy.name,
+                                      })}
+                                      {item.doneAt && ` · ${formatCommentDate(item.doneAt)}`}
+                                    </Typography>
+                                  )}
+                                </Stack>
+                              </Box>
+                            }
+                          />
+                        ))}
+                      </Stack>
+
+                      {!canCheck && (
+                        <Typography variant="caption" color="text.secondary">
+                          {t("taskDetail.cannotCheck")}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                })()}
 
               <Divider />
 

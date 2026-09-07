@@ -17,6 +17,20 @@ export const TASK_INCLUDE = {
     select: { employee: EMPLOYEE_SUMMARY },
     orderBy: { addedAt: "asc" },
   },
+  // In the LIST include and not only in the detail one: the board card shows the
+  // progress, so leaving it out would cost one GET /tasks/:id per card.
+  checklist: {
+    select: {
+      id: true,
+      text: true,
+      done: true,
+      doneAt: true,
+      doneByName: true,
+      doneBy: EMPLOYEE_SUMMARY,
+      assignee: EMPLOYEE_SUMMARY,
+    },
+    orderBy: { position: "asc" },
+  },
   conversation: {
     select: { id: true, closed: true, _count: { select: { messages: true } } },
   },
@@ -63,6 +77,21 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     // Lets the board tell a task the end-of-day job paused from one nobody ever
     // started: both sit in PENDING and would otherwise look identical.
     autoPausedAt: task.autoPausedAt,
+    checklist: task.checklist.map((item) => ({
+      id: item.id,
+      text: item.text,
+      done: item.done,
+      doneAt: item.doneAt,
+      assignee: item.assignee,
+      // The account may have been deleted (doneById is SetNull); the name comes
+      // from the snapshot, exactly like a message's author.
+      doneBy:
+        item.doneBy ??
+        (item.doneByName
+          ? { id: 0, employeeNumber: 0, name: item.doneByName }
+          : null),
+    })),
+    autoCompleteOnChecklist: task.autoCompleteOnChecklist,
     // Always computed, even when pinned: the frontend needs it to tell
     // "pinned and current" from "pinned and already past the cutoff", and it
     // keeps the 14-day constant living in one place.

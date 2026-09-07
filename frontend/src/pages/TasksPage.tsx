@@ -26,6 +26,7 @@ import {
   listTasks,
   moveTask,
   pinTask,
+  setChecklistItem,
   updateTask,
   type TaskPayload,
 } from "../components/tasks/tasksApi";
@@ -33,6 +34,7 @@ import {
   canMoveTask,
   daysUntilArchive,
   type Task,
+  type TaskChecklistItem,
   type TaskParticipant,
   type TaskState,
 } from "../components/tasks/types";
@@ -181,6 +183,54 @@ export default function TasksPage() {
     }
   }
 
+  /**
+   * Optimistic like handleMove, but it has to patch BOTH copies of the state:
+   * the card's chip reads from `tasks` and the checkbox from `detail`, and
+   * updating only one of them makes the tick appear to bounce back in whichever
+   * of the two the user happens to be looking at.
+   */
+  async function handleToggleChecklistItem(
+    task: Task,
+    item: TaskChecklistItem,
+    done: boolean
+  ) {
+    // The optimistic row names its own author: the server would send the same
+    // thing back a moment later, and without it the "ticked off by" line appears
+    // a beat after the tick, which reads as the app correcting itself.
+    const doneBy =
+      done && me ? { id: me.id, employeeNumber: me.employeeNumber, name: me.name } : null;
+
+    const patch = (current: Task) =>
+      current.id !== task.id
+        ? current
+        : {
+            ...current,
+            checklist: current.checklist.map((entry) =>
+              entry.id === item.id
+                ? { ...entry, done, doneBy, doneAt: done ? new Date().toISOString() : null }
+                : entry
+            ),
+          };
+
+    const previousTasks = tasks;
+    const previousDetail = detail;
+    setTasks((current) => current.map(patch));
+    setDetail((current) => (current ? patch(current) : current));
+    setError("");
+
+    try {
+      await setChecklistItem(task.id, item.id, done);
+      // Not just cosmetic: with autoCompleteOnChecklist on, the last tick also
+      // moved the task to Done, and only a reload shows that.
+      await load();
+      if (detailIdRef.current === task.id) await reloadDetail(task.id);
+    } catch (err) {
+      setTasks(previousTasks);
+      setDetail(previousDetail);
+      handleError(err);
+    }
+  }
+
   async function handleSubmit(payload: TaskPayload, taskId?: number) {
     if (taskId) await updateTask(taskId, payload);
     else await createTask(payload);
@@ -207,7 +257,9 @@ export default function TasksPage() {
     }
   }
 
-  const canPinDetail = Boolean(detail && canMoveTask(detail, me?.id, me?.role));
+  // Pinning and ticking a checklist item are the same rule: whoever may drag the
+  // task across the board decides both.
+  const canMoveDetail = Boolean(detail && canMoveTask(detail, me?.id, me?.role));
   // Reading and writing the thread follow the CHAT rule, not the board's: a task
   // manager who is not a participant administers the card but not its
   // conversation. Mirrors canCommentOnTask and chat.access.ts in the backend.
@@ -296,13 +348,15 @@ export default function TasksPage() {
         loading={detailLoading}
         canReadChat={canReadChat}
         canComment={canComment}
-        canPin={canPinDetail}
+        canPin={canMoveDetail}
+        canCheck={canMoveDetail}
         me={me ? { id: me.id, name: me.name } : null}
         onClose={() => {
           setDetailId(null);
           setDetail(null);
         }}
         onPin={handlePin}
+        onToggleChecklistItem={handleToggleChecklistItem}
       />
 
       <TaskReportDialog

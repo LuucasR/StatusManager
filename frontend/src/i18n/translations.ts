@@ -248,6 +248,25 @@ export const en = {
   "taskForm.descriptionRequired": "Explain what the task is about",
   "taskForm.datesRequired": "Set the start and end date and time",
   "taskForm.participantsRequired": "Pick at least one participant",
+
+  // --- Task checklist
+  "taskForm.checklist": "Checklist",
+  "taskForm.checklistHint":
+    "Break the task into steps. Whoever takes part in it ticks them off as they go.",
+  "taskForm.checklistItem": "Item {number}",
+  "taskForm.checklistAdd": "Add item",
+  "taskForm.checklistAssignee": "In charge",
+  "taskForm.checklistNobody": "Nobody",
+  "taskForm.checklistRemove": "Remove item",
+  "taskForm.autoComplete": "Move the task to Done when every item is ticked",
+  "taskForm.autoCompleteHint":
+    "Off by default: a checklist is not always the whole of the task. Needs at least one item.",
+  "taskDetail.checklist": "Checklist ({done}/{total})",
+  "taskDetail.checklistAssigned": "In charge: {name}",
+  "taskDetail.checklistDoneBy": "Ticked off by {name}",
+  "taskDetail.cannotCheck": "Only participants can tick off this task's items",
+  "board.checklistProgress": "{done} of {total} items done",
+
   "account.newTitle": "New account",
   "account.create": "Create account",
   "account.creating": "Creating…",
@@ -408,6 +427,9 @@ export const en = {
   "dashboard.reportFilename": "activity-report.pdf",
   "board.participantsLabel": "Members",
   "tasksPage.pdfReport": "PDF report",
+  "error.CHECKLIST_NOT_ALLOWED": "Only participants can tick off this task's items",
+  "error.CHECKLIST_ITEM_NOT_FOUND": "That checklist item no longer exists",
+  "error.INVALID_ASSIGNEE": "Whoever is in charge of an item has to take part in the task",
   "notifications.unreadLabel": "Notifications, {count} unread",
 
   // --- Workday calendar errors
@@ -728,6 +750,24 @@ const es: Record<TranslationKey, string> = {
   "taskForm.descriptionRequired": "Explicá de qué trata la tarea",
   "taskForm.datesRequired": "Indicá la fecha y hora de inicio y de fin",
   "taskForm.participantsRequired": "Elegí al menos un participante",
+
+  "taskForm.checklist": "Lista de ítems",
+  "taskForm.checklistHint":
+    "Dividí la tarea en pasos. Quien participa los va tildando a medida que los termina.",
+  "taskForm.checklistItem": "Ítem {number}",
+  "taskForm.checklistAdd": "Agregar ítem",
+  "taskForm.checklistAssignee": "A cargo",
+  "taskForm.checklistNobody": "Nadie",
+  "taskForm.checklistRemove": "Quitar ítem",
+  "taskForm.autoComplete": "Pasar la tarea a Hecho cuando se tilden todos los ítems",
+  "taskForm.autoCompleteHint":
+    "Apagado por defecto: una lista no siempre es toda la tarea. Necesita al menos un ítem.",
+  "taskDetail.checklist": "Lista de ítems ({done}/{total})",
+  "taskDetail.checklistAssigned": "A cargo: {name}",
+  "taskDetail.checklistDoneBy": "Marcado por {name}",
+  "taskDetail.cannotCheck": "Solo los participantes pueden tildar los ítems de esta tarea",
+  "board.checklistProgress": "{done} de {total} ítems listos",
+
   "account.newTitle": "Nueva cuenta",
   "account.create": "Crear cuenta",
   "account.creating": "Creando…",
@@ -883,6 +923,11 @@ const es: Record<TranslationKey, string> = {
   "dashboard.reportFilename": "reporte-actividades.pdf",
   "board.participantsLabel": "Integrantes",
   "tasksPage.pdfReport": "Reporte PDF",
+  "error.CHECKLIST_NOT_ALLOWED":
+    "Solo los participantes pueden tildar los ítems de esta tarea",
+  "error.CHECKLIST_ITEM_NOT_FOUND": "Ese ítem de la lista ya no existe",
+  "error.INVALID_ASSIGNEE":
+    "Quien está a cargo de un ítem tiene que participar de la tarea",
   "notifications.unreadLabel": "Notificaciones, {count} sin leer",
 
   "error.INVALID_DATE":

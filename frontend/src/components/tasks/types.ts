@@ -31,6 +31,21 @@ export type TaskComment = {
   author: TaskParticipant;
 };
 
+export type TaskChecklistItem = {
+  id: number;
+  text: string;
+  done: boolean;
+  doneAt: string | null;
+  /** Who is in charge. Always one of the task's participants, or nobody. */
+  assignee: TaskParticipant | null;
+  /**
+   * Who ticked it, null while it is open. May be a snapshot of a deleted
+   * account, in which case its id and employeeNumber are 0 - same shape as a
+   * message author, and for the same reason.
+   */
+  doneBy: TaskParticipant | null;
+};
+
 export type Task = {
   id: number;
   title: string;
@@ -43,6 +58,10 @@ export type Task = {
   autoPausedAt: string | null;
   /** endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
+  /** The task broken into steps, in the order the author wrote them. */
+  checklist: TaskChecklistItem[];
+  /** Move the task to Done on its own once every item is ticked. */
+  autoCompleteOnChecklist: boolean;
   /** Task chat: the comment thread and the widget thread are the same one. */
   conversationId: number | null;
   /** true when the task is Done or was deleted: read only. */
@@ -160,6 +179,14 @@ export function canMoveTask(task: Task, meId?: number, role?: string) {
   if (canManageTasks(role)) return true;
   if (!meId) return false;
   return task.participants.some((participant) => participant.id === meId);
+}
+
+/** Ticked over total. `total: 0` is what every "has a checklist?" check reads. */
+export function checklistProgress(task: Task) {
+  return {
+    done: task.checklist.filter((item) => item.done).length,
+    total: task.checklist.length,
+  };
 }
 
 /** Days before the cutoff at which the card starts warning. */

@@ -1,6 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import {
   ChatBubbleOutlineRounded,
+  ChecklistRounded,
   Inventory2Rounded,
   BedtimeRounded,
   MoreVertRounded,
@@ -26,6 +27,7 @@ import {
   ARCHIVE_WARNING_DAYS,
   STATE_META,
   STATE_ORDER,
+  checklistProgress,
   daysUntilArchive,
   noteVars,
   participantColor,
@@ -86,6 +88,7 @@ export default function TaskCard({
 
   const daysLeft = daysUntilArchive(task);
   const showArchiveWarning = !task.pinned && daysLeft <= ARCHIVE_WARNING_DAYS;
+  const progress = checklistProgress(task);
 
   const dragProps = overlay ? {} : { ref: setNodeRef, ...attributes, ...listeners };
 
@@ -195,6 +198,18 @@ export default function TaskCard({
           )}
 
           <Box sx={{ flex: 1 }} />
+
+          {progress.total > 0 && (
+            <Chip
+              size="small"
+              className="note-chip"
+              icon={<ChecklistRounded />}
+              label={`${progress.done}/${progress.total}`}
+              // The bare "2/3" means nothing read out on its own, same reason the
+              // state gets its own sr-only line above.
+              aria-label={tf("board.checklistProgress", progress)}
+            />
+          )}
 
           {task.commentsCount > 0 && (
             <Stack

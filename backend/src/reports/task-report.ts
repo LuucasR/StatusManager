@@ -19,6 +19,7 @@ export type ReportTask = {
   pinned: boolean;
   createdBy: { name: string } | null;
   participants: { employeeNumber: number; name: string }[];
+  checklist: { done: boolean }[];
 };
 
 type TaskReportOptions = {
@@ -117,6 +118,14 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
       chrome.y + 25,
       { width: 158 }
     );
+
+    if (row.checklist.length > 0) {
+      const ticked = row.checklist.filter((item) => item.done).length;
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(7);
+      doc.text(`Checklist ${ticked}/${row.checklist.length}`, margin + 10, chrome.y + 34, {
+        width: 158,
+      });
+    }
 
     const state = STATE[row.state];
     doc.roundedRect(margin + 176, chrome.y + 8, 76, 20, 6).fill(state.pale);

@@ -65,30 +65,30 @@ enum NotificationType {
 }
 
 model Employee {
-  id             Int              @id @default(autoincrement())
-  employeeNumber Int              @unique
-  name           String
-  email          String           @unique
-  password       String
+  id                     Int                     @id @default(autoincrement())
+  employeeNumber         Int                     @unique
+  name                   String
+  email                  String                  @unique
+  password               String
   /// Forces a password change on next login. Set when an admin resolves a
   /// reset request, because the temporary password is spoken out loud.
-  mustChangePassword Boolean     @default(false)
+  mustChangePassword     Boolean                 @default(false)
   /// Tokens issued before this instant are rejected. Without it, changing a
   /// password left every already-issued JWT valid for up to a day.
-  passwordChangedAt  DateTime?
+  passwordChangedAt      DateTime?
   /// When they last answered an activity check.
   ///
   /// Persisted rather than held in memory so the check can tell who answered
   /// even if the process restarted mid-window. Compared against
   /// `lastPromptedAt`: an answer counts only if it came AFTER the question.
-  lastConfirmedAt    DateTime?
+  lastConfirmedAt        DateTime?
   /// When the app last asked them whether they were still working.
   ///
   /// This is what makes the off-hours check both recurrent and restart-proof.
   /// The interval is measured from here, so the cadence cannot drift, and the
   /// answer timeout is re-derivable from the database after a restart drops the
   /// in-process timer. Null means never asked, which is due immediately.
-  lastPromptedAt     DateTime?
+  lastPromptedAt         DateTime?
   /// Consecutive activity checks that found nobody listening.
   ///
   /// A single miss no longer disconnects. On the web "no socket" reliably means
@@ -100,18 +100,21 @@ model Employee {
   ///
   /// Reset by anything that proves they are there: answering a check, changing
   /// their own status, or simply being reachable when the check runs.
-  missedChecks       Int          @default(0)
-  role           Role             @default(EMPLOYEE)
-  currentStatus  ActivityStatus   @default(OFFLINE)
-  statusSince    DateTime         @default(now())
-  active         Boolean          @default(true)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  activities     ActivityHistory[]
+  missedChecks           Int                     @default(0)
+  role                   Role                    @default(EMPLOYEE)
+  currentStatus          ActivityStatus          @default(OFFLINE)
+  statusSince            DateTime                @default(now())
+  active                 Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  activities             ActivityHistory[]
   passwordChangeRequests PasswordChangeRequest[]
 
   createdTasks       Task[]            @relation("TaskCreator")
   taskParticipations TaskParticipant[]
+
+  checklistAssignments TaskChecklistItem[] @relation("ChecklistAssignee")
+  checklistCompletions TaskChecklistItem[] @relation("ChecklistCompleter")
 
   conversations ConversationMember[]
   messages      Message[]
@@ -123,12 +126,12 @@ model Employee {
 /// approval the server mints a random temporary password, saves only its hash
 /// and returns the cleartext to the admin exactly once.
 model PasswordChangeRequest {
-  id                Int                         @id @default(autoincrement())
-  employeeId        Int
-  status            PasswordChangeRequestStatus @default(PENDING)
-  createdAt         DateTime                    @default(now())
-  resolvedAt        DateTime?
-  employee          Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id         Int                         @id @default(autoincrement())
+  employeeId Int
+  status     PasswordChangeRequestStatus @default(PENDING)
+  createdAt  DateTime                    @default(now())
+  resolvedAt DateTime?
+  employee   Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
   @@index([employeeId, status])
@@ -145,8 +148,8 @@ model ActivityHistory {
 
   /// Task declared when switching to WORKING. SetNull: deleting a task must not
   /// delete the time somebody booked against it.
-  taskId Int?
-  task   Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId    Int?
+  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
   /// Title snapshot, same reasoning as Conversation.title and
   /// Message.authorName: the summary has to keep saying what was worked on even
   /// once the task no longer exists.
@@ -158,26 +161,33 @@ model ActivityHistory {
 }
 
 model Task {
-  id          Int       @id @default(autoincrement())
-  title       String
-  description String
-  state       TaskState @default(PENDING)
-  startsAt    DateTime
-  endsAt      DateTime
-  pinned      Boolean   @default(false)
+  id                      Int       @id @default(autoincrement())
+  title                   String
+  description             String
+  state                   TaskState @default(PENDING)
+  startsAt                DateTime
+  endsAt                  DateTime
+  pinned                  Boolean   @default(false)
   /// Stamped when the end-of-day job moves a task out of IN_PROGRESS, cleared
   /// when the next working morning puts it back.
   ///
   /// The flag is what makes the pair reversible: at 09:00 the state alone
   /// cannot tell a task the job paused last night from one nobody ever started,
   /// and resuming every PENDING task would start work on its own.
-  autoPausedAt DateTime?
-  createdById Int?
-  createdBy   Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  autoPausedAt            DateTime?
+  /// Move the task to DONE on its own once the last checklist item is ticked.
+  ///
+  /// Per task and not a global rule: a checklist can be the whole of the work,
+  /// or a partial reminder with something still unwritten left to do. Deciding
+  /// it when the task is created is the only thing that tells those two apart.
+  autoCompleteOnChecklist Boolean   @default(false)
+  createdById             Int?
+  createdBy               Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   participants TaskParticipant[]
+  checklist    TaskChecklistItem[]
 
   conversation  Conversation?
   notifications Notification[]
@@ -199,16 +209,56 @@ model TaskParticipant {
   @@index([employeeId])
 }
 
+/// One line of a task's checklist: "clean the menu", "clean the leftover assets".
+///
+/// Cascade like TaskParticipant: an item has no life of its own outside the task.
+model TaskChecklistItem {
+  id         Int       @id @default(autoincrement())
+  taskId     Int
+  text       String
+  done       Boolean   @default(false)
+  doneAt     DateTime?
+  /// Who ticked it. SetNull rather than Cascade: deleting an account must not
+  /// delete the work it recorded.
+  doneById   Int?
+  doneBy     Employee? @relation("ChecklistCompleter", fields: [doneById], references: [id], onDelete: SetNull)
+  /// Name snapshot, same reasoning as Message.authorName: "done by" is a fact
+  /// about the past and has to stay readable once the account is gone.
+  doneByName String?
+  /// Who is in charge of this one. Always one of the task's participants, which
+  /// the routes enforce - there is no database constraint that can express
+  /// "exists in TaskParticipant for THIS task".
+  ///
+  /// Deliberately NOT snapshotted the way doneByName is: an assignment to a
+  /// deleted account is stale rather than historical, and should read as nobody
+  /// being in charge so somebody picks it up.
+  assigneeId Int?
+  assignee   Employee? @relation("ChecklistAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  /// Explicit ordering, unlike TaskParticipant, which is read back by addedAt.
+  /// A checklist's order is the one the author typed and can reorder while
+  /// editing, so it cannot be derived from when the row was inserted.
+  ///
+  /// Deliberately NOT unique on (taskId, position): reordering would then need
+  /// a two-phase update to avoid colliding with the index halfway through.
+  position   Int
+  createdAt  DateTime  @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, position])
+  @@index([assigneeId])
+}
+
 model Conversation {
-  id   Int              @id @default(autoincrement())
-  kind ConversationKind
+  id     Int              @id @default(autoincrement())
+  kind   ConversationKind
   /// get-or-create idempotency: "general" | "d:<minId>:<maxId>" | "t:<taskId>"
-  key  String           @unique
+  key    String           @unique
   /// Title snapshot: survives the task being deleted
   title  String?
-  closed Boolean @default(false)
-  taskId Int?    @unique
-  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  closed Boolean          @default(false)
+  taskId Int?             @unique
+  task   Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   createdAt     DateTime  @default(now())
   lastMessageAt DateTime?
@@ -233,7 +283,7 @@ model ConversationMember {
 }
 
 model Message {
-  id             Int  @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   conversationId Int
   authorId       Int?
   /// Snapshot: the history has to keep saying WHO spoke even after the account
@@ -250,7 +300,6 @@ model Message {
 
 /**
  * One row per recurring job, holding the last working day it ran.
- *
  * Kept in the database rather than in memory because that buys three things a
  * bare setInterval does not: the job still runs after a restart that straddled
  * its scheduled time (catch-up), it cannot run twice in one day, and a second
@@ -269,7 +318,6 @@ model ScheduledJobRun {
 
 /**
  * Single-row configuration for the working day, editable by an admin.
- *
  * A typed single row rather than a key/value table so the times keep their
  * shape and a typo cannot be stored as a valid setting.
  */
@@ -303,7 +351,6 @@ model WorkdaySettings {
 
 /**
  * One dated deviation from the weekly pattern.
- *
  * Covers all three cases with one row: `working: false` closes the day (a
  * holiday), `working: true` opens one the weekly pattern would have closed (a
  * worked Saturday), and the optional times make it a half day.

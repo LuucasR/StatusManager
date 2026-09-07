@@ -7,6 +7,13 @@ export type TaskPayload = {
   startsAt: string;
   endsAt: string;
   participantIds: number[];
+  /**
+   * The whole list, in order: the array index becomes the item's position. An
+   * entry carrying an `id` is one that already exists and keeps its tick; one
+   * without is new.
+   */
+  checklist: { id?: number; text: string; assigneeId: number | null }[];
+  autoCompleteOnChecklist: boolean;
 };
 
 export const listTasks = () => api<Task[]>("/tasks");
@@ -24,6 +31,17 @@ export const moveTask = (id: number, state: TaskState) =>
 
 export const pinTask = (id: number, pinned: boolean) =>
   api<Task>(`/tasks/${id}/pin`, { method: "PATCH", body: JSON.stringify({ pinned }) });
+
+/**
+ * Ticking one item. Its own call and not part of updateTask because it is a
+ * different permission: any participant may tick, only a manager may edit the
+ * list itself.
+ */
+export const setChecklistItem = (taskId: number, itemId: number, done: boolean) =>
+  api<Task>(`/tasks/${taskId}/checklist/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ done }),
+  });
 
 export const deleteTask = (id: number) =>
   api<{ success: boolean }>(`/tasks/${id}`, { method: "DELETE" });

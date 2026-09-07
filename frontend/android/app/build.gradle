@@ -22,6 +22,15 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    // The APK gets handed around as a file, so it is named after the product and
+    // not after the build type: "app-debug.apk" tells whoever receives it
+    // nothing, and it used to be renamed by hand after every build.
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = "HSG-SM.apk"
+        }
+    }
 }
 
 repositories {
