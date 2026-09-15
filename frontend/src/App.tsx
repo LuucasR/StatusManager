@@ -68,8 +68,9 @@ export default function App() {
             redirects, because the role is not known until AppLayout has
             fetched it - and every endpoint behind it refuses non-admins. */}
         <Route path="/workday" element={<WorkdayPage />} />
-        {/* Admin-only: the page redirects anyone else once the role is known,
-            and every /attendance endpoint refuses non-admins. */}
+        {/* Everyone: an admin records and sees the whole team, anyone else
+            gets a read-only calendar of their own arrivals. The backend only
+            lets non-admins reach GET /attendance/me. */}
         <Route path="/attendance" element={<AttendancePage />} />
       </Route>
 

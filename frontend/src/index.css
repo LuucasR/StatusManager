@@ -354,9 +354,22 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .cal-swatch.closed { background: var(--surface); }
 .cal-swatch.exception { background: var(--surface-2); box-shadow: inset 3px 0 0 0 var(--accent); }
 
+/* Attendance calendar. The arrival time is the whole point of the cell, so
+   unlike .cal-hours it stays visible on a phone. Lateness is marked by a bottom
+   rule as well as the colour, so it does not rest on hue alone. */
+.cal-arrival { margin-top: auto; font: 700 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.cal-late { font: 700 10.5px ui-monospace, monospace; color: #c2410c; }
+.cal-cell.on-time .cal-arrival { color: #15803d; }
+.cal-cell.late .cal-arrival { color: #c2410c; }
+.cal-cell.late { box-shadow: inset 0 -3px 0 0 #ea580c; }
+.cal-cell.on-time { box-shadow: inset 0 -3px 0 0 #22c55e; }
+.cal-swatch.on-time { background: var(--surface-2); box-shadow: inset 0 -3px 0 0 #22c55e; }
+.cal-swatch.late { background: var(--surface-2); box-shadow: inset 0 -3px 0 0 #ea580c; }
+
 @media (max-width: 800px) {
   .cal-cell { min-height: 58px; padding: 5px; }
-  .cal-label, .cal-hours { display: none; }
+  .cal-label, .cal-hours, .cal-late { display: none; }
+  .cal-arrival { font-size: 10px; }
 }
 
 /* Team panel as a corkboard. Same material as the task wall, so the two read as

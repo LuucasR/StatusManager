@@ -2,7 +2,6 @@ import { DeleteOutlineRounded } from "@mui/icons-material";
 import {
   Alert,
   Box,
-  Chip,
   CircularProgress,
   Container,
   FormControl,
@@ -22,10 +21,12 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, useOutletContext } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { isAdminRole } from "../components/roles";
 import type { AppOutletContext } from "../layouts/AppLayout";
-import { t, tf } from "../i18n";
+import { t } from "../i18n";
+import { HalfCell, LateChip } from "../components/attendance/AttendanceChips";
+import MyAttendance from "../components/attendance/MyAttendance";
 import { LOCALE } from "../locale";
 import PeriodFilter from "../components/PeriodFilter";
 import {
@@ -43,7 +44,6 @@ import {
   type AttendanceDay,
   type AttendanceHistory,
   type AttendanceSummary,
-  type HalfSummary,
 } from "../components/attendance/attendanceApi";
 
 /** "YYYY-MM-DD" -> a local date label, parsed piece by piece so it is not UTC. */
@@ -52,39 +52,36 @@ function formatDay(day: string) {
   return new Date(year, month - 1, date).toLocaleDateString(LOCALE);
 }
 
-function HalfCell({ half }: { half: HalfSummary }) {
-  return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }} useFlexGap>
-      <Chip
-        size="small"
-        color={half.exceeded ? "error" : "success"}
-        label={tf("attendance.used", { used: half.lateMinutes, tolerance: half.tolerance })}
-      />
-      <Typography variant="caption" color="text.secondary">
-        {tf("attendance.lateDays", { days: half.lateDays })}
-      </Typography>
-    </Stack>
-  );
-}
+/**
+ * The Attendance tab. An admin records everyone's arrivals and sets the
+ * allowance; anyone else sees their own month as a read-only calendar.
+ *
+ * The choice waits for the role: rendering either view before AppLayout has
+ * fetched it would briefly show an employee the admin screen, or fire requests
+ * that bounce with 403.
+ */
+export default function AttendancePage() {
+  const { me } = useOutletContext<AppOutletContext>();
 
-function LateChip({ minutes }: { minutes: number }) {
-  return minutes > 0 ? (
-    <Chip size="small" color="warning" label={tf("attendance.lateMinutes", { minutes })} />
-  ) : (
-    <Chip size="small" color="success" variant="outlined" label={t("attendance.onTime")} />
-  );
+  if (!me) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 6 }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
+
+  return isAdminRole(me.role) ? <AdminAttendance /> : <MyAttendance />;
 }
 
 /**
- * Admin-only arrival records.
+ * Everyone's arrival records.
  *
  * Times are typed in by hand, one day at a time. Lateness is measured against the
  * working calendar's start time for that day and adds up into a budget per half of
  * the month, whose size is set at the top of this page.
  */
-export default function AttendancePage() {
-  const { me } = useOutletContext<AppOutletContext>();
-  const admin = isAdminRole(me?.role);
+function AdminAttendance() {
 
   const [settings, setSettings] = useState<WorkdaySettings | null>(null);
   const [date, setDate] = useState(() => toDayKey(new Date()));
@@ -122,24 +119,21 @@ export default function AttendancePage() {
     );
   }, [range, historyEmployee]);
 
-  // Nothing is fetched until the role is known to be admin: every endpoint
-  // would answer 403 to anyone else, and the page redirects them anyway.
   useEffect(() => {
-    if (!admin) return;
     getSettings().then(setSettings).catch(fail);
-  }, [admin, fail]);
+  }, [fail]);
 
   useEffect(() => {
-    if (admin && date) loadDay().catch(fail);
-  }, [admin, date, loadDay, fail]);
+    if (date) loadDay().catch(fail);
+  }, [date, loadDay, fail]);
 
   useEffect(() => {
-    if (admin) loadSummary().catch(fail);
-  }, [admin, loadSummary, fail]);
+    loadSummary().catch(fail);
+  }, [loadSummary, fail]);
 
   useEffect(() => {
-    if (admin) loadHistory().catch(fail);
-  }, [admin, loadHistory, fail]);
+    loadHistory().catch(fail);
+  }, [loadHistory, fail]);
 
   /**
    * PeriodFilter speaks in instants with an exclusive end; attendance is keyed
@@ -185,8 +179,6 @@ export default function AttendancePage() {
       fail(err);
     }
   }
-
-  if (me && !admin) return <Navigate to="/dashboard" replace />;
 
   if (!settings) {
     return (

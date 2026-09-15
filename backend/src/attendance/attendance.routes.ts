@@ -20,15 +20,64 @@ import {
 
 /**
  * Arrival times, typed in by an admin day by day, and the half-month summary
- * they add up to. Admin-only end to end: this is a record about people, not a
- * page anyone reads about themselves.
+ * they add up to.
+ *
+ * Two audiences: everyone can read their OWN month (GET /me), and only an admin
+ * sees the team or writes anything. The /me route is registered before the
+ * requireAdmin line on purpose - Express applies router.use to what follows it.
  */
 const router = Router();
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth);
 
 const HISTORY_TAKE = 1000;
 
 const EMPLOYEE_SELECT = { id: true, employeeNumber: true, name: true } as const;
+
+const ENTRY_SELECT = {
+  id: true,
+  employeeId: true,
+  date: true,
+  arrivedAt: true,
+  expectedStart: true,
+  lateMinutes: true,
+  note: true,
+} as const;
+
+function badMonth(res: import("express").Response) {
+  return res.status(400).json({ code: "INVALID_MONTH", message: "The month must be YYYY-MM" });
+}
+
+/** The caller's own arrivals for a month, and both halves of their allowance. */
+router.get("/me", async (req, res) => {
+  const month = String(req.query.month ?? "");
+  if (!isMonth(month)) return badMonth(res);
+
+  const employeeId = req.auth!.employeeId;
+  const halves = halvesOf(month);
+
+  const [config, entries] = await Promise.all([
+    getWorkdayConfig(),
+    prisma.attendanceEntry.findMany({
+      where: { employeeId, date: { gte: halves.first.from, lte: halves.second.to } },
+      select: ENTRY_SELECT,
+      orderBy: { date: "asc" },
+    }),
+  ]);
+
+  const summary = summarize(entries, [employeeId], config).get(employeeId)!;
+
+  res.json({
+    month,
+    firstHalf: { ...halves.first, tolerance: config.lateToleranceFirstHalfMinutes },
+    secondHalf: { ...halves.second, tolerance: config.lateToleranceSecondHalfMinutes },
+    entries,
+    first: summary.first,
+    second: summary.second,
+  });
+});
+
+// Everything below is the team view and the writes.
+router.use(requireAdmin);
 
 /** Start of `date` per the calendar, exception included. */
 async function expectedStartOf(date: string) {
@@ -177,9 +226,7 @@ router.get("/history", async (req, res) => {
 /** Both halves of a month for every active employee, plus anyone with entries. */
 router.get("/summary", async (req, res) => {
   const month = String(req.query.month ?? "");
-  if (!isMonth(month)) {
-    return res.status(400).json({ code: "INVALID_MONTH", message: "The month must be YYYY-MM" });
-  }
+  if (!isMonth(month)) return badMonth(res);
 
   const halves = halvesOf(month);
 

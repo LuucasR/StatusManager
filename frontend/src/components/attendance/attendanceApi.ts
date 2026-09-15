@@ -46,6 +46,20 @@ export type AttendanceHistory = {
   truncated: boolean;
 };
 
+export type MyAttendance = {
+  month: string;
+  firstHalf: { from: string; to: string; tolerance: number };
+  secondHalf: { from: string; to: string; tolerance: number };
+  entries: AttendanceEntry[];
+  first: HalfSummary;
+  second: HalfSummary;
+};
+
+/** The signed-in employee's own month. Open to every role. */
+export function getMine(month: string) {
+  return api<MyAttendance>(`/attendance/me?month=${month}`);
+}
+
 export function getDay(date: string) {
   return api<AttendanceDay>(`/attendance/day/${date}`);
 }

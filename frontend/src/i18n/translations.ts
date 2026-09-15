@@ -561,6 +561,11 @@ export const en = {
   "attendance.empty": "No arrivals recorded for this period.",
   "attendance.historyTruncated":
     "Showing the latest 1000 arrivals. Narrow the period to see older ones.",
+  "attendance.mySubtitle":
+    "Your arrival times as recorded by an administrator, and how much of each half-month late allowance you have spent.",
+  "attendance.myCalendar": "My arrivals",
+  "attendance.lateShort": "+{minutes} min",
+  "attendance.arrivalTitle": "Arrived {time}, expected {expected}",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -1083,6 +1088,11 @@ const es: Record<TranslationKey, string> = {
   "attendance.empty": "No hay entradas cargadas en este período.",
   "attendance.historyTruncated":
     "Se muestran las últimas 1000 entradas. Acotá el período para ver las anteriores.",
+  "attendance.mySubtitle":
+    "Tus horarios de entrada tal como los cargó un administrador, y cuánto llevás gastado de la tolerancia de cada quincena.",
+  "attendance.myCalendar": "Mis entradas",
+  "attendance.lateShort": "+{minutes} min",
+  "attendance.arrivalTitle": "Entrada {time}, esperada {expected}",
 };
 
 export const CATALOGUES = { en, es };
