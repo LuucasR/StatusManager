@@ -1,7 +1,8 @@
-import { DeleteOutlineRounded } from "@mui/icons-material";
+import { DeleteOutlineRounded, RefreshRounded, SaveRounded } from "@mui/icons-material";
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   Container,
   FormControl,
@@ -20,11 +21,11 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { isAdminRole } from "../components/roles";
 import type { AppOutletContext } from "../layouts/AppLayout";
-import { t } from "../i18n";
+import { t, tf } from "../i18n";
 import { HalfCell, LateChip } from "../components/attendance/AttendanceChips";
 import MyAttendance from "../components/attendance/MyAttendance";
 import { LOCALE } from "../locale";
@@ -94,16 +95,29 @@ function AdminAttendance() {
   const [history, setHistory] = useState<AttendanceHistory | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fail = useCallback((err: unknown) => setError((err as Error).message), []);
 
-  const loadDay = useCallback(async () => {
-    const loaded = await getDay(date);
-    setDay(loaded);
-    setDrafts(
-      Object.fromEntries(loaded.rows.map((row) => [row.employee.id, row.entry?.arrivedAt ?? ""]))
-    );
-  }, [date]);
+  /**
+   * Reloads the day from the server. `keep` lists rows whose unsaved typing has
+   * to survive the reload - saving one row must not wipe what is still being
+   * typed in the others.
+   */
+  const loadDay = useCallback(
+    async (keep: number[] = []) => {
+      const loaded = await getDay(date);
+      setDay(loaded);
+      setDrafts((previous) => {
+        const next: Record<number, string> = Object.fromEntries(
+          loaded.rows.map((row) => [row.employee.id, row.entry?.arrivedAt ?? ""])
+        );
+        for (const id of keep) if (id in previous) next[id] = previous[id];
+        return next;
+      });
+    },
+    [date]
+  );
 
   const loadSummary = useCallback(async () => {
     if (!month) return;
@@ -161,22 +175,67 @@ function AdminAttendance() {
     }
   }
 
-  async function saveArrival(employeeId: number, value: string) {
-    const current = day?.rows.find((row) => row.employee.id === employeeId)?.entry ?? null;
-    if (value === (current?.arrivedAt ?? "")) return;
+  /** Rows with a complete time typed in that differs from what is saved. */
+  const pendingIds = useMemo(
+    () =>
+      (day?.rows ?? [])
+        .filter(({ employee, entry }) => {
+          const draft = drafts[employee.id] ?? "";
+          return draft !== "" && draft !== (entry?.arrivedAt ?? "");
+        })
+        .map(({ employee }) => employee.id),
+    [day, drafts]
+  );
 
+  /**
+   * Everything that shows a saved arrival, refreshed together. The summary
+   * jumps to the month of the day being recorded: it has its own month picker,
+   * and leaving it on another month made a save look like it had done nothing.
+   */
+  async function refreshAfterWrite(keep: number[]) {
+    const target = date.slice(0, 7);
+    await Promise.all([
+      loadDay(keep),
+      loadHistory(),
+      // A changed month reloads through its own effect.
+      target === month ? loadSummary() : Promise.resolve(setMonth(target)),
+    ]);
+  }
+
+  /**
+   * Explicit save rather than on blur. Saving on blur fired on a half-typed
+   * time too - which the browser reports as an empty value - and that cleared
+   * the arrival already on record.
+   */
+  async function saveArrivals(employeeIds: number[]) {
+    if (employeeIds.length === 0) return;
+    setSaving(true);
     setError("");
     setNotice("");
     try {
-      // An emptied field is how a mistyped arrival gets taken back.
-      if (value === "") await clearEntry(date, employeeId);
-      else {
-        await saveEntry(date, employeeId, value);
-        setNotice(t("attendance.entrySaved"));
-      }
-      await Promise.all([loadDay(), loadSummary(), loadHistory()]);
+      // One at a time: a handful of rows, and a failure then names the row
+      // that broke instead of leaving the rest half-applied in parallel.
+      for (const id of employeeIds) await saveEntry(date, id, drafts[id]);
+      setNotice(tf("attendance.entriesSaved", { count: employeeIds.length }));
+      await refreshAfterWrite(pendingIds.filter((id) => !employeeIds.includes(id)));
     } catch (err) {
       fail(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearArrival(employeeId: number) {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await clearEntry(date, employeeId);
+      await refreshAfterWrite(pendingIds.filter((id) => id !== employeeId));
+    } catch (err) {
+      fail(err);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -258,14 +317,24 @@ function AdminAttendance() {
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             {t("attendance.day")}
           </Typography>
-          <TextField
-            size="small"
-            type="date"
-            label={t("attendance.date")}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <TextField
+              size="small"
+              type="date"
+              label={t("attendance.date")}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<SaveRounded />}
+              disabled={saving || pendingIds.length === 0}
+              onClick={() => void saveArrivals(pendingIds)}
+            >
+              {tf("attendance.saveAll", { count: pendingIds.length })}
+            </Button>
+          </Stack>
         </Stack>
 
         {day && !day.working && (
@@ -302,7 +371,11 @@ function AdminAttendance() {
                       onChange={(e) =>
                         setDrafts((all) => ({ ...all, [employee.id]: e.target.value }))
                       }
-                      onBlur={(e) => void saveArrival(employee.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && pendingIds.includes(employee.id)) {
+                          void saveArrivals([employee.id]);
+                        }
+                      }}
                     />
                   </TableCell>
                   <TableCell>
@@ -314,16 +387,27 @@ function AdminAttendance() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                    <Button
+                      size="small"
+                      startIcon={<SaveRounded />}
+                      disabled={saving || !pendingIds.includes(employee.id)}
+                      onClick={() => void saveArrivals([employee.id])}
+                    >
+                      {t("attendance.save")}
+                    </Button>
                     {entry && (
                       <Tooltip title={t("attendance.clear")}>
-                        <IconButton
-                          size="small"
-                          aria-label={t("attendance.clear")}
-                          onClick={() => void saveArrival(employee.id, "")}
-                        >
-                          <DeleteOutlineRounded fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={t("attendance.clear")}
+                            disabled={saving}
+                            onClick={() => void clearArrival(employee.id)}
+                          >
+                            <DeleteOutlineRounded fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                     )}
                   </TableCell>
@@ -340,17 +424,31 @@ function AdminAttendance() {
           spacing={2}
           sx={{ alignItems: { sm: "center" }, justifyContent: "space-between", mb: 2 }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            {t("attendance.summary")}
-          </Typography>
-          <TextField
-            size="small"
-            type="month"
-            label={t("attendance.month")}
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              {t("attendance.summary")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("attendance.summaryHelp")}
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <TextField
+              size="small"
+              type="month"
+              label={t("attendance.month")}
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <Button
+              variant="outlined"
+              startIcon={<RefreshRounded />}
+              onClick={() => void loadSummary().catch(fail)}
+            >
+              {t("attendance.refresh")}
+            </Button>
+          </Stack>
         </Stack>
 
         <Box sx={{ overflowX: "auto" }}>
