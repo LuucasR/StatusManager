@@ -86,7 +86,7 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
     // Its own return value reports "no tab open" - asking it rather than
     // checking presence separately closes the gap where they disconnect between
     // the two calls, which would stamp a deadline against a prompt never sent.
-    if (!sendConfirmationRequest(id, config.confirmationTimeoutSeconds * 1000)) {
+    if (!sendConfirmationRequest(id, config.confirmationTimeoutSeconds * 1000, "offHours")) {
       // Nothing there to accept it. In a browser that reliably means no tab is
       // open, but Android tears the socket down about a minute after the screen
       // goes off, and disconnecting on that alone auto-disconnected anyone who

@@ -16,9 +16,18 @@ import { logger } from "./logger";
  */
 const employeeRoom = (employeeId: number) => `emp:${employeeId}`;
 
+/**
+ * Why they are being asked. The dialog words the question differently: the
+ * scheduler's comes out of hours on its own, an admin's is somebody asking.
+ */
+export type ConfirmationReason = "offHours" | "admin";
+
 type PendingConfirmation = {
   employeeId: number;
   timeout: NodeJS.Timeout;
+  reason: ConfirmationReason;
+  /** Epoch ms the timer fires at, so a client that missed the event can resume the countdown. */
+  deadline: number;
 };
 
 const pendingConfirmations = new Map<number, PendingConfirmation>();
@@ -131,7 +140,8 @@ export function isEmployeeOnline(employeeId: number) {
  */
 export function sendConfirmationRequest(
   employeeId: number,
-  timeoutMs: number = DEFAULT_CONFIRMATION_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_CONFIRMATION_TIMEOUT_MS,
+  reason: ConfirmationReason = "admin"
 ) {
   if (!isEmployeeOnline(employeeId)) {
     return false;
@@ -143,7 +153,13 @@ export function sendConfirmationRequest(
     clearTimeout(old.timeout);
   }
 
-  io.to(employeeRoom(employeeId)).emit("confirmation:request");
+  // The window travels with the prompt: the client used to read it from the
+  // settings, which non-admins can no longer see, and an admin's ad-hoc request
+  // does not use the configured window anyway.
+  io.to(employeeRoom(employeeId)).emit("confirmation:request", {
+    timeoutSeconds: Math.round(timeoutMs / 1000),
+    reason,
+  });
 
   const timeout = setTimeout(() => {
     // Dropped from the map FIRST: the handler below is async, and leaving the
@@ -168,9 +184,21 @@ export function sendConfirmationRequest(
   pendingConfirmations.set(employeeId, {
     employeeId,
     timeout,
+    reason,
+    deadline: Date.now() + timeoutMs,
   });
 
   return true;
+}
+
+/**
+ * The check still ticking in this process, if any, for a client that has to
+ * put the dialog back on screen after missing the event.
+ */
+export function getPendingConfirmation(employeeId: number) {
+  const pending = pendingConfirmations.get(employeeId);
+  if (!pending) return null;
+  return { reason: pending.reason, deadline: pending.deadline };
 }
 
 /**

@@ -201,6 +201,9 @@ export default function WorkdayPage() {
             />
           </Stack>
 
+          {/* The activity check's timing is the admin's alone: the server does
+              not even send these three values to anyone else. */}
+          {canEdit && (
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
               label={t("workday.delay")}
@@ -251,6 +254,7 @@ export default function WorkdayPage() {
               }
             />
           </Stack>
+          )}
 
           <TextField
             select

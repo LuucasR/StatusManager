@@ -21,6 +21,7 @@ import { closeSocket } from "../realtime/socket";
 import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
+import ActivityConfirmationDialog from "../components/activities/ActivityConfirmationDialog";
 import type { Role } from "../components/roles";
 import AppSettings from "../components/AppSettings";
 import { t } from "../i18n";
@@ -191,6 +192,10 @@ export default function AppLayout() {
       <Outlet context={{ me } satisfies AppOutletContext} />
 
       <ChatLauncher me={me ? { id: me.id, name: me.name } : null} />
+
+      {/* Here and not on the dashboard: the check has to be answerable from
+          whatever page the person is on, or it disconnects them unasked. */}
+      <ActivityConfirmationDialog me={me} />
     </Box>
     </ChatProvider>
     </SocketProvider>

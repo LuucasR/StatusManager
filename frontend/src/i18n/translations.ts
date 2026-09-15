@@ -401,6 +401,8 @@ export const en = {
   "dashboard.confirmationCountdown": "Time left: {seconds}s",
   "dashboard.changeActivity": "Change activity",
   "dashboard.stillOnIt": "Yes, still on it",
+  "activityCheck.offHoursBody":
+    "You're still marked as Working outside working hours. Are you still working?",
   "account.created":
     "Account created: {name} · employee #{number}. Pass them the number and the password.",
   "chat.messages": "Messages",
@@ -946,6 +948,8 @@ const es: Record<TranslationKey, string> = {
   "dashboard.confirmationCountdown": "Tiempo restante: {seconds}s",
   "dashboard.changeActivity": "Cambiar actividad",
   "dashboard.stillOnIt": "Sí, continúo",
+  "activityCheck.offHoursBody":
+    "Seguís marcado como Trabajando fuera del horario laboral. ¿Seguís trabajando?",
   "account.created":
     "Cuenta creada: {name} · legajo #{number}. Pasale el legajo y la contraseña.",
   "chat.messages": "Mensajes",

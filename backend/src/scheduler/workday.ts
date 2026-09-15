@@ -282,6 +282,26 @@ export function checkExpired(
   return now.getTime() - lastPromptedAt.getTime() >= timeoutSeconds * 1000;
 }
 
+/**
+ * Seconds left to answer an open check, or null when none is open.
+ *
+ * What lets the client put back a dialog it never got to show: a reload, a
+ * navigation, or a phone waking up inside the window. Same rule as
+ * checkExpired, so the dialog is on screen exactly as long as an answer would
+ * still be accepted.
+ */
+export function confirmationSecondsLeft(
+  lastPromptedAt: Date | null,
+  lastConfirmedAt: Date | null,
+  timeoutSeconds: number,
+  now: Date = new Date()
+) {
+  if (!lastPromptedAt) return null;
+  if (lastConfirmedAt && lastConfirmedAt >= lastPromptedAt) return null;
+  const left = timeoutSeconds - Math.floor((now.getTime() - lastPromptedAt.getTime()) / 1000);
+  return left > 0 ? left : null;
+}
+
 export type ActivityCheckState = {
   lastPromptedAt: Date | null;
   lastConfirmedAt: Date | null;

@@ -3,8 +3,13 @@ import PDFDocument from "pdfkit";
 import { z } from "zod";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
-import { emitStatusChanged, confirmActivity, cancelConfirmation } from "../realtime";
-import { checkExpired, getWorkdayConfig } from "../scheduler/workday";
+import {
+  emitStatusChanged,
+  confirmActivity,
+  cancelConfirmation,
+  getPendingConfirmation,
+} from "../realtime";
+import { checkExpired, confirmationSecondsLeft, getWorkdayConfig } from "../scheduler/workday";
 import { renderActivityReport } from "../reports/activity-report";
 import { changeStatusSchema } from "./activity-validation";
 import { overlappingWhere, visibleHistoryWhere } from "./activity-status";
@@ -206,6 +211,46 @@ router.get("/report.pdf", async (req, res) => {
   });
 });
 
+
+/**
+ * Whether a check is waiting for the caller's answer, and for how much longer.
+ *
+ * The prompt is a socket event, so a client that was not listening at that
+ * instant - reloading, or a phone waking up - never saw it, and the check then
+ * disconnected somebody who was never asked. The dialog calls this on mount and
+ * on every reconnect to put the question back on screen.
+ */
+router.get("/pending-confirmation", async (req, res) => {
+  const employeeId = req.auth!.employeeId;
+
+  const live = getPendingConfirmation(employeeId);
+  if (live) {
+    const secondsLeft = Math.ceil((live.deadline - Date.now()) / 1000);
+    if (secondsLeft > 0) {
+      return res.json({ pending: true, secondsLeft, reason: live.reason });
+    }
+  }
+
+  // No live timer (a restart dropped it): the database still knows. Only the
+  // scheduler survives a restart with its deadline, hence "offHours".
+  const [employee, config] = await Promise.all([
+    prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { lastPromptedAt: true, lastConfirmedAt: true },
+    }),
+    getWorkdayConfig(),
+  ]);
+  const secondsLeft = employee
+    ? confirmationSecondsLeft(
+        employee.lastPromptedAt,
+        employee.lastConfirmedAt,
+        config.confirmationTimeoutSeconds
+      )
+    : null;
+
+  if (secondsLeft === null) return res.json({ pending: false });
+  res.json({ pending: true, secondsLeft, reason: "offHours" });
+});
 
 router.post("/confirm-activity", async (req, res) => {
   const employeeId = req.auth!.employeeId;

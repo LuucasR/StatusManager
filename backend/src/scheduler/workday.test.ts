@@ -5,6 +5,7 @@ import {
   checkDue,
   checkExpired,
   closeMinutes,
+  confirmationSecondsLeft,
   isOffHours,
   promptMinutes,
   resolveWorkday,
@@ -253,6 +254,32 @@ describe("checkExpired", () => {
   it("expires exactly on the timeout", () => {
     const onTheDot = new Date(now.getTime() - 120_000);
     assert.equal(checkExpired(onTheDot, null, 120, now), true);
+  });
+});
+
+describe("confirmationSecondsLeft", () => {
+  const now = new Date("2026-03-10T23:00:00Z");
+  const secondsAgo = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+
+  it("is null when nobody was asked", () => {
+    assert.equal(confirmationSecondsLeft(null, null, 120, now), null);
+  });
+
+  it("counts down from the prompt", () => {
+    assert.equal(confirmationSecondsLeft(secondsAgo(30), null, 120, now), 90);
+  });
+
+  it("is null once answered", () => {
+    const asked = secondsAgo(30);
+    assert.equal(confirmationSecondsLeft(asked, secondsAgo(10), 120, now), null);
+  });
+
+  it("ignores an answer that predates the question", () => {
+    assert.equal(confirmationSecondsLeft(secondsAgo(30), secondsAgo(60), 120, now), 90);
+  });
+
+  it("is null once the window has run out", () => {
+    assert.equal(confirmationSecondsLeft(secondsAgo(120), null, 120, now), null);
   });
 });
 

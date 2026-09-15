@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
+import { isAdmin } from "../auth/roles";
 import { getWorkdayConfig, isCalendarDay } from "../scheduler/workday";
 
 /**
@@ -18,8 +19,19 @@ import { getWorkdayConfig, isCalendarDay } from "../scheduler/workday";
 const router = Router();
 router.use(requireAuth);
 
-router.get("/settings", async (_req, res) => {
-  res.json(await getWorkdayConfig());
+router.get("/settings", async (req, res) => {
+  const config = await getWorkdayConfig();
+  if (isAdmin(req.auth?.role)) return res.json(config);
+
+  // The hours are everyone's; how the activity check is timed is the admin's.
+  // Knowing the exact window is knowing how long a prompt can be ignored.
+  const {
+    confirmationDelayMinutes: _delay,
+    confirmationTimeoutSeconds: _timeout,
+    recheckIntervalMinutes: _recheck,
+    ...visible
+  } = config;
+  res.json(visible);
 });
 
 router.get("/exceptions", async (req, res) => {

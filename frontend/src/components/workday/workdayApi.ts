@@ -5,10 +5,14 @@ export type WorkdaySettings = {
   startTime: string;
   endTime: string;
   timezone: string;
-  confirmationDelayMinutes: number;
-  confirmationTimeoutSeconds: number;
+  /*
+   * The activity check's timing. Optional because GET /workday/settings only
+   * sends these three to an admin.
+   */
+  confirmationDelayMinutes?: number;
+  confirmationTimeoutSeconds?: number;
   /** Minutes between checks while someone is still working out of hours. */
-  recheckIntervalMinutes: number;
+  recheckIntervalMinutes?: number;
   enabled: boolean;
   /** Total late minutes allowed from the 1st to the 15th. */
   lateToleranceFirstHalfMinutes: number;

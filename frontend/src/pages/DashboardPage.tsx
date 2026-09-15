@@ -60,7 +60,7 @@ import {
   type Status,
 } from "../components/activities/statuses";
 import { LOCALE } from "../locale";
-import { getSettings } from "../components/workday/workdayApi";
+import { useSearchParams } from "react-router-dom";
 
 
 type Employee = {
@@ -154,20 +154,7 @@ export default function DashboardPage() {
   const [factsLoading, setFactsLoading] = useState(false);
 
   const [error, setError] = useState("");
-  const [confirmationDialog, setConfirmationDialog] = useState(false);
-const [confirmationCountdown, setConfirmationCountdown] = useState(0);
-/*
- * How long the server will actually wait, read from the workday settings.
- *
- * Held in a ref rather than in state because the socket handler needs the
- * current value at the instant a prompt lands, and it must not re-subscribe
- * when the number changes. It used to be hardcoded to 120 here while the
- * server read `confirmationTimeoutSeconds`, so an admin lowering the window
- * left the dialog counting down to a moment that had already passed - much
- * more visible now that the same prompt comes back all evening.
- */
-const confirmationSeconds = useRef(120);
-const [confirming, setConfirming] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
 const [reportDialog, setReportDialog] = useState(false);
@@ -204,14 +191,6 @@ const [notice, setNotice] = useState("");
     const current = await api<Employee>("/activities/me");
 
     setMe(current);
-
-    // Best effort: a failure here must not take the dashboard down with it,
-    // since the countdown is cosmetic and the server enforces the real window.
-    try {
-      confirmationSeconds.current = (await getSettings()).confirmationTimeoutSeconds;
-    } catch {
-      // Keep whatever we had; the default matches the server's own.
-    }
 
     await loadHistory(historyParamsRef.current);
 
@@ -300,33 +279,21 @@ const [notice, setNotice] = useState("");
 // listeners died on navigating to /tasks.
 useSocketEvent("status:changed", () => load());
 
-useSocketEvent("confirmation:request", () => {
-  setConfirmationDialog(true);
-  setConfirmationCountdown(confirmationSeconds.current);
-  // A fresh prompt has to clear the previous one's in-flight flag, or a
-  // failed attempt would leave the new dialog's button permanently disabled.
-  setConfirming(false);
-});
+// The check's dialog itself lives in the layout (ActivityConfirmationDialog), so
+// it can be answered from any page. The dashboard only refreshes on its outcome.
+useSocketEvent("confirmation:confirmed", () => void load());
+useSocketEvent("confirmation:timeout", () => void load());
 
-// Both of these are broadcast to EVERY client, so the payload has to be
-// checked: without it, one person's check closing would close the dialog of
-// anyone else who happened to have one open.
-useSocketEvent<{ employeeId: number }>("confirmation:confirmed", (payload) => {
-  if (payload?.employeeId === me?.id) setConfirmationDialog(false);
-  void load();
-});
-
-// The server drops the pending check when its timer fires. Closing the dialog
-// here is what stops the button outliving the thing it acts on - clicking it
-// afterwards was the 400 that looked like the button doing nothing.
-useSocketEvent<{ employeeId: number }>("confirmation:timeout", (payload) => {
-  if (payload?.employeeId === me?.id) {
-    setConfirmationDialog(false);
-    setConfirming(false);
-    setError(t("dashboard.confirmationExpired"));
-  }
-  void load();
-});
+// "Change activity" in that dialog lands here with ?changeStatus=1. The param
+// is dropped straight away so a reload or a back navigation does not reopen it.
+useEffect(() => {
+  if (searchParams.get("changeStatus") !== "1") return;
+  setSelectedEmployee(null);
+  setDialog(true);
+  const next = new URLSearchParams(searchParams);
+  next.delete("changeStatus");
+  setSearchParams(next, { replace: true });
+}, [searchParams, setSearchParams]);
 
 useOnReconnect(() => load());
 
@@ -376,57 +343,6 @@ useOnReconnect(() => load());
       setError((err as Error).message);
     }
   }
-
-  /**
-   * Answering the end-of-day check.
-   *
-   * The failure path matters as much as the success one. The pending check
-   * lives in the server's memory, so it is gone if the timer fired, if the
-   * backend restarted in between, or if this is a second click - and the call
-   * then answers 400. This used to have no catch at all, so the rejection
-   * escaped as an unhandled promise, the dialog stayed open and the button
-   * looked dead. Whatever the reason, there is nothing left to confirm, so the
-   * dialog closes either way and the message is surfaced instead of swallowed.
-   */
-  async function confirmActivity() {
-    if (confirming) return;
-    setConfirming(true);
-    try {
-      await api("/activities/confirm-activity", { method: "POST" });
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setConfirming(false);
-      setConfirmationDialog(false);
-      void load();
-    }
-  }
-
-useEffect(() => {
-
-  if (!confirmationDialog) {
-    return;
-  }
-
-  const timer = setInterval(() => {
-
-    setConfirmationCountdown((value) => {
-
-      if (value <= 1) {
-        clearInterval(timer);
-        return 0;
-      }
-
-      return value - 1;
-
-    });
-
-  }, 1000);
-
-  return () => clearInterval(timer);
-
-}, [confirmationDialog]);
-
 
   function buildReportParams() {
     const params = new URLSearchParams();
@@ -1131,42 +1047,6 @@ useEffect(() => {
       </DialogActions>
     </Dialog>
 
-    <Dialog
-      open={confirmationDialog}
-    >
-      <DialogTitle>
-        {t("dashboard.confirmationTitle")}
-      </DialogTitle>
-
-      <DialogContent>
-        <Typography>
-          {t("dashboard.confirmationBody")}
-        </Typography>
-
-        <Typography sx={{ mt: 2 }}>
-          {tf("dashboard.confirmationCountdown", { seconds: confirmationCountdown })}
-        </Typography>
-      </DialogContent>
-
-      <DialogActions>
-        <Button
-          onClick={() => {
-            setConfirmationDialog(false);
-            setDialog(true);
-          }}
-        >
-          {t("dashboard.changeActivity")}
-        </Button>
-
-        <Button
-          variant="contained"
-          disabled={confirming}
-          onClick={() => void confirmActivity()}
-        >
-          {t("dashboard.stillOnIt")}
-        </Button>
-      </DialogActions>
-    </Dialog>
     <Dialog
   open={reportDialog}
   onClose={() => setReportDialog(false)}

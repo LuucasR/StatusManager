@@ -14,6 +14,7 @@ import { Role } from "@prisma/client";
 import { LOCALE } from "../locale";
 import {
   WORKDAY_SETTINGS_ID,
+  getWorkdayConfig,
   isCalendarDay,
   isValidTimeOfDay,
   isValidTimeZone,
@@ -347,7 +348,11 @@ router.post("/employees/:id/request-confirmation", requireStaff, async (req, res
     });
   }
 
-  const sent = sendConfirmationRequest(employeeId);
+  // The configured window, not the hardcoded default: the database backstop and
+  // GET /activities/pending-confirmation both judge the answer by that setting,
+  // so a different in-process timer would disagree with them.
+  const { confirmationTimeoutSeconds } = await getWorkdayConfig();
+  const sent = sendConfirmationRequest(employeeId, confirmationTimeoutSeconds * 1000, "admin");
 
   if (!sent) {
     return res.status(400).json({
