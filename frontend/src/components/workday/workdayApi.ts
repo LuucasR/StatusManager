@@ -10,6 +10,10 @@ export type WorkdaySettings = {
   /** Minutes between checks while someone is still working out of hours. */
   recheckIntervalMinutes: number;
   enabled: boolean;
+  /** Total late minutes allowed from the 1st to the 15th. */
+  lateToleranceFirstHalfMinutes: number;
+  /** Total late minutes allowed from the 16th to the end of the month. */
+  lateToleranceSecondHalfMinutes: number;
 };
 
 export type WorkdayException = {

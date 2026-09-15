@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  activityCheckAction,
   checkDue,
   checkExpired,
   closeMinutes,
@@ -31,6 +32,8 @@ const config: WorkdayConfig = {
   confirmationTimeoutSeconds: 120,
   recheckIntervalMinutes: 30,
   enabled: true,
+  lateToleranceFirstHalfMinutes: 25,
+  lateToleranceSecondHalfMinutes: 25,
 };
 
 describe("zonedNow", () => {
@@ -250,5 +253,50 @@ describe("checkExpired", () => {
   it("expires exactly on the timeout", () => {
     const onTheDot = new Date(now.getTime() - 120_000);
     assert.equal(checkExpired(onTheDot, null, 120, now), true);
+  });
+});
+
+describe("activityCheckAction", () => {
+  const now = new Date("2026-03-10T23:00:00Z");
+  const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+
+  it("disconnects on a question left unanswered with no live timer", () => {
+    // The restart backstop. It is also what fired every minute when a stale
+    // question from an earlier stretch was never cleared.
+    const state = { lastPromptedAt: minutesAgo(90), lastConfirmedAt: null, missedChecks: 0 };
+    assert.equal(activityCheckAction(state, config, now, false), "disconnect");
+  });
+
+  it("does not disconnect right after a status change", () => {
+    // A status change stamps both with the same instant, which buries the old
+    // unanswered question: the next one is simply one interval away.
+    const changed = minutesAgo(1);
+    const state = { lastPromptedAt: changed, lastConfirmedAt: changed, missedChecks: 0 };
+    assert.equal(activityCheckAction(state, config, now, false), "skip");
+  });
+
+  it("asks once the configured interval has passed since the status change", () => {
+    const changed = minutesAgo(30);
+    const state = { lastPromptedAt: changed, lastConfirmedAt: changed, missedChecks: 0 };
+    assert.equal(activityCheckAction(state, config, now, false), "prompt");
+    const shorter = { ...config, recheckIntervalMinutes: 45 };
+    assert.equal(activityCheckAction(state, shorter, now, false), "skip");
+  });
+
+  it("waits while the answer window is still open", () => {
+    const state = { lastPromptedAt: new Date(now.getTime() - 30_000), lastConfirmedAt: null, missedChecks: 0 };
+    assert.equal(activityCheckAction(state, config, now, false), "wait");
+  });
+
+  it("leaves an expired question to the live timer when there is one", () => {
+    const state = { lastPromptedAt: minutesAgo(5), lastConfirmedAt: null, missedChecks: 0 };
+    assert.equal(activityCheckAction(state, config, now, true), "wait");
+  });
+
+  it("retries a miss on the interval instead of disconnecting", () => {
+    const state = { lastPromptedAt: minutesAgo(10), lastConfirmedAt: null, missedChecks: 1 };
+    assert.equal(activityCheckAction(state, config, now, false), "skip");
+    const due = { ...state, lastPromptedAt: minutesAgo(30) };
+    assert.equal(activityCheckAction(due, config, now, false), "prompt");
   });
 });

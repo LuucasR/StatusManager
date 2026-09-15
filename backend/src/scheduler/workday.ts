@@ -19,6 +19,10 @@ export type WorkdayConfig = {
   /** Minutes between checks while someone is still WORKING out of hours. */
   recheckIntervalMinutes: number;
   enabled: boolean;
+  /** Late minutes allowed in total from the 1st to the 15th. */
+  lateToleranceFirstHalfMinutes: number;
+  /** Late minutes allowed in total from the 16th to the end of the month. */
+  lateToleranceSecondHalfMinutes: number;
 };
 
 /** One dated deviation, as the resolver needs it. */
@@ -39,6 +43,8 @@ const DEFAULTS: WorkdayConfig = {
   confirmationTimeoutSeconds: 120,
   recheckIntervalMinutes: 30,
   enabled: true,
+  lateToleranceFirstHalfMinutes: 25,
+  lateToleranceSecondHalfMinutes: 25,
 };
 
 /**
@@ -64,6 +70,8 @@ export async function getWorkdayConfig(): Promise<WorkdayConfig> {
     confirmationTimeoutSeconds: row.confirmationTimeoutSeconds,
     recheckIntervalMinutes: row.recheckIntervalMinutes,
     enabled: row.enabled,
+    lateToleranceFirstHalfMinutes: row.lateToleranceFirstHalfMinutes,
+    lateToleranceSecondHalfMinutes: row.lateToleranceSecondHalfMinutes,
   };
 }
 
@@ -78,6 +86,16 @@ export function parseTimeOfDay(value: string): number | null {
 
 export function isValidTimeOfDay(value: string) {
   return parseTimeOfDay(value) !== null;
+}
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Rejects both a malformed "YYYY-MM-DD" and a real-looking but impossible date. */
+export function isCalendarDay(value: string) {
+  if (!DAY_PATTERN.test(value)) return false;
+  // Round-tripping catches 2026-02-30, which Date happily rolls into March.
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 /** Whether Intl actually knows the zone, so a typo cannot be saved. */
@@ -262,6 +280,55 @@ export function checkExpired(
   if (!lastPromptedAt) return false;
   if (lastConfirmedAt && lastConfirmedAt >= lastPromptedAt) return false;
   return now.getTime() - lastPromptedAt.getTime() >= timeoutSeconds * 1000;
+}
+
+export type ActivityCheckState = {
+  lastPromptedAt: Date | null;
+  lastConfirmedAt: Date | null;
+  missedChecks: number;
+};
+
+/**
+ * What the out-of-hours check does with one WORKING employee on this tick.
+ *
+ *  - "disconnect": asked, never answered, out of time, and no live timer left
+ *    to resolve it (the restart backstop).
+ *  - "wait": asked and still inside the answer window.
+ *  - "skip": answered, and the next question is not due yet.
+ *  - "prompt": due - ask now (or count a miss if nobody is listening).
+ *
+ * Pure so the rule can be tested without a database or a socket. Note what it
+ * relies on: a status change stamps both timestamps with the same instant, so a
+ * question left unanswered in an EARLIER stretch of work cannot read as expired
+ * the moment someone is WORKING again - that used to disconnect them on the very
+ * next tick, a minute later, without ever asking.
+ */
+export function activityCheckAction(
+  state: ActivityCheckState,
+  config: Pick<WorkdayConfig, "confirmationTimeoutSeconds" | "recheckIntervalMinutes">,
+  at: Date,
+  hasPending: boolean
+): "disconnect" | "wait" | "skip" | "prompt" {
+  const { lastPromptedAt, lastConfirmedAt, missedChecks } = state;
+
+  // Their stamp has no prompt behind it: the previous run found nobody
+  // listening and granted a grace interval instead of disconnecting. The due
+  // branch owns this case, and it is the only thing that can clear the counter.
+  const awaitingRetry = missedChecks > 0;
+
+  if (
+    !awaitingRetry &&
+    checkExpired(lastPromptedAt, lastConfirmedAt, config.confirmationTimeoutSeconds, at) &&
+    !hasPending
+  ) {
+    return "disconnect";
+  }
+
+  const answered =
+    !lastPromptedAt || (lastConfirmedAt !== null && lastConfirmedAt >= lastPromptedAt);
+  if (!answered && !awaitingRetry) return "wait";
+
+  return checkDue(lastPromptedAt, config.recheckIntervalMinutes, at) ? "prompt" : "skip";
 }
 
 /** Human "DD/MM/YYYY at HH:MM" in the configured zone, for notification text. */

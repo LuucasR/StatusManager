@@ -1,7 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
-import { getWorkdayConfig } from "../scheduler/workday";
+import { getWorkdayConfig, isCalendarDay } from "../scheduler/workday";
 
 /**
  * Read-only view of the working calendar, for everyone.
@@ -21,15 +21,6 @@ router.use(requireAuth);
 router.get("/settings", async (_req, res) => {
   res.json(await getWorkdayConfig());
 });
-
-const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-function isCalendarDay(value: string) {
-  if (!DAY_PATTERN.test(value)) return false;
-  // Round-tripping catches 2026-02-30, which Date happily rolls into March.
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
 
 router.get("/exceptions", async (req, res) => {
   const from = String(req.query.from ?? "");

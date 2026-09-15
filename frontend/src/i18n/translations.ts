@@ -524,6 +524,43 @@ export const en = {
     "No answer from that address. Check that the server is running and that you are on the same network.",
   "server.notAServer": "Something answered, but it is not a Status Manager server.",
   "server.databaseDown": "The server answered, but its database is down. Try again shortly.",
+
+  // --- Attendance (admin)
+  "nav.attendance": "Attendance",
+  "error.INVALID_MONTH": "The month must be YYYY-MM",
+  "attendance.eyebrow": "ADMINISTRATION",
+  "attendance.title": "Attendance",
+  "attendance.subtitle":
+    "Arrival times recorded day by day, and how much of their half-month late allowance each person has spent.",
+  "attendance.tolerances": "Late allowance",
+  "attendance.tolerancesHelp":
+    "Total late minutes allowed per half of the month. Every minute after the calendar's start time counts against it.",
+  "attendance.firstHalf": "1st to 15th (min)",
+  "attendance.secondHalf": "16th to end of month (min)",
+  "attendance.saved": "Allowance saved",
+  "attendance.entrySaved": "Arrival saved",
+  "attendance.day": "Arrivals for the day",
+  "attendance.date": "Date",
+  "attendance.closedDay": "Not a working day in the calendar. Arrivals can still be recorded.",
+  "attendance.employee": "Employee",
+  "attendance.expected": "Expected",
+  "attendance.arrival": "Arrival",
+  "attendance.late": "Late",
+  "attendance.lateMinutes": "{minutes} min late",
+  "attendance.onTime": "On time",
+  "attendance.notRecorded": "Not recorded",
+  "attendance.clear": "Clear arrival",
+  "attendance.summary": "Half-month summary",
+  "attendance.month": "Month",
+  "attendance.firstHalfShort": "1st to 15th",
+  "attendance.secondHalfShort": "16th to end",
+  "attendance.used": "{used} / {tolerance} min",
+  "attendance.lateDays": "{days} late day(s)",
+  "attendance.history": "History",
+  "attendance.allEmployees": "Everyone",
+  "attendance.empty": "No arrivals recorded for this period.",
+  "attendance.historyTruncated":
+    "Showing the latest 1000 arrivals. Narrow the period to see older ones.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -1010,6 +1047,42 @@ const es: Record<TranslationKey, string> = {
     "No hubo respuesta desde esa dirección. Fijate que el servidor esté encendido y que estés en la misma red.",
   "server.notAServer": "Algo respondió, pero no es un servidor de Status Manager.",
   "server.databaseDown": "El servidor respondió, pero su base de datos está caída. Probá de nuevo en un rato.",
+
+  "nav.attendance": "Asistencia",
+  "error.INVALID_MONTH": "El mes tiene que tener el formato AAAA-MM",
+  "attendance.eyebrow": "ADMINISTRACIÓN",
+  "attendance.title": "Asistencia",
+  "attendance.subtitle":
+    "Horarios de entrada cargados día por día, y cuánto de la tolerancia de la quincena lleva gastado cada persona.",
+  "attendance.tolerances": "Tolerancia de llegadas tarde",
+  "attendance.tolerancesHelp":
+    "Minutos tarde permitidos en total por quincena. Cada minuto después de la hora de inicio del calendario descuenta.",
+  "attendance.firstHalf": "Del 1 al 15 (min)",
+  "attendance.secondHalf": "Del 16 a fin de mes (min)",
+  "attendance.saved": "Tolerancia guardada",
+  "attendance.entrySaved": "Entrada guardada",
+  "attendance.day": "Entradas del día",
+  "attendance.date": "Fecha",
+  "attendance.closedDay": "No es día laboral en el calendario. Igual se pueden cargar entradas.",
+  "attendance.employee": "Empleado",
+  "attendance.expected": "Esperada",
+  "attendance.arrival": "Entrada",
+  "attendance.late": "Tarde",
+  "attendance.lateMinutes": "{minutes} min tarde",
+  "attendance.onTime": "A horario",
+  "attendance.notRecorded": "Sin cargar",
+  "attendance.clear": "Borrar entrada",
+  "attendance.summary": "Resumen por quincena",
+  "attendance.month": "Mes",
+  "attendance.firstHalfShort": "Del 1 al 15",
+  "attendance.secondHalfShort": "Del 16 a fin de mes",
+  "attendance.used": "{used} / {tolerance} min",
+  "attendance.lateDays": "{days} día(s) tarde",
+  "attendance.history": "Historial",
+  "attendance.allEmployees": "Todos",
+  "attendance.empty": "No hay entradas cargadas en este período.",
+  "attendance.historyTruncated":
+    "Se muestran las últimas 1000 entradas. Acotá el período para ver las anteriores.",
 };
 
 export const CATALOGUES = { en, es };

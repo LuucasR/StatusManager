@@ -21,9 +21,9 @@ import { closeSocket } from "../realtime/socket";
 import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
-import type { Role } from "../components/roles";
+import { isAdminRole, type Role } from "../components/roles";
 import AppSettings from "../components/AppSettings";
-import { t } from "../i18n";
+import { t, type TranslationKey } from "../i18n";
 
 export type SessionEmployee = {
   id: number;
@@ -40,13 +40,15 @@ export type AppOutletContext = {
 
 // Labels resolve through t() at render time, so the language switch relabels
 // the nav without any extra wiring.
-const links = [
+const links: { to: string; key: TranslationKey; adminOnly?: boolean }[] = [
   { to: "/dashboard", key: "nav.dashboard" },
   { to: "/tasks", key: "nav.tasks" },
   // No role filter: the summary is always the authenticated employee's own.
   { to: "/summary", key: "nav.summary" },
   { to: "/workday", key: "nav.workday" },
-] as const;
+  // Arrival records are about other people, so only an admin sees the tab.
+  { to: "/attendance", key: "nav.attendance", adminOnly: true },
+];
 
 // The calendar is readable by the whole team - everyone works to these hours -
 // and only editable by an admin, which the page and the backend both enforce.
@@ -61,6 +63,8 @@ export default function AppLayout() {
       .then(setMe)
       .catch(() => setMe(null));
   }, []);
+
+  const visibleLinks = links.filter((link) => !link.adminOnly || isAdminRole(me?.role));
 
   function logout() {
     closeSocket();
@@ -108,7 +112,7 @@ export default function AppLayout() {
             spacing={1}
             sx={{ flex: 1, ml: 3, display: { xs: "none", md: "flex" } }}
           >
-            {links.map((link) => {
+            {visibleLinks.map((link) => {
               const active = pathname.startsWith(link.to);
               return (
                 <Button
@@ -166,7 +170,7 @@ export default function AppLayout() {
           <Divider />
 
           <List onClick={() => setNavOpen(false)}>
-            {links.map((link) => (
+            {visibleLinks.map((link) => (
               <ListItemButton
                 key={link.to}
                 component={RouterLink}

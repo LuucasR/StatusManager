@@ -3,7 +3,8 @@ import PDFDocument from "pdfkit";
 import { z } from "zod";
 import prisma from "../prisma/client";
 import { requireAuth } from "../auth/auth.middleware";
-import { emitStatusChanged, confirmActivity } from "../realtime";
+import { emitStatusChanged, confirmActivity, cancelConfirmation } from "../realtime";
+import { checkExpired, getWorkdayConfig } from "../scheduler/workday";
 import { renderActivityReport } from "../reports/activity-report";
 import { changeStatusSchema } from "./activity-validation";
 import { overlappingWhere, visibleHistoryWhere } from "./activity-status";
@@ -207,7 +208,30 @@ router.get("/report.pdf", async (req, res) => {
 
 
 router.post("/confirm-activity", async (req, res) => {
-  const confirmed = confirmActivity(req.auth!.employeeId);
+  const employeeId = req.auth!.employeeId;
+  let confirmed = confirmActivity(employeeId);
+
+  // The in-process timer is gone - a restart, or the host waking from sleep -
+  // but the question can still be open in the database. Refusing here used to
+  // leave a real answer recorded as silence, and the check then disconnected
+  // the person who had just said they were still working.
+  if (!confirmed) {
+    const [employee, config] = await Promise.all([
+      prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { lastPromptedAt: true, lastConfirmedAt: true },
+      }),
+      getWorkdayConfig(),
+    ]);
+    confirmed =
+      !!employee?.lastPromptedAt &&
+      (!employee.lastConfirmedAt || employee.lastConfirmedAt < employee.lastPromptedAt) &&
+      !checkExpired(
+        employee.lastPromptedAt,
+        employee.lastConfirmedAt,
+        config.confirmationTimeoutSeconds
+      );
+  }
 
   if (!confirmed) {
     return res.status(400).json({
@@ -220,7 +244,7 @@ router.post("/confirm-activity", async (req, res) => {
   // prompt and the close - and it is what keeps this person's tasks off the
   // pause list.
   await prisma.employee.update({
-    where: { id: req.auth!.employeeId },
+    where: { id: employeeId },
     data: { lastConfirmedAt: new Date(), missedChecks: 0 },
   });
 
@@ -278,14 +302,25 @@ router.post("/status", async (req, res) => {
     });
     const employee = await tx.employee.update({
       where: { id: req.auth!.employeeId },
-      // missedChecks resets here too: acting on their own status is proof they
-      // are present, and leaving a stale count behind would spend a mobile
-      // user's grace on the very first check after they came back.
-      data: { currentStatus: parsed.data.status, statusSince: now, missedChecks: 0 },
+      // A status change starts a fresh activity check. Acting on their own
+      // status is proof they are present, so it counts as asked AND answered
+      // right now: the next question lands one recheck interval from here.
+      // Without the stamps, a question left unanswered in an earlier stretch
+      // read as expired the moment they were WORKING again, and the scheduler
+      // disconnected them on its next tick - every minute, without asking.
+      data: {
+        currentStatus: parsed.data.status,
+        statusSince: now,
+        missedChecks: 0,
+        lastPromptedAt: now,
+        lastConfirmedAt: now,
+      },
       select: { id: true, employeeNumber: true, name: true, currentStatus: true, statusSince: true },
     });
     return { activity, employee };
   });
+  // The pending question was about the status they just left.
+  cancelConfirmation(req.auth!.employeeId);
   emitStatusChanged(result.employee);
   res.status(201).json(result);
 });

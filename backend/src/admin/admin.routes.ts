@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth, requireStaff } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
-import { emitStatusChanged, sendConfirmationRequest } from "../realtime";
+import { cancelConfirmation, emitStatusChanged, sendConfirmationRequest } from "../realtime";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { approvePasswordReset } from "../auth/auth.service";
@@ -14,6 +14,7 @@ import { Role } from "@prisma/client";
 import { LOCALE } from "../locale";
 import {
   WORKDAY_SETTINGS_ID,
+  isCalendarDay,
   isValidTimeOfDay,
   isValidTimeZone,
   parseTimeOfDay,
@@ -432,9 +433,14 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
 
     return tx.employee.update({
       where: { id: employeeId },
+      // Same fresh activity check as POST /activities/status: without it a
+      // stale unanswered question disconnects the person on the next tick.
       data: {
         currentStatus: parsed.data.status,
         statusSince: now,
+        missedChecks: 0,
+        lastPromptedAt: now,
+        lastConfirmedAt: now,
       },
       select: {
         id: true,
@@ -446,6 +452,7 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
     });
   });
 
+  cancelConfirmation(employeeId);
   emitStatusChanged(employee);
   res.json({ success: true, employee });
 });
@@ -643,6 +650,9 @@ const workdaySettingsSchema = z
     // which the check would not come round again before the next working day.
     recheckIntervalMinutes: z.number().int().min(1).max(720),
     enabled: z.boolean(),
+    // Late-arrival allowance per half of the month, in total minutes.
+    lateToleranceFirstHalfMinutes: z.number().int().min(0).max(600),
+    lateToleranceSecondHalfMinutes: z.number().int().min(0).max(600),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, {
@@ -686,15 +696,6 @@ router.patch("/workday-settings", requireAdmin, async (req, res) => {
  * timestamps: a holiday is a local calendar date, and a Date would shift it a
  * day either way depending on the offset.
  */
-const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Rejects both a malformed shape and a real-looking but impossible date. */
-function isCalendarDay(value: string) {
-  if (!DAY_PATTERN.test(value)) return false;
-  // Round-tripping catches 2026-02-30, which Date happily rolls into March.
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
 
 const workdayExceptionSchema = z
   .object({

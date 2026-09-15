@@ -119,6 +119,9 @@ model Employee {
   conversations ConversationMember[]
   messages      Message[]
   notifications Notification[]
+
+  attendanceEntries  AttendanceEntry[] @relation("AttendanceEmployee")
+  attendanceRecorded AttendanceEntry[] @relation("AttendanceRecorder")
 }
 
 /// A request to have the password reset. It deliberately carries NO password:
@@ -346,7 +349,42 @@ model WorkdaySettings {
   recheckIntervalMinutes     Int      @default(30)
   /// Master switch, so the automation can be stopped without a deploy.
   enabled                    Boolean  @default(true)
+  /// Total late minutes allowed from the 1st to the 15th of the month.
+  lateToleranceFirstHalfMinutes  Int  @default(25)
+  /// Total late minutes allowed from the 16th to the end of the month.
+  lateToleranceSecondHalfMinutes Int  @default(25)
   updatedAt                  DateTime @updatedAt
+}
+
+/**
+ * One day's arrival time for one employee, typed in by an admin.
+ *
+ * `expectedStart` and `lateMinutes` are snapshots taken when the entry is saved:
+ * editing the calendar later must not rewrite how late somebody was on a day
+ * that already happened. The tolerance is NOT snapshotted - it is the rule the
+ * half-month is judged by, so changing it re-evaluates the summary.
+ */
+model AttendanceEntry {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  /// "YYYY-MM-DD", a local calendar date, same reasoning as WorkdayException.date.
+  date          String
+  /// "HH:MM" as typed.
+  arrivedAt     String
+  /// "HH:MM" the day started at when this was saved, exceptions included.
+  expectedStart String
+  lateMinutes   Int
+  note          String?
+  /// Who typed it. SetNull: deleting that account must not delete the record.
+  createdById   Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employee  Employee  @relation("AttendanceEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy Employee? @relation("AttendanceRecorder", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date])
+  @@index([date])
 }
 
 /**

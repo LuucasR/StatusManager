@@ -186,6 +186,24 @@ export function hasPendingConfirmation(employeeId: number) {
   return pendingConfirmations.has(employeeId);
 }
 
+/**
+ * Drops a pending check without resolving it either way.
+ *
+ * Called when the employee's status changes: the question was about the status
+ * they just left, so neither answering nor timing out still means anything, and
+ * a timer left running would disconnect someone who already picked a new
+ * activity. The `confirmed` event is what closes a dialog still on screen.
+ */
+export function cancelConfirmation(employeeId: number) {
+  const pending = pendingConfirmations.get(employeeId);
+  if (!pending) return;
+
+  clearTimeout(pending.timeout);
+  pendingConfirmations.delete(employeeId);
+
+  io.emit("confirmation:confirmed", { employeeId });
+}
+
 export function confirmActivity(employeeId: number) {
   const pending = pendingConfirmations.get(employeeId);
 

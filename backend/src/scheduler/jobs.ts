@@ -8,8 +8,7 @@ import {
 import { handleMissedConfirmation } from "../activities/activity-confirmation";
 import { logger } from "../logger";
 import {
-  checkDue,
-  checkExpired,
+  activityCheckAction,
   isOffHours,
   type ResolvedDay,
   type WorkdayConfig,
@@ -69,34 +68,20 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
   let disconnected = 0;
 
   for (const employee of working) {
-    const { id, lastPromptedAt, lastConfirmedAt, missedChecks } = employee;
-
-    // Their stamp has no prompt behind it: the previous run found nobody
-    // listening and granted a grace interval instead of disconnecting. They
-    // are not "asked and silent", so the expiry branch below must not claim
-    // them - the due branch owns this case, and it is the only thing that can
-    // clear the counter.
+    const { id, missedChecks } = employee;
     const awaitingRetry = missedChecks > 0;
 
-    // Asked, never answered, out of time. Skipped while realtime.ts still holds
-    // a live timer for them: that one is about to resolve this same check, and
-    // running both would disconnect the person twice. What is left is exactly
-    // the case this backstop is for - the restart that dropped the timer.
-    if (
-      !awaitingRetry &&
-      checkExpired(lastPromptedAt, lastConfirmedAt, config.confirmationTimeoutSeconds, at) &&
-      !hasPendingConfirmation(id)
-    ) {
+    // Skipped as "disconnect" while realtime.ts still holds a live timer for
+    // them: that one is about to resolve this same check, and running both would
+    // disconnect the person twice. "wait" keeps a short interval from stacking a
+    // second prompt on top of an unanswered one.
+    const action = activityCheckAction(employee, config, at, hasPendingConfirmation(id));
+
+    if (action === "disconnect") {
       if (await disconnectQuietly(id)) disconnected += 1;
       continue;
     }
-
-    // Asked, still inside their answer window: leave them alone. Without this,
-    // a short interval would stack a second prompt on top of an unanswered one.
-    const answered = !lastPromptedAt || (lastConfirmedAt !== null && lastConfirmedAt >= lastPromptedAt);
-    if (!answered && !awaitingRetry) continue;
-
-    if (!checkDue(lastPromptedAt, config.recheckIntervalMinutes, at)) continue;
+    if (action !== "prompt") continue;
 
     // Its own return value reports "no tab open" - asking it rather than
     // checking presence separately closes the gap where they disconnect between
