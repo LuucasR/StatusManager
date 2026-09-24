@@ -21,7 +21,7 @@ export type ReportPatchEntry = {
 };
 
 type PatchNotesReportOptions = {
-  /** internal: times, people and internal notes. public: the player-facing text only. */
+  /** internal: per-person times and internal notes. public: task names and total time, no people. */
   mode: "internal" | "public";
   weekStart: string;
   weekEnd: string;
@@ -75,6 +75,9 @@ export function renderPatchNotesReport(doc: any, options: PatchNotesReportOption
   const timeByTask = new Map(options.taskTimes.map((task) => [task.key, task]));
   const contributors = new Set(entries.map((entry) => entry.authorName));
   const totalMs = options.taskTimes.reduce((sum, task) => sum + task.totalMs, 0);
+  // Each linked task counted once, however many entries point at it.
+  const linkedKeys = new Set(entries.map(taskKey).filter((key): key is string => key !== null));
+  const linkedMs = [...linkedKeys].reduce((sum, key) => sum + (timeByTask.get(key)?.totalMs ?? 0), 0);
 
   const heading = options.version ? `Patch notes ${options.version}` : "Patch notes";
   const chrome = createReportChrome(doc, {
@@ -105,10 +108,7 @@ export function renderPatchNotesReport(doc: any, options: PatchNotesReportOption
         ]
       : [
           { label: "CHANGES", value: String(entries.length), highlight: true },
-          {
-            label: "AREAS",
-            value: String(new Set(entries.map((entry) => entry.category)).size),
-          },
+          { label: "TIME ON THESE CHANGES", value: formatDuration(linkedMs) },
           {
             label: "RELEASED",
             value: options.publishedAt ? formatDate(options.publishedAt) : "-",
@@ -147,8 +147,16 @@ export function renderPatchNotesReport(doc: any, options: PatchNotesReportOption
     chrome.y -= 16;
 
     for (const entry of list) {
-      const time = internal ? timeByTask.get(taskKey(entry) ?? "") : undefined;
+      const time = timeByTask.get(taskKey(entry) ?? "");
       const metaLines: string[] = [];
+      if (!internal && entry.taskTitle) {
+        // Public: the task and its total, never who booked it.
+        metaLines.push(
+          `Task: ${truncate(entry.taskTitle, 70)}   |   Time invested: ${
+            time ? formatDuration(time.totalMs) : "none booked"
+          }`
+        );
+      }
       if (internal) {
         const task = entry.taskTitle
           ? `Task${entry.taskId != null ? ` #${entry.taskId}` : " (deleted)"}: ${truncate(entry.taskTitle, 70)}${

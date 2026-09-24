@@ -1,8 +1,8 @@
-import { DeleteOutlineRounded, EditRounded, LockRounded } from "@mui/icons-material";
+import { DeleteOutlineRounded, EditRounded, LockRounded, ScheduleRounded } from "@mui/icons-material";
 import { Box, Chip, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import { t } from "../../i18n";
 import { STATE_META } from "../tasks/types";
-import { CATEGORY_LABELS, type PatchEntry } from "./patchNotesApi";
+import { CATEGORY_LABELS, formatMs, type PatchEntry } from "./patchNotesApi";
 
 type Props = {
   entries: PatchEntry[];
@@ -39,6 +39,14 @@ export default function EntryList({ entries, canEdit, onEdit, onDelete }: Props)
                     label={`${entry.taskId != null ? `#${entry.taskId} ` : ""}${taskTitle}${
                       entry.task ? ` · ${STATE_META[entry.task.state].label}` : ""
                     }`}
+                  />
+                )}
+                {taskTitle && (
+                  <Chip
+                    size="small"
+                    icon={<ScheduleRounded />}
+                    label={entry.taskMs > 0 ? formatMs(entry.taskMs) : t("patchNotes.noTimeBooked")}
+                    title={t("patchNotes.taskTimeHelp")}
                   />
                 )}
                 {entry.internal && (

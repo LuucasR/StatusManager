@@ -53,6 +53,8 @@ export type PatchEntry = {
   createdAt: string;
   updatedAt: string;
   task: { title: string; state: TaskState } | null;
+  /** Team total on the linked task that week; 0 without a task or time. */
+  taskMs: number;
 };
 
 export type WeekListItem = {

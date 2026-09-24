@@ -128,6 +128,11 @@ async function linkedTask(taskId: number | null | undefined) {
   return task ? { taskId: task.id, taskTitle: task.title } : undefined;
 }
 
+/** Same keying as TeamTaskTime.key: by id, or by title once the task is gone. */
+function taskKeyOf(entry: { taskId: number | null; taskTitle: string | null }) {
+  return entry.taskId != null ? `id:${entry.taskId}` : `title:${entry.taskTitle}`;
+}
+
 function taskNotFound(res: Response) {
   return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 }
@@ -158,13 +163,24 @@ router.get("/weeks/:weekStart", async (req, res) => {
   if (!isWeekStart(weekStart)) return badWeek(res);
 
   const week = await loadWeek(weekStart);
-  const entries = week
-    ? await prisma.patchEntry.findMany({
-        where: { weekId: week.id },
-        select: ENTRY_SELECT,
-        orderBy: [{ authorName: "asc" }, { position: "asc" }, { id: "asc" }],
-      })
-    : [];
+  const [rows, times] = week
+    ? await Promise.all([
+        prisma.patchEntry.findMany({
+          where: { weekId: week.id },
+          select: ENTRY_SELECT,
+          orderBy: [{ authorName: "asc" }, { position: "asc" }, { id: "asc" }],
+        }),
+        weekTaskTimes(weekStart),
+      ])
+    : [[], []];
+
+  // The team's total on the linked task that week. Totals only: the split per
+  // person stays in the staff-only /insights.
+  const totalByTask = new Map(times.map((task) => [task.key, task.totalMs]));
+  const entries = rows.map((entry) => ({
+    ...entry,
+    taskMs: totalByTask.get(taskKeyOf(entry)) ?? 0,
+  }));
 
   res.json({
     weekStart,
@@ -429,7 +445,8 @@ router.post("/weeks/:weekStart/status", async (req, res) => {
 
 /**
  * The patch notes as a PDF. `mode=internal` (default) carries times, people and
- * internal notes; `mode=public` is the player-facing version without them.
+ * internal notes; `mode=public` is the player-facing version: task names and total time,
+ * without people or internal notes.
  */
 router.get("/weeks/:weekStart/report.pdf", async (req, res) => {
   const weekStart = String(req.params.weekStart);
