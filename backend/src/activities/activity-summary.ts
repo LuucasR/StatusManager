@@ -140,3 +140,72 @@ export function summarize(
     byTask: [...tasks.values()].sort((a, b) => b.totalMs - a.totalMs),
   };
 }
+
+/** Minimum shape teamTaskTimes needs. Prisma-free, like SummaryRow. */
+export type TeamTimeRow = {
+  employeeId: number;
+  employee: { name: string };
+  startedAt: Date;
+  endedAt: Date | null;
+  taskId: number | null;
+  taskTitle: string | null;
+  task: { title: string; state: TaskState } | null;
+};
+
+export type TeamTaskTime = {
+  /** Same keying as TaskBucket.key: by id, or by title once the task is gone. */
+  key: string;
+  taskId: number | null;
+  title: string;
+  state: TaskState | null;
+  totalMs: number;
+  /** Who booked the time, most time first. */
+  byEmployee: { id: number; name: string; ms: number }[];
+};
+
+/**
+ * Time the whole team booked per task in the range, split by person.
+ *
+ * The rows are expected to be WORKING segments already: this answers "who
+ * worked on what and for how long", so the caller filters the status. Unlike
+ * `summarize` it is not scoped to one employee - route it behind requireStaff.
+ */
+export function teamTaskTimes(
+  rows: TeamTimeRow[],
+  from: Date | undefined,
+  to: Date | undefined,
+  now: Date = new Date()
+): TeamTaskTime[] {
+  const tasks = new Map<string, TeamTaskTime & { people: Map<number, { id: number; name: string; ms: number }> }>();
+
+  for (const row of rows) {
+    if (row.taskId == null && !row.taskTitle) continue;
+    const ms = segmentMs(row, from, to, now);
+    if (ms <= 0) continue;
+
+    const key = row.taskId != null ? `id:${row.taskId}` : `title:${row.taskTitle}`;
+    const bucket =
+      tasks.get(key) ?? {
+        key,
+        taskId: row.taskId,
+        title: row.task?.title ?? row.taskTitle ?? "",
+        state: row.task?.state ?? null,
+        totalMs: 0,
+        byEmployee: [],
+        people: new Map(),
+      };
+
+    bucket.totalMs += ms;
+    const person = bucket.people.get(row.employeeId) ?? { id: row.employeeId, name: row.employee.name, ms: 0 };
+    person.ms += ms;
+    bucket.people.set(row.employeeId, person);
+    tasks.set(key, bucket);
+  }
+
+  return [...tasks.values()]
+    .map(({ people, ...bucket }) => ({
+      ...bucket,
+      byEmployee: [...people.values()].sort((a, b) => b.ms - a.ms),
+    }))
+    .sort((a, b) => b.totalMs - a.totalMs);
+}

@@ -5,6 +5,7 @@ import TasksPage from "./pages/TasksPage";
 import SummaryPage from "./pages/SummaryPage";
 import WorkdayPage from "./pages/WorkdayPage";
 import AttendancePage from "./pages/AttendancePage";
+import PatchNotesPage from "./pages/PatchNotesPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -72,6 +73,9 @@ export default function App() {
             gets a read-only calendar of their own arrivals. The backend only
             lets non-admins reach GET /attendance/me. */}
         <Route path="/attendance" element={<AttendancePage />} />
+        {/* Everyone: each person writes their own section, staff reviews,
+            publishes and exports. The backend guards the staff routes. */}
+        <Route path="/patch-notes" element={<PatchNotesPage />} />
       </Route>
 
       {/* Old Spanish paths, kept as redirects. They were live in production

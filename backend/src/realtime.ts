@@ -110,6 +110,14 @@ export function emitTaskChanged(payload: unknown) {
 }
 
 /**
+ * Patch notes changed for a week. Everyone can read every week, so it is a
+ * broadcast like task:changed; the payload carries the `weekStart`.
+ */
+export function emitPatchNotesChanged(payload: { weekStart: string }) {
+  io?.emit("patchnotes:changed", payload);
+}
+
+/**
  * Emits only to the given employees, across all their open tabs. It emits to
  * per-employee rooms rather than per-conversation rooms so that join/leave does
  * not have to be kept in sync with every participant added and removed:

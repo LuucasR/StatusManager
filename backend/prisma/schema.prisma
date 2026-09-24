@@ -122,6 +122,9 @@ model Employee {
 
   attendanceEntries  AttendanceEntry[] @relation("AttendanceEmployee")
   attendanceRecorded AttendanceEntry[] @relation("AttendanceRecorder")
+
+  patchEntries       PatchEntry[]      @relation("PatchEntryAuthor")
+  patchWeeksPublished PatchWeek[]      @relation("PatchWeekPublisher")
 }
 
 /// A request to have the password reset. It deliberately carries NO password:
@@ -195,6 +198,7 @@ model Task {
   conversation  Conversation?
   notifications Notification[]
   activities    ActivityHistory[]
+  patchEntries  PatchEntry[]
 
   @@index([state, startsAt])
   @@index([startsAt])
@@ -428,4 +432,75 @@ model Notification {
 
   @@index([employeeId, createdAt])
   @@index([employeeId, readAt])
+}
+
+enum PatchWeekStatus {
+  /// Everyone writes their own entries.
+  DRAFT
+  /// Frozen for the team; only staff can still edit while reviewing.
+  CLOSED
+  /// Released. Nobody edits any more.
+  PUBLISHED
+}
+
+enum PatchCategory {
+  FEATURE
+  FIX
+  BALANCE
+  ART
+  AUDIO
+  UI
+  PERFORMANCE
+  CONTENT
+  OTHER
+}
+
+/**
+ * One week of patch notes. Created lazily, the first time somebody writes into
+ * the week or staff edits its header.
+ */
+model PatchWeek {
+  id            Int             @id @default(autoincrement())
+  /// Monday of the week, "YYYY-MM-DD" in WorkdaySettings.timezone. Text for the
+  /// same reason as AttendanceEntry.date: a calendar day, not an instant.
+  weekStart     String          @unique
+  /// "v0.4.2". Set by staff, usually when publishing.
+  version       String?         @unique
+  title         String?
+  /// Staff intro printed at the top of the PDF.
+  summary       String          @default("")
+  status        PatchWeekStatus @default(DRAFT)
+  closedAt      DateTime?
+  publishedAt   DateTime?
+  publishedById Int?
+  publishedBy   Employee?       @relation("PatchWeekPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  entries PatchEntry[]
+}
+
+/** One line of somebody's section: what advanced, optionally tied to a task. */
+model PatchEntry {
+  id         Int           @id @default(autoincrement())
+  weekId     Int
+  week       PatchWeek     @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  /// SetNull + authorName snapshot, same reasoning as Message.authorName.
+  authorId   Int?
+  author     Employee?     @relation("PatchEntryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName String
+  /// SetNull + taskTitle snapshot, same reasoning as ActivityHistory.taskTitle.
+  taskId     Int?
+  task       Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskTitle  String?
+  category   PatchCategory
+  body       String
+  /// Team-only note: left out of the public PDF.
+  internal   Boolean       @default(false)
+  position   Int
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([weekId, authorId])
+  @@index([taskId])
 }

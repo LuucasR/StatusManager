@@ -49,6 +49,8 @@ const links = [
   { to: "/workday", key: "nav.workday" },
   // No role filter either: an admin gets the team there, anyone else their own.
   { to: "/attendance", key: "nav.attendance" },
+  // Everyone writes their own section; staff gets the review panel on the page.
+  { to: "/patch-notes", key: "nav.patchNotes" },
 ] as const;
 
 // The calendar is readable by the whole team - everyone works to these hours -
