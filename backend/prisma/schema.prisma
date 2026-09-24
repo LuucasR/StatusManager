@@ -504,3 +504,25 @@ model PatchEntry {
   @@index([weekId, authorId])
   @@index([taskId])
 }
+
+/**
+ * A company tool the team can download from the Downloads tab. Only the
+ * metadata lives here: the installer itself is hosted elsewhere (Drive,
+ * OneDrive, GitHub Releases...) because the API host has no persistent disk
+ * and a ~1 GB file has no business going through Express.
+ */
+model Utility {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String   @default("")
+  version     String   @default("")
+  /// Direct link to the installer at its host. Always https.
+  url         String
+  /// Free text shown on the card, e.g. "850 MB".
+  sizeLabel   String   @default("")
+  /// Free text shown on the card, e.g. "Windows".
+  platform    String   @default("")
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

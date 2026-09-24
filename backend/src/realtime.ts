@@ -117,6 +117,10 @@ export function emitPatchNotesChanged(payload: { weekStart: string }) {
   io?.emit("patchnotes:changed", payload);
 }
 
+export function emitDownloadsChanged() {
+  io?.emit("downloads:changed", {});
+}
+
 /**
  * Emits only to the given employees, across all their open tabs. It emits to
  * per-employee rooms rather than per-conversation rooms so that join/leave does

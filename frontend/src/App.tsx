@@ -6,6 +6,7 @@ import SummaryPage from "./pages/SummaryPage";
 import WorkdayPage from "./pages/WorkdayPage";
 import AttendancePage from "./pages/AttendancePage";
 import PatchNotesPage from "./pages/PatchNotesPage";
+import DownloadsPage from "./pages/DownloadsPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -76,6 +77,9 @@ export default function App() {
         {/* Everyone: each person writes their own section, staff reviews,
             publishes and exports. The backend guards the staff routes. */}
         <Route path="/patch-notes" element={<PatchNotesPage />} />
+        {/* Everyone downloads; only admins get the edit controls, and the
+            backend guards the writes. */}
+        <Route path="/downloads" element={<DownloadsPage />} />
       </Route>
 
       {/* Old Spanish paths, kept as redirects. They were live in production
