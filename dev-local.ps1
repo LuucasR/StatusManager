@@ -29,7 +29,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root\backend'; npm run dev"
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root\frontend'; npm run dev"
+# Por variable y no con frontend\.env.local: ese archivo tambien lo lee el build del
+# APK, y un APK apuntando a localhost no le sirve a nadie.
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$root\frontend'; `$env:VITE_API_URL='http://localhost:3000'; npm run dev"
 
 Write-Host ""
 Write-Host "Listo. Abri http://localhost:5173 (tarda unos segundos en arrancar)." -ForegroundColor Green
