@@ -17,6 +17,7 @@ import {
   summarize,
   weekdayOf,
 } from "./attendance";
+import { syncLateWarning } from "../warnings/late-warning";
 
 /**
  * Arrival times, typed in by an admin day by day, and the half-month summary
@@ -175,6 +176,8 @@ router.put("/:date/:employeeId", async (req, res) => {
     update: data,
   });
 
+  await syncLateWarning(employeeId, date, req.auth!.employeeId);
+
   res.json(entry);
 });
 
@@ -189,6 +192,7 @@ router.delete("/:date/:employeeId", async (req, res) => {
 
   // deleteMany: clearing a day that had no entry is a no-op, not a 404.
   await prisma.attendanceEntry.deleteMany({ where: { employeeId, date } });
+  await syncLateWarning(employeeId, date, req.auth!.employeeId);
   res.json({ success: true });
 });
 

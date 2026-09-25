@@ -1,5 +1,7 @@
 import {
   ChatBubbleRounded,
+  GavelRounded,
+  TaskAltRounded,
   PersonAddAlt1Rounded,
   PersonRemoveAlt1Rounded,
   ReportProblemRounded,
@@ -13,7 +15,10 @@ export type NotificationType =
   | "TASK_REMOVED"
   | "TASK_STATE"
   | "TASK_MESSAGE"
-  | "ACTIVITY_NO_RESPONSE";
+  | "ACTIVITY_NO_RESPONSE"
+  | "LATE_WARNING"
+  | "WARNING_GRANTED"
+  | "WARNING_REVOKED";
 
 export type AppNotification = {
   id: number;
@@ -38,7 +43,17 @@ export const NOTIFICATION_META: Record<
   TASK_STATE: { Icon: SwapHorizRounded, accent: "#5b5ce2", soft: softOf("#5b5ce2") },
   TASK_MESSAGE: { Icon: ChatBubbleRounded, accent: "#16738b", soft: softOf("#16738b") },
   ACTIVITY_NO_RESPONSE: { Icon: ReportProblemRounded, accent: "#c2410c", soft: softOf("#c2410c") },
+  LATE_WARNING: { Icon: GavelRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
+  WARNING_GRANTED: { Icon: GavelRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
+  WARNING_REVOKED: { Icon: TaskAltRounded, accent: "#2eae70", soft: softOf("#2eae70") },
 };
+
+/** Types that open the Warnings page instead of a task. */
+export const WARNING_NOTIFICATIONS: ReadonlySet<string> = new Set([
+  "LATE_WARNING",
+  "WARNING_GRANTED",
+  "WARNING_REVOKED",
+]);
 
 /**
  * Forgiving lookup, same reasoning as roleMeta(): this union is hand-written

@@ -7,6 +7,7 @@ import WorkdayPage from "./pages/WorkdayPage";
 import AttendancePage from "./pages/AttendancePage";
 import PatchNotesPage from "./pages/PatchNotesPage";
 import DownloadsPage from "./pages/DownloadsPage";
+import WarningsPage from "./pages/WarningsPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -80,6 +81,9 @@ export default function App() {
         {/* Everyone downloads; only admins get the edit controls, and the
             backend guards the writes. */}
         <Route path="/downloads" element={<DownloadsPage />} />
+        {/* Everyone: their own warnings; an admin sees the team, grants and
+            revokes. The backend only lets non-admins reach GET /warnings/me. */}
+        <Route path="/warnings" element={<WarningsPage />} />
       </Route>
 
       {/* Old Spanish paths, kept as redirects. They were live in production

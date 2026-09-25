@@ -62,6 +62,12 @@ enum NotificationType {
   TASK_MESSAGE
   /// Someone was auto-disconnected for not answering the end-of-day check.
   ACTIVITY_NO_RESPONSE
+  /// Went over the half-month late allowance; an automatic warning was added.
+  LATE_WARNING
+  /// An admin granted a warning by hand.
+  WARNING_GRANTED
+  /// A warning was revoked, by an admin or because a correction undid it.
+  WARNING_REVOKED
 }
 
 model Employee {
@@ -125,6 +131,10 @@ model Employee {
 
   patchEntries       PatchEntry[]      @relation("PatchEntryAuthor")
   patchWeeksPublished PatchWeek[]      @relation("PatchWeekPublisher")
+
+  warnings        Warning[] @relation("WarningEmployee")
+  warningsGranted Warning[] @relation("WarningGranter")
+  warningsRevoked Warning[] @relation("WarningRevoker")
 }
 
 /// A request to have the password reset. It deliberately carries NO password:
@@ -389,6 +399,55 @@ model AttendanceEntry {
 
   @@unique([employeeId, date])
   @@index([date])
+}
+
+enum WarningSource {
+  /// Added by the system when a half-month went over the late allowance.
+  AUTO_LATE
+  /// Granted by an admin from the Warnings page.
+  MANUAL
+}
+
+/**
+ * A disciplinary warning. Never deleted: revoking one stamps `revokedAt`, so
+ * the history keeps what was given and why it was taken back.
+ *
+ * Automatic ones carry `month` + `half` and there is at most one per employee
+ * per half (the unique key). Manual ones leave both null, and Postgres treats
+ * NULLs as distinct, so the key does not limit them.
+ */
+model Warning {
+  id              Int           @id @default(autoincrement())
+  employeeId      Int
+  source          WarningSource
+  reason          String
+  /// "YYYY-MM" and 1 | 2. Only on AUTO_LATE.
+  month           String?
+  half            Int?
+  /// Snapshot of the half when the warning was last synced. Only on AUTO_LATE.
+  lateMinutes     Int?
+  tolerance       Int?
+  /// Null on automatic ones. SetNull + name snapshot, like PatchEntry.authorName.
+  createdById     Int?
+  createdByName   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  revokedAt       DateTime?
+  revokedById     Int?
+  revokedByName   String?
+  revokeReason    String?
+  /// Revoked because a correction brought the half back within the allowance.
+  /// Only these come back on their own if the half goes over again; one an
+  /// admin revoked stays revoked.
+  revokedBySystem Boolean       @default(false)
+
+  employee  Employee  @relation("WarningEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy Employee? @relation("WarningGranter", fields: [createdById], references: [id], onDelete: SetNull)
+  revokedBy Employee? @relation("WarningRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, month, half])
+  @@index([employeeId, createdAt])
+  @@index([createdAt])
 }
 
 /**

@@ -24,6 +24,7 @@ import workdayRoutes from "./workday/workday.routes";
 import attendanceRoutes from "./attendance/attendance.routes";
 import patchNotesRoutes from "./patch-notes/patch-notes.routes";
 import downloadsRoutes from "./downloads/downloads.routes";
+import warningsRoutes from "./warnings/warnings.routes";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -69,7 +70,7 @@ app.use(
 // history: with 10 active people it drained in minutes. Same for chat, which
 // spends a request per message, per read receipt and per page.
 app.use(
-  ["/activities", "/admin", "/tasks", "/chat", "/notifications", "/workday", "/attendance", "/patch-notes", "/downloads"],
+  ["/activities", "/admin", "/tasks", "/chat", "/notifications", "/workday", "/attendance", "/patch-notes", "/downloads", "/warnings"],
   rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 900,
@@ -93,6 +94,8 @@ app.use("/attendance", attendanceRoutes);
 app.use("/patch-notes", patchNotesRoutes);
 // Everyone lists the company tools; admin writes are guarded inside.
 app.use("/downloads", downloadsRoutes);
+// Everyone reads their own; the team view and the writes are admin, inside.
+app.use("/warnings", warningsRoutes);
 
 /**
  * Touches the database on purpose. The previous version returned a static OK,

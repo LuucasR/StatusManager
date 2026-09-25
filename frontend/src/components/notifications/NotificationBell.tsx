@@ -13,7 +13,7 @@ import {
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatClock, relativeDay } from "../tasks/datetime";
-import { notificationMeta, type AppNotification } from "./types";
+import { WARNING_NOTIFICATIONS, notificationMeta, type AppNotification } from "./types";
 import { useNotifications } from "./useNotifications";
 import { t, tf } from "../../i18n";
 
@@ -26,6 +26,7 @@ export default function NotificationBell() {
     setAnchor(null);
     if (!notification.readAt) void markRead(notification.id);
     if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
+    else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
   }
 
   let lastDay = "";

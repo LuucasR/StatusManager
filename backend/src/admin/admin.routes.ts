@@ -20,6 +20,7 @@ import {
   isValidTimeZone,
   parseTimeOfDay,
 } from "../scheduler/workday";
+import { currentMonth, syncLateWarningsForMonth } from "../warnings/late-warning";
 
 
 const createEmployeeSchema = z.object({
@@ -689,6 +690,15 @@ router.patch("/workday-settings", requireAdmin, async (req, res) => {
     create: { id: WORKDAY_SETTINGS_ID, ...parsed.data },
     update: parsed.data,
   });
+
+  // A new allowance re-judges the current month's halves, so warnings follow
+  // it both ways. Earlier months keep the warnings they were given.
+  if (
+    parsed.data.lateToleranceFirstHalfMinutes !== undefined ||
+    parsed.data.lateToleranceSecondHalfMinutes !== undefined
+  ) {
+    await syncLateWarningsForMonth(await currentMonth(), req.auth!.employeeId);
+  }
 
   // No restart needed: the scheduler re-reads this row on every tick.
   res.json(settings);

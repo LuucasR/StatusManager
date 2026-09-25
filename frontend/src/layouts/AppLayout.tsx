@@ -1,15 +1,27 @@
-import { AccessTimeRounded, LogoutRounded, MenuRounded } from "@mui/icons-material";
+import {
+  AccessTimeRounded,
+  CalendarMonthRounded,
+  DashboardRounded,
+  DescriptionRounded,
+  DownloadRounded,
+  GavelRounded,
+  HowToRegRounded,
+  InsightsRounded,
+  LogoutRounded,
+  MenuRounded,
+  ViewKanbanRounded,
+} from "@mui/icons-material";
+import type { SvgIconComponent } from "@mui/icons-material";
 import {
   AppBar,
   Box,
-  Button,
   Divider,
   Drawer,
   IconButton,
   List,
   ListItemButton,
+  ListItemIcon,
   ListItemText,
-  Stack,
   Toolbar,
   Typography,
 } from "@mui/material";
@@ -42,18 +54,70 @@ export type AppOutletContext = {
 // Labels resolve through t() at render time, so the language switch relabels
 // the nav without any extra wiring.
 const links = [
-  { to: "/dashboard", key: "nav.dashboard" },
-  { to: "/tasks", key: "nav.tasks" },
+  { to: "/dashboard", key: "nav.dashboard", Icon: DashboardRounded },
+  { to: "/tasks", key: "nav.tasks", Icon: ViewKanbanRounded },
   // No role filter: the summary is always the authenticated employee's own.
-  { to: "/summary", key: "nav.summary" },
-  { to: "/workday", key: "nav.workday" },
+  { to: "/summary", key: "nav.summary", Icon: InsightsRounded },
+  { to: "/workday", key: "nav.workday", Icon: CalendarMonthRounded },
   // No role filter either: an admin gets the team there, anyone else their own.
-  { to: "/attendance", key: "nav.attendance" },
+  { to: "/attendance", key: "nav.attendance", Icon: HowToRegRounded },
+  // Same split: an admin sees and grants the team's, anyone else their own.
+  { to: "/warnings", key: "nav.warnings", Icon: GavelRounded },
   // Everyone writes their own section; staff gets the review panel on the page.
-  { to: "/patch-notes", key: "nav.patchNotes" },
+  { to: "/patch-notes", key: "nav.patchNotes", Icon: DescriptionRounded },
   // Everyone downloads; admins get the edit controls on the page.
-  { to: "/downloads", key: "nav.downloads" },
-] as const;
+  { to: "/downloads", key: "nav.downloads", Icon: DownloadRounded },
+] as const satisfies readonly { to: string; key: string; Icon: SvgIconComponent }[];
+
+/** Width of the sidebar from md up. */
+const SIDEBAR_WIDTH = 232;
+
+/**
+ * The page links plus logout, shared by the permanent sidebar (md and up) and
+ * the phone drawer, so the two can never list different pages.
+ */
+function NavList({ pathname, onLogout }: { pathname: string; onLogout: () => void }) {
+  return (
+    <List sx={{ px: 1.5, py: 1.5 }}>
+      {links.map(({ to, key, Icon }) => {
+        const active = pathname.startsWith(to);
+        return (
+          <ListItemButton
+            key={to}
+            component={RouterLink}
+            to={to}
+            selected={active}
+            sx={{
+              borderRadius: "12px",
+              mb: 0.5,
+              "&.Mui-selected, &.Mui-selected:hover": {
+                bgcolor: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                color: "var(--accent)",
+              },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 38, color: active ? "var(--accent)" : "inherit" }}>
+              <Icon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary={t(key)}
+              slotProps={{ primary: { sx: { fontWeight: active ? 700 : 500 } } }}
+            />
+          </ListItemButton>
+        );
+      })}
+
+      <Divider sx={{ my: 1 }} />
+
+      <ListItemButton onClick={onLogout} sx={{ borderRadius: "12px" }}>
+        <ListItemIcon sx={{ minWidth: 38, color: "inherit" }}>
+          <LogoutRounded fontSize="small" />
+        </ListItemIcon>
+        <ListItemText primary={t("nav.logout")} />
+      </ListItemButton>
+    </List>
+  );
+}
 
 // The calendar is readable by the whole team - everyone works to these hours -
 // and only editable by an admin, which the page and the backend both enforce.
@@ -88,10 +152,8 @@ export default function AppLayout() {
         sx={{ pt: "env(safe-area-inset-top, 0px)" }}
       >
         <Toolbar>
-          {/* Below md the four nav buttons, the name and the logout label
-              cannot share a phone-width row - they used to squash into an
-              unreadable smear - so they move into a drawer and only the icon
-              controls stay on the bar. */}
+          {/* The pages live in the left sidebar from md up; below that it
+              would eat the screen, so it becomes a drawer behind this. */}
           <IconButton
             color="inherit"
             edge="start"
@@ -110,29 +172,7 @@ export default function AppLayout() {
             Status Manager
           </Typography>
 
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ flex: 1, ml: 3, display: { xs: "none", md: "flex" } }}
-          >
-            {links.map((link) => {
-              const active = pathname.startsWith(link.to);
-              return (
-                <Button
-                  key={link.to}
-                  component={RouterLink}
-                  to={link.to}
-                  color={active ? "primary" : "inherit"}
-                  sx={{ fontWeight: active ? 700 : 500 }}
-                >
-                  {t(link.key)}
-                </Button>
-              );
-            })}
-          </Stack>
-
-          {/* Pushes the icon cluster right once the nav row above is hidden. */}
-          <Box sx={{ flex: 1, display: { xs: "block", md: "none" } }} />
+          <Box sx={{ flex: 1 }} />
 
           <AppSettings />
 
@@ -146,14 +186,6 @@ export default function AppLayout() {
             {me?.name} · #{me?.employeeNumber}
           </Typography>
 
-          <Button
-            color="inherit"
-            startIcon={<LogoutRounded />}
-            onClick={logout}
-            sx={{ display: { xs: "none", md: "inline-flex" } }}
-          >
-            {t("nav.logout")}
-          </Button>
         </Toolbar>
       </AppBar>
 
@@ -172,28 +204,37 @@ export default function AppLayout() {
 
           <Divider />
 
-          <List onClick={() => setNavOpen(false)}>
-            {links.map((link) => (
-              <ListItemButton
-                key={link.to}
-                component={RouterLink}
-                to={link.to}
-                selected={pathname.startsWith(link.to)}
-              >
-                <ListItemText primary={t(link.key)} />
-              </ListItemButton>
-            ))}
-
-            <Divider sx={{ my: 1 }} />
-
-            <ListItemButton onClick={logout}>
-              <ListItemText primary={t("nav.logout")} />
-            </ListItemButton>
-          </List>
+          <Box onClick={() => setNavOpen(false)}>
+            <NavList pathname={pathname} onLogout={logout} />
+          </Box>
         </Box>
       </Drawer>
 
-      <Outlet context={{ me } satisfies AppOutletContext} />
+      <Box sx={{ display: "flex", alignItems: "flex-start" }}>
+        {/* Sticky under the AppBar (64px on desktop) rather than a fixed
+            Drawer, so the page column needs no offset of its own. */}
+        <Box
+          component="nav"
+          aria-label={t("nav.menu")}
+          sx={{
+            display: { xs: "none", md: "block" },
+            width: SIDEBAR_WIDTH,
+            flexShrink: 0,
+            position: "sticky",
+            top: 64,
+            height: "calc(100vh - 64px)",
+            overflowY: "auto",
+            borderRight: 1,
+            borderColor: "divider",
+          }}
+        >
+          <NavList pathname={pathname} onLogout={logout} />
+        </Box>
+
+        <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+          <Outlet context={{ me } satisfies AppOutletContext} />
+        </Box>
+      </Box>
 
       <ChatLauncher me={me ? { id: me.id, name: me.name } : null} />
 
