@@ -8,11 +8,20 @@ import {
   Snackbar,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { t, tf } from "../../i18n";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
+import {
+  flashTitle,
+  playChime,
+  showDesktopNotification,
+  stopTitleFlash,
+} from "../../alerts/attention";
+
+/** How often the chime repeats while the check is unanswered. */
+const REPEAT_CHIME_MS = 15_000;
 
 type Reason = "offHours" | "admin";
 
@@ -44,6 +53,23 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
   const [countdown, setCountdown] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState("");
+  const toast = useRef<Notification | null>(null);
+
+  /**
+   * Everything that gets attention from another tab or app: the chime, a toast
+   * that stays until answered and a blinking title. Missing this check logs
+   * the person out, so it is louder than an ordinary notification.
+   */
+  const alert = useCallback((why: Reason) => {
+    playChime("urgent");
+    flashTitle(t("dashboard.confirmationTitle"));
+    toast.current?.close();
+    toast.current = showDesktopNotification(
+      t("dashboard.confirmationTitle"),
+      why === "admin" ? t("dashboard.confirmationBody") : t("activityCheck.offHoursBody"),
+      { tag: "activity-check", urgent: true }
+    );
+  }, []);
 
   const show = useCallback((seconds: number, why: Reason) => {
     setReason(why);
@@ -57,14 +83,17 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
   const syncPending = useCallback(async () => {
     try {
       const pending = await api<PendingResponse>("/activities/pending-confirmation");
-      if (pending.pending) show(pending.secondsLeft, pending.reason);
+      if (pending.pending) {
+        show(pending.secondsLeft, pending.reason);
+        alert(pending.reason);
+      }
       // Nothing open any more (answered in another tab, expired while offline):
       // a dialog left up would only lead to a 400 on click.
       else setOpen(false);
     } catch {
       // Best effort: the live event is still the primary path.
     }
-  }, [show]);
+  }, [show, alert]);
 
   useEffect(() => {
     void syncPending();
@@ -73,7 +102,9 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
   useOnReconnect(() => void syncPending());
 
   useSocketEvent<RequestPayload>("confirmation:request", (payload) => {
-    show(payload?.timeoutSeconds ?? FALLBACK_SECONDS, payload?.reason ?? "admin");
+    const why = payload?.reason ?? "admin";
+    show(payload?.timeoutSeconds ?? FALLBACK_SECONDS, why);
+    alert(why);
   });
 
   // Both of these are broadcast to EVERY client, so the payload has to be
@@ -91,6 +122,18 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
     setConfirming(false);
     setMessage(t("dashboard.confirmationExpired"));
   });
+
+  // Keeps ringing while unanswered, and clears the toast and title once closed.
+  useEffect(() => {
+    if (!open) return;
+    const timer = setInterval(() => playChime("urgent"), REPEAT_CHIME_MS);
+    return () => {
+      clearInterval(timer);
+      stopTitleFlash();
+      toast.current?.close();
+      toast.current = null;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

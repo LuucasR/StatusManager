@@ -75,6 +75,8 @@ export const en = {
   "settings.appearance": "Appearance",
   "settings.theme.light": "Light mode",
   "settings.theme.dark": "Dark mode",
+  "settings.sound.on": "Turn sound on",
+  "settings.sound.off": "Mute sound",
   "settings.open": "Settings",
 
   // --- API errors, keyed by the `code` every backend response carries.
@@ -766,6 +768,8 @@ const es: Record<TranslationKey, string> = {
   "settings.appearance": "Apariencia",
   "settings.theme.light": "Modo claro",
   "settings.theme.dark": "Modo oscuro",
+  "settings.sound.on": "Activar sonido",
+  "settings.sound.off": "Silenciar sonido",
   "settings.open": "Ajustes",
 
   "error.SESSION_EXPIRED": "Tu sesión venció. Volvé a entrar.",

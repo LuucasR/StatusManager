@@ -37,6 +37,7 @@ import ActivityConfirmationDialog from "../components/activities/ActivityConfirm
 import type { Role } from "../components/roles";
 import AppSettings from "../components/AppSettings";
 import { t } from "../i18n";
+import { installAttention } from "../alerts/attention";
 
 export type SessionEmployee = {
   id: number;
@@ -126,6 +127,9 @@ export default function AppLayout() {
   const { pathname } = useLocation();
   const [me, setMe] = useState<SessionEmployee | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+
+  // Sound and desktop alerts unlock on the first click; see alerts/attention.ts.
+  useEffect(() => installAttention(), []);
 
   useEffect(() => {
     api<SessionEmployee>("/activities/me")

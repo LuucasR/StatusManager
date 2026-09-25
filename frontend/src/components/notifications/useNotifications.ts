@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { flashTitle, playChime, showDesktopNotification } from "../../alerts/attention";
+import { t } from "../../i18n";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
 import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from "./notificationsApi";
-import type { AppNotification } from "./types";
+import { WARNING_NOTIFICATIONS, type AppNotification } from "./types";
 
 export function useNotifications() {
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -13,6 +16,7 @@ export function useNotifications() {
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const reload = useCallback(async () => {
     try {
@@ -37,6 +41,16 @@ export function useNotifications() {
   useSocketEvent<{ notification: AppNotification; unreadCount: number }>(
     "notification:new",
     (payload) => {
+      const { notification } = payload;
+      playChime();
+      flashTitle(`(${payload.unreadCount}) ${t("notifications.title")}`);
+      showDesktopNotification(notification.title, notification.body, {
+        tag: `notification-${notification.id}`,
+        onClick: () => {
+          if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
+          else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
+        },
+      });
       setUnread(payload.unreadCount);
       setItems((current) => [
         payload.notification,

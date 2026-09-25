@@ -4,6 +4,8 @@ import {
   DnsRounded,
   LightModeRounded,
   TranslateRounded,
+  VolumeOffRounded,
+  VolumeUpRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -25,6 +27,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { useThemeMode } from "../theme/ThemeModeProvider";
 import ServerAddressForm from "./ServerAddressForm";
 import { getApiUrl, isRuntimeConfigurable, switchServer } from "../serverConfig";
+import { isSoundOn, playChime, requestNotificationPermission, setSoundOn } from "../alerts/attention";
 
 /**
  * Language picker and light/dark switch.
@@ -38,6 +41,21 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
   const { mode, toggle } = useThemeMode();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [serverOpen, setServerOpen] = useState(false);
+  const [sound, setSound] = useState(isSoundOn);
+
+  function toggleSound() {
+    const next = !sound;
+    setSoundOn(next);
+    setSound(next);
+    // A click is the gesture browsers want before asking; turning it on also
+    // plays a sample so the person hears what they just enabled.
+    if (next) {
+      void requestNotificationPermission();
+      playChime();
+    }
+  }
+
+  const soundLabel = sound ? t("settings.sound.off") : t("settings.sound.on");
 
   // Only the app can change this. A web build has its API baked in, and a
   // control that cannot change anything is worse than no control.
@@ -72,6 +90,15 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
           {mode === "dark" ? <LightModeRounded /> : <DarkModeRounded />}
         </IconButton>
       </Tooltip>
+
+      {/* Only in the app bar: on the sign-in screens there is nothing to alert. */}
+      {!floating && (
+        <Tooltip title={soundLabel}>
+          <IconButton color="inherit" onClick={toggleSound} aria-label={soundLabel}>
+            {sound ? <VolumeUpRounded /> : <VolumeOffRounded />}
+          </IconButton>
+        </Tooltip>
+      )}
 
       {canChangeServer && (
         <Tooltip title={t("server.change")}>
