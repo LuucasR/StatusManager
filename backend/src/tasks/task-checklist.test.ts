@@ -37,9 +37,9 @@ describe("diffChecklist", () => {
     ]);
 
     assert.deepEqual(diff.updates, [
-      { id: 3, text: "c", position: 0, assigneeId: null },
-      { id: 1, text: "a", position: 1, assigneeId: null },
-      { id: 2, text: "b", position: 2, assigneeId: null },
+      { id: 3, text: "c", position: 0, assigneeIds: [] },
+      { id: 1, text: "a", position: 1, assigneeIds: [] },
+      { id: 2, text: "b", position: 2, assigneeIds: [] },
     ]);
   });
 
@@ -51,7 +51,7 @@ describe("diffChecklist", () => {
       { id: 3, text: "c" },
     ]);
 
-    assert.deepEqual(diff.creates, [{ text: "brand new", position: 1, assigneeId: null }]);
+    assert.deepEqual(diff.creates, [{ text: "brand new", position: 1, assigneeIds: [] }]);
     assert.deepEqual(diff.deletedIds, []);
   });
 
@@ -59,7 +59,7 @@ describe("diffChecklist", () => {
     const diff = diffChecklist(current, [{ id: 2, text: "b" }]);
 
     assert.deepEqual(diff.deletedIds, [1, 3]);
-    assert.deepEqual(diff.updates, [{ id: 2, text: "b", position: 0, assigneeId: null }]);
+    assert.deepEqual(diff.updates, [{ id: 2, text: "b", position: 0, assigneeIds: [] }]);
   });
 
   it("empties the list when the payload is empty", () => {
@@ -94,29 +94,39 @@ describe("diffChecklist", () => {
    */
   it("collects the assignees the payload asks for, without repeats", () => {
     const diff = diffChecklist(current, [
-      { id: 1, text: "a", assigneeId: 7 },
-      { id: 2, text: "b", assigneeId: 7 },
-      { text: "c", assigneeId: 9 },
+      { id: 1, text: "a", assigneeIds: [7, 8] },
+      { id: 2, text: "b", assigneeIds: [7] },
+      { text: "c", assigneeIds: [9, 8] },
       { id: 3, text: "d" },
     ]);
 
-    assert.deepEqual(diff.assigneeIds, [7, 9]);
+    assert.deepEqual(diff.assigneeIds, [7, 8, 9]);
+  });
+
+  it("keeps several assignees per item, without repeats inside one item", () => {
+    const diff = diffChecklist(current, [
+      { id: 1, text: "a", assigneeIds: [7, 9, 7] },
+      { text: "b", assigneeIds: [8, 9] },
+    ]);
+
+    assert.deepEqual(diff.updates[0]?.assigneeIds, [7, 9]);
+    assert.deepEqual(diff.creates[0]?.assigneeIds, [8, 9]);
   });
 
   /**
-   * The column is written on every save, so an item whose assignee the user
-   * cleared has to produce an explicit null. Left as undefined, Prisma would
-   * skip the field and the old assignment would come straight back.
+   * The set is rewritten on every save, so an item whose assignees the user
+   * cleared has to produce an explicit empty list. Treated as "leave alone",
+   * the old assignment would come straight back.
    */
-  it("turns a cleared or absent assignee into an explicit null", () => {
+  it("turns cleared or absent assignees into an explicit empty list", () => {
     const diff = diffChecklist(current, [
-      { id: 1, text: "a", assigneeId: null },
+      { id: 1, text: "a", assigneeIds: [] },
       { id: 2, text: "b" },
     ]);
 
     assert.deepEqual(
-      diff.updates.map((item) => item.assigneeId),
-      [null, null]
+      diff.updates.map((item) => item.assigneeIds),
+      [[], []]
     );
     assert.deepEqual(diff.assigneeIds, []);
   });

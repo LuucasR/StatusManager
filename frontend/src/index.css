@@ -265,6 +265,25 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .note-chip.note-chip .MuiChip-icon { font-size: 14px; color: inherit; }
 .note-chip-warn.note-chip-warn { background: var(--note-warn-bg); color: var(--note-warn-ink); }
 
+/* The admin's colour flag: a marker stripe down the left edge plus a ring, so it
+   reads at a glance across the wall. Deliberately NOT the paper tone, which is
+   decorative per task (notePaper.ts) and must stay meaningless. */
+.task-card.flagged .task-note::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: var(--task-flag);
+  border-radius: 2px 0 0 2px;
+}
+.task-card.flagged .task-note::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid color-mix(in srgb, var(--task-flag) 70%, transparent);
+  border-radius: 2px;
+  pointer-events: none;
+}
 .task-card.dragging .task-note { opacity: .3; box-shadow: none; }
 .task-card.task-card-overlay { cursor: grabbing; }
 .task-card-overlay .task-note {

@@ -33,13 +33,13 @@ type Props = {
  * what tells the backend to keep its tick instead of recreating the row.
  */
 function toDrafts(
-  items: { id: number; text: string; assignee: { id: number } | null }[]
+  items: { id: number; text: string; assignees: { id: number }[] }[]
 ): ChecklistDraft[] {
   return items.map((item) => ({
     key: item.id,
     id: item.id,
     text: item.text,
-    assigneeId: item.assignee?.id ?? null,
+    assigneeIds: item.assignees.map((assignee) => assignee.id),
   }));
 }
 
@@ -72,21 +72,22 @@ export default function TaskFormDialog({ open, task, employees, onClose, onSubmi
   const hasItems = checklist.some((draft) => draft.text.trim());
 
   /**
-   * Removing somebody from the task also drops the items they were in charge of.
+   * Removing somebody from the task also takes them off the items they were in
+   * charge of; the other people on those items stay.
    *
    * Done here rather than left to the save, because the dropdown they were
-   * chosen from no longer offers them: the row would show an empty owner while
-   * still carrying their id, and the backend would then refuse the whole save
-   * with INVALID_ASSIGNEE over something the form appeared to have cleared.
+   * chosen from no longer offers them: the row would still carry an id nobody
+   * can see, and the backend would then refuse the whole save with
+   * INVALID_ASSIGNEE over something the form appeared to have cleared.
    */
   function changeParticipants(next: TaskParticipant[]) {
     setParticipants(next);
     const stillThere = new Set(next.map((participant) => participant.id));
     setChecklist((current) =>
       current.map((draft) =>
-        draft.assigneeId !== null && !stillThere.has(draft.assigneeId)
-          ? { ...draft, assigneeId: null }
-          : draft
+        draft.assigneeIds.every((id) => stillThere.has(id))
+          ? draft
+          : { ...draft, assigneeIds: draft.assigneeIds.filter((id) => stillThere.has(id)) }
       )
     );
   }
@@ -137,7 +138,7 @@ export default function TaskFormDialog({ open, task, employees, onClose, onSubmi
     // too many. The backend would reject the empty string, so it is dropped here.
     const items = checklist
       .filter((draft) => draft.text.trim())
-      .map((draft) => ({ id: draft.id, text: draft.text.trim(), assigneeId: draft.assigneeId }));
+      .map((draft) => ({ id: draft.id, text: draft.text.trim(), assigneeIds: draft.assigneeIds }));
 
     setSaving(true);
     try {

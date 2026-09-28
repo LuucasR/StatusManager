@@ -1,7 +1,10 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ChatBubbleOutlineRounded,
+  CheckRounded,
   ChecklistRounded,
+  FlagRounded,
   Inventory2Rounded,
   BedtimeRounded,
   MoreVertRounded,
@@ -13,7 +16,10 @@ import {
   AvatarGroup,
   Box,
   Chip,
+  Divider,
   IconButton,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
   Paper,
@@ -27,11 +33,15 @@ import {
   ARCHIVE_WARNING_DAYS,
   STATE_META,
   STATE_ORDER,
+  TASK_COLORS,
+  TASK_COLOR_HEX,
   checklistProgress,
   daysUntilArchive,
   noteVars,
   participantColor,
+  taskColorLabel,
   type Task,
+  type TaskColor,
   type TaskState,
 } from "./types";
 import { t, tf } from "../../i18n";
@@ -40,6 +50,8 @@ type Props = {
   task: Task;
   canMove: boolean;
   canEdit: boolean;
+  /** Admin only: the colour flag entries in the menu. */
+  canColor?: boolean;
   /** Copy drawn inside the DragOverlay: no drag, no menu. */
   overlay?: boolean;
   onOpen?: (task: Task) => void;
@@ -47,6 +59,7 @@ type Props = {
   onPin?: (task: Task, pinned: boolean) => void;
   onEdit?: (task: Task) => void;
   onDelete?: (task: Task) => void;
+  onColor?: (task: Task, color: TaskColor | null) => void;
 };
 
 function initials(name: string) {
@@ -68,19 +81,23 @@ export default function TaskCard({
   task,
   canMove,
   canEdit,
+  canColor = false,
   overlay = false,
   onOpen,
   onMove,
   onPin,
   onEdit,
   onDelete,
+  onColor,
 }: Props) {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const meta = STATE_META[task.state];
 
-  // The overlay mounts a second TaskCard with the same task.id; without the
-  // prefix there would be two draggables sharing an id and the drag breaks.
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  // Sortable rather than merely draggable: the same drag both moves a card to
+  // another column and places it among the cards of its own. The overlay mounts
+  // a second TaskCard with the same task.id; without the prefix there would be
+  // two draggables sharing an id and the drag breaks.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: overlay ? `overlay-${task.id}` : task.id,
     disabled: !canMove || overlay,
     data: { state: task.state },
@@ -91,6 +108,7 @@ export default function TaskCard({
   const progress = checklistProgress(task);
 
   const dragProps = overlay ? {} : { ref: setNodeRef, ...attributes, ...listeners };
+  const flag = task.color ? TASK_COLOR_HEX[task.color] : undefined;
 
   return (
     // The Paper is only the draggable anchor: dnd-kit writes `transform` onto it,
@@ -99,10 +117,15 @@ export default function TaskCard({
     <Paper
       {...dragProps}
       elevation={0}
-      style={noteVars(task)}
+      style={{
+        ...noteVars(task),
+        "--task-flag": flag,
+        ...(overlay ? {} : { transform: CSS.Translate.toString(transform), transition }),
+      }}
       className={[
         "task-card",
         task.pinned ? "pinned" : "",
+        flag ? "flagged" : "",
         isDragging && !overlay ? "dragging" : "",
         overlay ? "task-card-overlay" : "",
       ]
@@ -121,8 +144,18 @@ export default function TaskCard({
         {/* Colour cannot be the only carrier of the state. */}
         <span className="sr-only">{tf("board.statusLabel", { state: meta.label })}</span>
         {task.pinned && <span className="sr-only">{t("board.pinnedLabel")}</span>}
+        {task.color && (
+          <span className="sr-only">
+            {tf("board.flaggedLabel", { color: taskColorLabel(task.color) })}
+          </span>
+        )}
 
         <Stack direction="row" spacing={1} sx={{ alignItems: "start" }}>
+          {task.color && (
+            <Tooltip title={taskColorLabel(task.color)}>
+              <FlagRounded sx={{ fontSize: 18, mt: 0.25, color: flag }} aria-hidden />
+            </Tooltip>
+          )}
           <Typography
             variant="subtitle2"
             className="task-card-title"
@@ -288,6 +321,45 @@ export default function TaskCard({
             <Typography variant="caption">{t("error.MOVE_NOT_ALLOWED")}</Typography>
           </MenuItem>
         )}
+
+        {canColor && [
+          <Divider key="color-divider" />,
+          <MenuItem key="color-heading" disabled sx={{ opacity: "1 !important" }}>
+            <Typography variant="overline" color="text.secondary">
+              {t("board.colorFlag")}
+            </Typography>
+          </MenuItem>,
+          ...TASK_COLORS.map((color) => (
+            <MenuItem
+              key={color}
+              dense
+              selected={task.color === color}
+              onClick={() => {
+                setMenuAnchor(null);
+                onColor?.(task, color);
+              }}
+            >
+              <ListItemIcon>
+                <FlagRounded fontSize="small" sx={{ color: TASK_COLOR_HEX[color] }} />
+              </ListItemIcon>
+              <ListItemText primary={taskColorLabel(color)} />
+              {task.color === color && <CheckRounded fontSize="small" sx={{ ml: 1 }} />}
+            </MenuItem>
+          )),
+          <MenuItem
+            key="color-none"
+            dense
+            disabled={!task.color}
+            onClick={() => {
+              setMenuAnchor(null);
+              onColor?.(task, null);
+            }}
+          >
+            <ListItemIcon />
+            <ListItemText primary={t("taskColor.none")} />
+          </MenuItem>,
+          <Divider key="color-divider-end" />,
+        ]}
 
         {canEdit && [
           <MenuItem

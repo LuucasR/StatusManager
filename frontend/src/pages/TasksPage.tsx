@@ -26,7 +26,10 @@ import {
   listTasks,
   moveTask,
   pinTask,
+  reorderChecklist,
+  reorderTasks,
   setChecklistItem,
+  setTaskColor,
   updateTask,
   type TaskPayload,
 } from "../components/tasks/tasksApi";
@@ -35,6 +38,7 @@ import {
   daysUntilArchive,
   type Task,
   type TaskChecklistItem,
+  type TaskColor,
   type TaskParticipant,
   type TaskState,
 } from "../components/tasks/types";
@@ -151,13 +155,94 @@ export default function TasksPage() {
    */
   async function handleMove(taskId: number, state: TaskState) {
     const previous = tasks;
-    setTasks((current) => current.map((task) => (task.id === taskId ? { ...task, state } : task)));
+    // boardPosition cleared like the backend does: it lands at the bottom of the
+    // cards nobody has placed by hand in its new column.
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId && task.state !== state ? { ...task, state, boardPosition: null } : task
+      )
+    );
     setError("");
     try {
       await moveTask(taskId, state);
     } catch (err) {
       setTasks(previous);
       handleError(err);
+    }
+  }
+
+  /**
+   * A manager's drop: the target column's ids in their new order, plus the move
+   * when the card came from another column. Optimistic like handleMove; the move
+   * goes first because it resets the card's position, which the reorder then
+   * sets.
+   */
+  async function handleReorder(
+    state: TaskState,
+    taskIds: number[],
+    moved?: { taskId: number; from: TaskState }
+  ) {
+    const previous = tasks;
+    const positions = new Map(taskIds.map((id, index) => [id, index]));
+    setTasks((current) =>
+      current.map((task) =>
+        positions.has(task.id)
+          ? { ...task, state, boardPosition: positions.get(task.id)! }
+          : task
+      )
+    );
+    setError("");
+    try {
+      if (moved) await moveTask(moved.taskId, state);
+      await reorderTasks(state, taskIds);
+    } catch (err) {
+      setTasks(previous);
+      handleError(err);
+      void load();
+    }
+  }
+
+  async function handleColor(task: Task, color: TaskColor | null) {
+    const patch = (current: Task) => (current.id === task.id ? { ...current, color } : current);
+    const previousTasks = tasks;
+    setTasks((current) => current.map(patch));
+    setDetail((current) => (current ? patch(current) : current));
+    setError("");
+    try {
+      await setTaskColor(task.id, color);
+    } catch (err) {
+      setTasks(previousTasks);
+      handleError(err);
+    }
+  }
+
+  /** Drag in the detail view. Both copies are patched, same as a tick. */
+  async function handleReorderChecklist(task: Task, itemIds: number[]) {
+    const order = new Map(itemIds.map((id, index) => [id, index]));
+    const patch = (current: Task) =>
+      current.id !== task.id
+        ? current
+        : {
+            ...current,
+            checklist: [...current.checklist].sort(
+              (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)
+            ),
+          };
+
+    const previousTasks = tasks;
+    const previousDetail = detail;
+    setTasks((current) => current.map(patch));
+    setDetail((current) => (current ? patch(current) : current));
+    setError("");
+    try {
+      await reorderChecklist(task.id, itemIds);
+    } catch (err) {
+      setTasks(previousTasks);
+      setDetail(previousDetail);
+      handleError(err);
+      // Most likely somebody added or removed an item meanwhile: show the list
+      // as it really is now.
+      if (detailIdRef.current === task.id) void reloadDetail(task.id);
     }
   }
 
@@ -325,6 +410,8 @@ export default function TasksPage() {
           role={me?.role}
           onOpen={(task) => void openDetailById(task.id)}
           onMove={handleMove}
+          onReorder={handleReorder}
+          onColor={handleColor}
           onPin={handlePin}
           onEdit={(task) => {
             setEditing(task);
@@ -350,6 +437,7 @@ export default function TasksPage() {
         canComment={canComment}
         canPin={canMoveDetail}
         canCheck={canMoveDetail}
+        canReorder={canManage}
         me={me ? { id: me.id, name: me.name } : null}
         onClose={() => {
           setDetailId(null);
@@ -357,6 +445,7 @@ export default function TasksPage() {
         }}
         onPin={handlePin}
         onToggleChecklistItem={handleToggleChecklistItem}
+        onReorderChecklist={handleReorderChecklist}
       />
 
       <TaskReportDialog

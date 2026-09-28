@@ -3,16 +3,19 @@ import { Prisma, TaskState } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { renderTaskReport } from "../reports/task-report";
-import { requireAuth, requireTaskManagement } from "../auth/auth.middleware";
+import { requireAdmin, requireAuth, requireTaskManagement } from "../auth/auth.middleware";
 import { canManageTasks, isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
 import { emitTaskChanged } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
 import {
+  changeTaskColorSchema,
   changeTaskPinSchema,
   changeTaskStateSchema,
   createCommentSchema,
   createTaskSchema,
+  reorderChecklistSchema,
+  reorderTasksSchema,
   setChecklistItemSchema,
   updateTaskSchema,
 } from "./task-validation";
@@ -113,11 +116,47 @@ router.get("/", async (req, res) => {
       ...visibleTasksWhere(),
     },
     include: TASK_INCLUDE,
-    orderBy: [{ pinned: "desc" }, { startsAt: "asc" }, { id: "asc" }],
+    // Pinned first, then the order somebody dragged the cards into, then - for
+    // cards never placed by hand - the old startsAt order. The frontend's
+    // compareBoardOrder mirrors this; change both together.
+    orderBy: [
+      { pinned: "desc" },
+      { boardPosition: { sort: "asc", nulls: "last" } },
+      { startsAt: "asc" },
+      { id: "asc" },
+    ],
     take: 500,
   });
 
   res.json(tasks.map(toTaskDto));
+});
+
+/**
+ * Drag to reorder cards inside one column. Board managers only: the order is
+ * shared by everybody looking at the board, unlike moving a task, which is the
+ * call of whoever works it.
+ *
+ * IMPORTANT: registered BEFORE "/:id" for the same reason as /report.pdf.
+ */
+router.patch("/order", requireTaskManagement, async (req, res) => {
+  const parsed = reorderTasksSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
+  }
+
+  const { state, taskIds } = parsed.data;
+
+  // updateMany filtered by state: a card somebody moved to another column
+  // while this drag was in flight is skipped rather than handed a position in
+  // a column it no longer belongs to.
+  await prisma.$transaction(
+    taskIds.map((id, index) =>
+      prisma.task.updateMany({ where: { id, state }, data: { boardPosition: index } })
+    )
+  );
+
+  emitTaskChanged({ type: "reordered", state });
+  res.json({ success: true });
 });
 
 /**
@@ -237,8 +276,8 @@ router.post("/", requireTaskManagement, async (req, res) => {
   const participantIds = [...new Set(parsed.data.participantIds)];
 
   if (
-    parsed.data.checklist.some(
-      (item) => item.assigneeId != null && !participantIds.includes(item.assigneeId)
+    parsed.data.checklist.some((item) =>
+      item.assigneeIds.some((employeeId) => !participantIds.includes(employeeId))
     )
   ) {
     return res.status(400).json(INVALID_ASSIGNEE);
@@ -264,7 +303,9 @@ router.post("/", requireTaskManagement, async (req, res) => {
           create: parsed.data.checklist.map((item, index) => ({
             text: item.text,
             position: index,
-            assigneeId: item.assigneeId ?? null,
+            assignees: {
+              create: item.assigneeIds.map((employeeId) => ({ employeeId })),
+            },
           })),
         },
       },
@@ -314,7 +355,9 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       autoCompleteOnChecklist: true,
       // Same reason as the participants above, and with more at stake: the
       // previous items are what lets `done` survive an edit of the title.
-      checklist: { select: { id: true, text: true, position: true } },
+      checklist: {
+        select: { id: true, text: true, position: true, assignees: { select: { employeeId: true } } },
+      },
     },
   });
   if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
@@ -347,6 +390,9 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
   const added = next ? [...next].filter((employeeId) => !previous.has(employeeId)) : [];
   const removed = next ? [...previous].filter((employeeId) => !next.has(employeeId)) : [];
   const stateChanged = Boolean(parsed.data.state && parsed.data.state !== current.state);
+  const currentAssignees = new Map(
+    current.checklist.map((item) => [item.id, item.assignees.map((link) => link.employeeId)])
+  );
 
   // Checklist diff, keyed by item id and for the same reason as the participant
   // one above - except a blind rewrite here would not merely reshuffle an order,
@@ -380,6 +426,8 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
         startsAt: parsed.data.startsAt,
         endsAt: parsed.data.endsAt,
         autoCompleteOnChecklist: parsed.data.autoCompleteOnChecklist,
+        // A new column: the old manual position meant nothing there.
+        ...(stateChanged ? { boardPosition: null } : {}),
       },
     });
 
@@ -399,9 +447,8 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     // send a checklist too - otherwise editing only the participants would leave
     // an item assigned to somebody who is no longer on the task.
     if (removed.length) {
-      await tx.taskChecklistItem.updateMany({
-        where: { taskId: id, assigneeId: { in: removed } },
-        data: { assigneeId: null },
+      await tx.taskChecklistAssignee.deleteMany({
+        where: { employeeId: { in: removed }, item: { taskId: id } },
       });
     }
 
@@ -428,8 +475,26 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       for (const item of checklistDiff.updates) {
         await tx.taskChecklistItem.update({
           where: { id: item.id },
-          data: { text: item.text, position: item.position, assigneeId: item.assigneeId },
+          data: { text: item.text, position: item.position },
         });
+
+        // The assignee set is only touched when it actually changed, so the
+        // ones that stay keep their addedAt - which is the order they are shown
+        // in, same lesson as the participants above.
+        const before = currentAssignees.get(item.id) ?? [];
+        const dropped = before.filter((employeeId) => !item.assigneeIds.includes(employeeId));
+        const joined = item.assigneeIds.filter((employeeId) => !before.includes(employeeId));
+        if (dropped.length) {
+          await tx.taskChecklistAssignee.deleteMany({
+            where: { itemId: item.id, employeeId: { in: dropped } },
+          });
+        }
+        if (joined.length) {
+          await tx.taskChecklistAssignee.createMany({
+            data: joined.map((employeeId) => ({ itemId: item.id, employeeId })),
+            skipDuplicates: true,
+          });
+        }
       }
       for (const item of checklistDiff.creates) {
         await tx.taskChecklistItem.create({
@@ -437,7 +502,9 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
             taskId: id,
             text: item.text,
             position: item.position,
-            assigneeId: item.assigneeId,
+            assignees: {
+              create: item.assigneeIds.map((employeeId) => ({ employeeId })),
+            },
           },
         });
       }
@@ -509,7 +576,7 @@ router.patch("/:id/state", async (req, res) => {
 
   const exists = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, state: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
@@ -520,7 +587,15 @@ router.patch("/:id/state", async (req, res) => {
   }
 
   const task = await prisma.$transaction(async (tx) => {
-    await tx.task.update({ where: { id }, data: { state: parsed.data.state } });
+    await tx.task.update({
+      where: { id },
+      data: {
+        state: parsed.data.state,
+        // Lands at the bottom of its new column; a manager's drop at a specific
+        // spot follows up with PATCH /order.
+        ...(parsed.data.state !== exists.state ? { boardPosition: null } : {}),
+      },
+    });
     // The task chat closes on DONE and reopens when moved back.
     await syncTaskConversationState(tx, id, parsed.data.state);
     // Re-read AFTER the sync: otherwise the DTO returns the stale chatClosed.
@@ -573,6 +648,81 @@ router.patch("/:id/pin", async (req, res) => {
   });
 
   emitTaskChanged({ type: "pinned", taskId: id, pinned: task.pinned });
+  res.json(toTaskDto(task));
+});
+
+/**
+ * The colour flag (RED = critical, GREEN = all good...). ADMIN only, a tighter
+ * rule than editing the task: the flag is a judgement on how the work is going,
+ * made by whoever answers for it, not by the people doing it.
+ */
+router.patch("/:id/color", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const parsed = changeTaskColorSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
+  }
+
+  const exists = await prisma.task.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+
+  const task = await prisma.task.update({
+    where: { id },
+    data: { color: parsed.data.color },
+    include: TASK_INCLUDE,
+  });
+
+  emitTaskChanged({ type: "updated", taskId: id });
+  res.json(toTaskDto(task));
+});
+
+/**
+ * Drag to reorder the checklist from the detail view, without opening the edit
+ * form. Board managers only, like every other change to the list itself.
+ */
+router.put("/:id/checklist/order", requireTaskManagement, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const parsed = reorderChecklistSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
+  }
+
+  const owner = await prisma.task.findUnique({
+    where: { id },
+    select: { checklist: { select: { id: true } } },
+  });
+  if (!owner) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  const current = owner.checklist;
+
+  // Exactly the task's items, each once: an item somebody added or deleted
+  // while this view was open would otherwise end up with no position, or a
+  // duplicated one.
+  const currentIds = new Set(current.map((item) => item.id));
+  const { itemIds } = parsed.data;
+  if (
+    itemIds.length !== currentIds.size ||
+    new Set(itemIds).size !== itemIds.length ||
+    itemIds.some((itemId) => !currentIds.has(itemId))
+  ) {
+    return res.status(409).json(CHECKLIST_ITEM_NOT_FOUND);
+  }
+
+  await prisma.$transaction(
+    itemIds.map((itemId, position) =>
+      prisma.taskChecklistItem.update({ where: { id: itemId }, data: { position } })
+    )
+  );
+
+  const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
+
+  emitTaskChanged({ type: "checklist", taskId: id });
   res.json(toTaskDto(task));
 });
 

@@ -36,8 +36,8 @@ export type TaskChecklistItem = {
   text: string;
   done: boolean;
   doneAt: string | null;
-  /** Who is in charge. Always one of the task's participants, or nobody. */
-  assignee: TaskParticipant | null;
+  /** Who is in charge; several people or nobody ([]). Always task participants. */
+  assignees: TaskParticipant[];
   /**
    * Who ticked it, null while it is open. May be a snapshot of a deleted
    * account, in which case its id and employeeNumber are 0 - same shape as a
@@ -54,6 +54,10 @@ export type Task = {
   startsAt: string;
   endsAt: string;
   pinned: boolean;
+  /** Manual order inside its column. null = never placed by hand. */
+  boardPosition: number | null;
+  /** Colour flag an admin put on the card, or none. */
+  color: TaskColor | null;
   /** Set while the task is one the end-of-day job paused, cleared when resumed. */
   autoPausedAt: string | null;
   /** endsAt + 14 days. The backend owns the constant. */
@@ -76,6 +80,40 @@ export type Task = {
 };
 
 export const STATE_ORDER: TaskState[] = ["PENDING", "IN_PROGRESS", "DONE"];
+
+/**
+ * The palette an admin can flag a task with. Mirrors TASK_COLORS in the
+ * backend's task-validation.ts; change both together.
+ */
+export const TASK_COLORS = ["RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "PURPLE"] as const;
+export type TaskColor = (typeof TASK_COLORS)[number];
+
+export const TASK_COLOR_HEX: Record<TaskColor, string> = {
+  RED: "#e5484d",
+  ORANGE: "#f76b15",
+  YELLOW: "#e2b100",
+  GREEN: "#2eae70",
+  BLUE: "#3e7bfa",
+  PURPLE: "#8e4ec6",
+};
+
+export const taskColorLabel = (color: TaskColor) => t(`taskColor.${color}` as TranslationKey);
+
+/**
+ * The board's order: pinned first, then the order somebody dragged the cards
+ * into, then - for cards never placed by hand - by start. Mirrors the orderBy
+ * of GET /tasks; change both together.
+ */
+export function compareBoardOrder(a: Task, b: Task) {
+  if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+  if (a.boardPosition !== b.boardPosition) {
+    if (a.boardPosition === null) return 1;
+    if (b.boardPosition === null) return -1;
+    return a.boardPosition - b.boardPosition;
+  }
+  const byStart = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+  return byStart || a.id - b.id;
+}
 
 export type StateMeta = {
   label: string;

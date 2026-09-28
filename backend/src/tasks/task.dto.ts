@@ -27,7 +27,10 @@ export const TASK_INCLUDE = {
       doneAt: true,
       doneByName: true,
       doneBy: EMPLOYEE_SUMMARY,
-      assignee: EMPLOYEE_SUMMARY,
+      assignees: {
+        select: { employee: EMPLOYEE_SUMMARY },
+        orderBy: { addedAt: "asc" },
+      },
     },
     orderBy: { position: "asc" },
   },
@@ -77,12 +80,19 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     // Lets the board tell a task the end-of-day job paused from one nobody ever
     // started: both sit in PENDING and would otherwise look identical.
     autoPausedAt: task.autoPausedAt,
+    // Manual order inside the column (null = never placed by hand) and the
+    // admin's colour flag.
+    boardPosition: task.boardPosition,
+    color: task.color,
     checklist: task.checklist.map((item) => ({
       id: item.id,
       text: item.text,
       done: item.done,
       doneAt: item.doneAt,
-      assignee: item.assignee,
+      assignees: item.assignees.map((link) => link.employee),
+      // LEGACY: the first assignee, for clients built before an item could have
+      // several people (the Android app ships its bundle).
+      assignee: item.assignees[0]?.employee ?? null,
       // The account may have been deleted (doneById is SetNull); the name comes
       // from the snapshot, exactly like a message's author.
       doneBy:

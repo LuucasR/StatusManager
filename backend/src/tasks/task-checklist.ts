@@ -4,15 +4,15 @@ import { syncTaskConversationState } from "../chat/chat.service";
 type Tx = Prisma.TransactionClient;
 
 /** One item as the client sends it: no id means "new". */
-export type ChecklistInput = { id?: number; text: string; assigneeId?: number | null };
+export type ChecklistInput = { id?: number; text: string; assigneeIds?: number[] };
 
 export type ChecklistDiff = {
   /** Ids in the payload that this task does not own. Non-empty means refuse. */
   unknownIds: number[];
-  /** Existing rows, with their new text, assignee and position. */
-  updates: { id: number; text: string; position: number; assigneeId: number | null }[];
+  /** Existing rows, with their new text, assignees and position. */
+  updates: { id: number; text: string; position: number; assigneeIds: number[] }[];
   /** Rows to insert, already carrying their position. */
-  creates: { text: string; position: number; assigneeId: number | null }[];
+  creates: { text: string; position: number; assigneeIds: number[] }[];
   /** Every assignee the payload asks for. The route checks them against the
    *  task's participants, which is a rule no database constraint can express. */
   assigneeIds: number[];
@@ -48,16 +48,15 @@ export function diffChecklist(
   const kept = new Set<number>();
 
   next.forEach((item, position) => {
-    // undefined and null both mean "nobody": the column is written on every
-    // save, so leaving it undefined would make Prisma skip the field and an
-    // assignment the user cleared would come straight back.
-    const assigneeId = item.assigneeId ?? null;
+    // Absent means "nobody", not "leave alone": the set is rewritten on every
+    // save, so an assignment the user cleared must not come straight back.
+    const assigneeIds = [...new Set(item.assigneeIds ?? [])];
 
     if (item.id === undefined) {
-      creates.push({ text: item.text, position, assigneeId });
+      creates.push({ text: item.text, position, assigneeIds });
     } else {
       kept.add(item.id);
-      updates.push({ id: item.id, text: item.text, position, assigneeId });
+      updates.push({ id: item.id, text: item.text, position, assigneeIds });
     }
   });
 
@@ -65,11 +64,7 @@ export function diffChecklist(
     unknownIds,
     updates,
     creates,
-    assigneeIds: [
-      ...new Set(
-        next.map((item) => item.assigneeId).filter((id): id is number => typeof id === "number")
-      ),
-    ],
+    assigneeIds: [...new Set(next.flatMap((item) => item.assigneeIds ?? []))],
     deletedIds: [...currentIds].filter((id) => !kept.has(id)),
   };
 }
@@ -107,7 +102,8 @@ export async function applyChecklistAutoComplete(tx: Tx, taskId: number) {
   if (task.checklist.length === 0) return false;
   if (task.checklist.some((item) => !item.done)) return false;
 
-  await tx.task.update({ where: { id: taskId }, data: { state: "DONE" } });
+  // boardPosition cleared like every other change of column.
+  await tx.task.update({ where: { id: taskId }, data: { state: "DONE", boardPosition: null } });
   // Without this the task's chat would stay open on a finished task, which no
   // other route that reaches DONE allows.
   await syncTaskConversationState(tx, taskId, "DONE");

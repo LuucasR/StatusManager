@@ -45,6 +45,14 @@ export const en = {
   "taskState.IN_PROGRESS.empty": "Nobody has started a task",
   "taskState.DONE.empty": "Nothing finished yet",
 
+  "taskColor.RED": "Red",
+  "taskColor.ORANGE": "Orange",
+  "taskColor.YELLOW": "Yellow",
+  "taskColor.GREEN": "Green",
+  "taskColor.BLUE": "Blue",
+  "taskColor.PURPLE": "Purple",
+  "taskColor.none": "No colour",
+
   // --- Chat
   "chat.kind.GENERAL": "Team",
   "chat.kind.TASK": "Tasks",
@@ -260,6 +268,7 @@ export const en = {
   "taskForm.checklistAssignee": "In charge",
   "taskForm.checklistNobody": "Nobody",
   "taskForm.checklistRemove": "Remove item",
+  "taskForm.checklistReorder": "Drag to reorder",
   "taskForm.autoComplete": "Move the task to Done when every item is ticked",
   "taskForm.autoCompleteHint":
     "Off by default: a checklist is not always the whole of the task. Needs at least one item.",
@@ -375,6 +384,8 @@ export const en = {
   "board.unpin": "Unpin",
   "board.pinnedTooltip": "Pinned — never archived",
   "board.pinnedLabel": "Pinned",
+  "board.flaggedLabel": "Flagged: {color}",
+  "board.colorFlag": "Colour flag",
   "board.cardActions": "Actions for {title}",
   "board.statusLabel": "State: {state}",
   "board.moveTo": "Move to {state}",
@@ -741,6 +752,14 @@ const es: Record<TranslationKey, string> = {
   "taskState.IN_PROGRESS.empty": "Nadie arrancó ninguna tarea",
   "taskState.DONE.empty": "Todavía no terminaron ninguna",
 
+  "taskColor.RED": "Rojo",
+  "taskColor.ORANGE": "Naranja",
+  "taskColor.YELLOW": "Amarillo",
+  "taskColor.GREEN": "Verde",
+  "taskColor.BLUE": "Azul",
+  "taskColor.PURPLE": "Violeta",
+  "taskColor.none": "Sin color",
+
   "chat.kind.GENERAL": "Equipo",
   "chat.kind.TASK": "Tareas",
   "chat.kind.DIRECT": "Directos",
@@ -944,6 +963,7 @@ const es: Record<TranslationKey, string> = {
   "taskForm.checklistAssignee": "A cargo",
   "taskForm.checklistNobody": "Nadie",
   "taskForm.checklistRemove": "Quitar ítem",
+  "taskForm.checklistReorder": "Arrastrar para reordenar",
   "taskForm.autoComplete": "Pasar la tarea a Hecho cuando se tilden todos los ítems",
   "taskForm.autoCompleteHint":
     "Apagado por defecto: una lista no siempre es toda la tarea. Necesita al menos un ítem.",
@@ -1053,6 +1073,8 @@ const es: Record<TranslationKey, string> = {
   "board.unpin": "Dejar de fijar",
   "board.pinnedTooltip": "Fijada — no se archiva",
   "board.pinnedLabel": "Fijada",
+  "board.flaggedLabel": "Marcada: {color}",
+  "board.colorFlag": "Color",
   "board.cardActions": "Acciones de {title}",
   "board.statusLabel": "Estado: {state}",
   "board.moveTo": "Mover a {state}",

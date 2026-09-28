@@ -1,4 +1,27 @@
-import { PushPinOutlined, PushPinRounded } from "@mui/icons-material";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  DragIndicatorRounded,
+  FlagRounded,
+  PushPinOutlined,
+  PushPinRounded,
+} from "@mui/icons-material";
+import type { ReactNode } from "react";
 import {
   Alert,
   Avatar,
@@ -27,12 +50,61 @@ import TaskFacts from "./TaskFacts";
 import { formatCommentDate } from "./datetime";
 import {
   STATE_META,
+  TASK_COLOR_HEX,
   checklistProgress,
   participantColor,
+  taskColorLabel,
   type Task,
   type TaskChecklistItem,
 } from "./types";
 import { t, tf } from "../../i18n";
+
+/**
+ * One checklist line that can be dragged by its handle. When reordering is not
+ * allowed it renders the line alone, with no handle taking up room.
+ */
+function SortableChecklistRow({
+  id,
+  enabled,
+  children,
+}: {
+  id: number;
+  enabled: boolean;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled: !enabled });
+
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <Stack
+      ref={setNodeRef}
+      direction="row"
+      sx={{
+        alignItems: "flex-start",
+        position: "relative",
+        zIndex: isDragging ? 1 : "auto",
+        bgcolor: isDragging ? "background.paper" : "transparent",
+        borderRadius: 1,
+        boxShadow: isDragging ? 3 : "none",
+      }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+    >
+      <IconButton
+        ref={setActivatorNodeRef}
+        size="small"
+        aria-label={t("taskForm.checklistReorder")}
+        sx={{ cursor: "grab", touchAction: "none", mt: 0.75, p: 0.25 }}
+        {...attributes}
+        {...listeners}
+      >
+        <DragIndicatorRounded sx={{ fontSize: 18, color: "text.disabled" }} />
+      </IconButton>
+      {children}
+    </Stack>
+  );
+}
 
 type Props = {
   open: boolean;
@@ -53,10 +125,13 @@ type Props = {
    * the two cannot silently drift apart at the call site.
    */
   canCheck: boolean;
+  /** Dragging the items into another order: board managers, like editing the list. */
+  canReorder: boolean;
   me: { id: number; name: string } | null;
   onClose: () => void;
   onPin: (task: Task, pinned: boolean) => void;
   onToggleChecklistItem: (task: Task, item: TaskChecklistItem, done: boolean) => void;
+  onReorderChecklist: (task: Task, itemIds: number[]) => void;
 };
 
 export default function TaskDetailDialog({
@@ -67,11 +142,18 @@ export default function TaskDetailDialog({
   canComment,
   canPin,
   canCheck,
+  canReorder,
   me,
   onClose,
   onPin,
   onToggleChecklistItem,
+  onReorderChecklist,
 }: Props) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   // The thread comes from the same store as the floating window: what is typed
   // in one appears in the other with no round-trip. null is passed when there is
   // no read permission: mounting it anyway would be a guaranteed 403.
@@ -130,6 +212,20 @@ export default function TaskDetailDialog({
                       }}
                     />
 
+                    {task.color && (
+                      <Chip
+                        size="small"
+                        icon={<FlagRounded />}
+                        label={taskColorLabel(task.color)}
+                        sx={{
+                          bgcolor: "var(--surface)",
+                          fontWeight: 700,
+                          border: `1px solid ${alpha(TASK_COLOR_HEX[task.color], 0.5)}`,
+                          "& .MuiChip-icon": { color: TASK_COLOR_HEX[task.color], fontSize: 16 },
+                        }}
+                      />
+                    )}
+
                     <Tooltip
                       title={
                         canPin
@@ -181,74 +277,94 @@ export default function TaskDetailDialog({
                         sx={{ height: 6, borderRadius: 3, my: 1 }}
                       />
 
-                      <Stack>
-                        {task.checklist.map((item) => (
-                          <FormControlLabel
-                            key={item.id}
-                            control={
-                              <Checkbox
-                                checked={item.done}
-                                disabled={!canCheck}
-                                onChange={(event) =>
-                                  onToggleChecklistItem(task, item, event.target.checked)
-                                }
-                              />
-                            }
-                            // The label is two lines high, so the box has to sit
-                            // at the top of it rather than centre on the pair.
-                            sx={{ alignItems: "flex-start", mb: 0.5 }}
-                            label={
-                              <Box sx={{ pt: 1 }}>
-                                <Typography
-                                  sx={{
-                                    textDecoration: item.done ? "line-through" : "none",
-                                    color: item.done ? "text.secondary" : "text.primary",
-                                  }}
-                                >
-                                  {item.text}
-                                </Typography>
-
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  sx={{ alignItems: "center", flexWrap: "wrap" }}
-                                  useFlexGap
-                                >
-                                  {item.assignee && (
-                                    <Chip
-                                      size="small"
-                                      avatar={
-                                        <Avatar
-                                          sx={{
-                                            bgcolor: participantColor(item.assignee.id),
-                                            color: "#fff !important",
-                                          }}
-                                        >
-                                          {item.assignee.name.slice(0, 1).toUpperCase()}
-                                        </Avatar>
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={({ active, over }: DragEndEvent) => {
+                          if (!over || active.id === over.id) return;
+                          const ids = task.checklist.map((item) => item.id);
+                          const from = ids.indexOf(Number(active.id));
+                          const to = ids.indexOf(Number(over.id));
+                          if (from < 0 || to < 0) return;
+                          onReorderChecklist(task, arrayMove(ids, from, to));
+                        }}
+                      >
+                        <SortableContext
+                          items={task.checklist.map((item) => item.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Stack>
+                            {task.checklist.map((item) => (
+                              <SortableChecklistRow key={item.id} id={item.id} enabled={canReorder}>
+                                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      checked={item.done}
+                                      disabled={!canCheck}
+                                      onChange={(event) =>
+                                        onToggleChecklistItem(task, item, event.target.checked)
                                       }
-                                      label={tf("taskDetail.checklistAssigned", {
-                                        name: item.assignee.name,
-                                      })}
                                     />
-                                  )}
+                                  }
+                                  // The label is two lines high, so the box has to sit
+                                  // at the top of it rather than centre on the pair.
+                                  sx={{ alignItems: "flex-start", mb: 0.5 }}
+                                  label={
+                                    <Box sx={{ pt: 1 }}>
+                                      <Typography
+                                        sx={{
+                                          textDecoration: item.done ? "line-through" : "none",
+                                          color: item.done ? "text.secondary" : "text.primary",
+                                        }}
+                                      >
+                                        {item.text}
+                                      </Typography>
 
-                                  {/* Only once it is done: doneBy is cleared
-                                      when an item is unticked. */}
-                                  {item.done && item.doneBy && (
-                                    <Typography variant="caption" color="text.secondary">
-                                      {tf("taskDetail.checklistDoneBy", {
-                                        name: item.doneBy.name,
-                                      })}
-                                      {item.doneAt && ` · ${formatCommentDate(item.doneAt)}`}
-                                    </Typography>
-                                  )}
-                                </Stack>
-                              </Box>
-                            }
-                          />
-                        ))}
-                      </Stack>
+                                      <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        sx={{ alignItems: "center", flexWrap: "wrap" }}
+                                        useFlexGap
+                                      >
+                                        {item.assignees.map((assignee) => (
+                                          <Chip
+                                            key={assignee.id}
+                                            size="small"
+                                            avatar={
+                                              <Avatar
+                                                sx={{
+                                                  bgcolor: participantColor(assignee.id),
+                                                  color: "#fff !important",
+                                                }}
+                                              >
+                                                {assignee.name.slice(0, 1).toUpperCase()}
+                                              </Avatar>
+                                            }
+                                            label={tf("taskDetail.checklistAssigned", {
+                                              name: assignee.name,
+                                            })}
+                                          />
+                                        ))}
+
+                                        {/* Only once it is done: doneBy is cleared
+                                            when an item is unticked. */}
+                                        {item.done && item.doneBy && (
+                                          <Typography variant="caption" color="text.secondary">
+                                            {tf("taskDetail.checklistDoneBy", {
+                                              name: item.doneBy.name,
+                                            })}
+                                            {item.doneAt && ` · ${formatCommentDate(item.doneAt)}`}
+                                          </Typography>
+                                        )}
+                                      </Stack>
+                                    </Box>
+                                  }
+                                />
+                              </SortableChecklistRow>
+                            ))}
+                          </Stack>
+                        </SortableContext>
+                      </DndContext>
 
                       {!canCheck && (
                         <Typography variant="caption" color="text.secondary">

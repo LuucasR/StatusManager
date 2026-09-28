@@ -119,8 +119,9 @@ model Employee {
   createdTasks       Task[]            @relation("TaskCreator")
   taskParticipations TaskParticipant[]
 
-  checklistAssignments TaskChecklistItem[] @relation("ChecklistAssignee")
-  checklistCompletions TaskChecklistItem[] @relation("ChecklistCompleter")
+  checklistAssignments     TaskChecklistItem[]     @relation("ChecklistAssignee")
+  checklistAssigneeLinks   TaskChecklistAssignee[]
+  checklistCompletions     TaskChecklistItem[]     @relation("ChecklistCompleter")
 
   conversations ConversationMember[]
   messages      Message[]
@@ -197,6 +198,16 @@ model Task {
   /// or a partial reminder with something still unwritten left to do. Deciding
   /// it when the task is created is the only thing that tells those two apart.
   autoCompleteOnChecklist Boolean   @default(false)
+  /// Manual order inside its column, set by dragging cards on the board.
+  /// Null = never placed by hand: those sort after the placed ones, by startsAt,
+  /// which is exactly the order the board had before this column existed.
+  /// Cleared whenever the task changes column, since a position only means
+  /// something relative to the other cards of the same column.
+  boardPosition           Int?
+  /// Colour flag an ADMIN puts on the card (RED = critical, GREEN = all good...).
+  /// TEXT validated by Zod against TASK_COLORS rather than a Postgres enum, so a
+  /// new colour is a code change and not a migration.
+  color                   String?
   createdById             Int?
   createdBy               Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt               DateTime  @default(now())
@@ -242,13 +253,10 @@ model TaskChecklistItem {
   /// Name snapshot, same reasoning as Message.authorName: "done by" is a fact
   /// about the past and has to stay readable once the account is gone.
   doneByName String?
-  /// Who is in charge of this one. Always one of the task's participants, which
-  /// the routes enforce - there is no database constraint that can express
-  /// "exists in TaskParticipant for THIS task".
-  ///
-  /// Deliberately NOT snapshotted the way doneByName is: an assignment to a
-  /// deleted account is stale rather than historical, and should read as nobody
-  /// being in charge so somebody picks it up.
+  /// DEPRECATED: replaced by `assignees` (TaskChecklistAssignee), which allows
+  /// several people per item. Copied over by the migration that introduced it
+  /// and no longer read or written; kept only so the build that was running
+  /// during that deploy kept working. Drop in a later migration.
   assigneeId Int?
   assignee   Employee? @relation("ChecklistAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   /// Explicit ordering, unlike TaskParticipant, which is read back by addedAt.
@@ -262,8 +270,29 @@ model TaskChecklistItem {
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
+  assignees TaskChecklistAssignee[]
+
   @@index([taskId, position])
   @@index([assigneeId])
+}
+
+/// Who is in charge of a checklist item; an item can have several people.
+/// Always participants of the item's task, which the routes enforce - there is
+/// no database constraint that can express "exists in TaskParticipant for THIS
+/// task".
+///
+/// Cascade on the employee and NOT snapshotted the way doneByName is: an
+/// assignment to a deleted account is stale rather than historical, and should
+/// simply disappear so somebody picks the item up.
+model TaskChecklistAssignee {
+  itemId     Int
+  employeeId Int
+  addedAt    DateTime          @default(now())
+  item       TaskChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, employeeId])
+  @@index([employeeId])
 }
 
 model Conversation {

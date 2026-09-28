@@ -27,12 +27,21 @@ const checklist = z
     z.object({
       id: z.number().int().positive().optional(),
       text: z.string().trim().min(1).max(200),
-      // null clears it, absent leaves it alone. Nullable and not just optional
-      // because "nobody is in charge" has to be sendable.
+      // Everybody in charge of the item; [] = nobody.
+      assigneeIds: z.array(z.number().int().positive()).max(50).optional(),
+      // LEGACY single assignee, still accepted from clients built before an item
+      // could have several people (the Android app ships its bundle). Only read
+      // when assigneeIds is absent.
       assigneeId: z.number().int().positive().nullable().optional(),
     })
   )
-  .max(50);
+  .max(50)
+  .transform((items) =>
+    items.map(({ assigneeId, assigneeIds, ...item }) => ({
+      ...item,
+      assigneeIds: [...new Set(assigneeIds ?? (assigneeId ? [assigneeId] : []))],
+    }))
+  );
 
 export const createTaskSchema = z
   .object({
@@ -94,6 +103,32 @@ export const changeTaskPinSchema = z.object({
  */
 export const setChecklistItemSchema = z.object({
   done: z.boolean(),
+});
+
+/**
+ * Drag to reorder inside a task's checklist: the item ids in their new order.
+ * Must be exactly the task's current items, checked in the route.
+ */
+export const reorderChecklistSchema = z.object({
+  itemIds: z.array(z.number().int().positive()).max(50),
+});
+
+/**
+ * Drag to reorder cards inside one board column: the task ids of that column in
+ * their new order. The state travels too so a card that was moved to another
+ * column in the meantime is skipped rather than given a position there.
+ */
+export const reorderTasksSchema = z.object({
+  state: z.nativeEnum(TaskState),
+  taskIds: z.array(z.number().int().positive()).max(500),
+});
+
+/** The fixed palette an admin can flag a task with. Mirrored in the frontend. */
+export const TASK_COLORS = ["RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "PURPLE"] as const;
+
+/** null removes the flag. */
+export const changeTaskColorSchema = z.object({
+  color: z.enum(TASK_COLORS).nullable(),
 });
 
 export const createCommentSchema = z.object({
