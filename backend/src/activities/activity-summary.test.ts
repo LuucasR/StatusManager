@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { teamTaskTimes, workedByDay, workedMs, type TeamTimeRow } from "./activity-summary";
+import { teamTaskTimes, workedByDay, workedByTask, workedMs, type TeamTimeRow } from "./activity-summary";
 
 const HOUR = 3_600_000;
 
@@ -108,6 +108,26 @@ describe("workedMs", () => {
       [
         { day: "2026-09-28", ms: 4 * HOUR },
         { day: "2026-09-29", ms: 3 * HOUR },
+      ]
+    );
+  });
+});
+
+describe("workedByTask", () => {
+  it("splits worked time per task, no-task time last, ignoring other statuses", () => {
+    const rows = [
+      { status: "WORKING" as const, startedAt: new Date("2026-09-28T12:00:00Z"), endedAt: new Date("2026-09-28T13:00:00Z"), taskId: null, taskTitle: null },
+      { status: "WORKING" as const, startedAt: new Date("2026-09-28T13:00:00Z"), endedAt: new Date("2026-09-28T15:00:00Z"), taskId: 7, taskTitle: "Login" },
+      { status: "LUNCH" as const, startedAt: new Date("2026-09-28T15:00:00Z"), endedAt: new Date("2026-09-28T16:00:00Z"), taskId: null, taskTitle: null },
+      { status: "WORKING" as const, startedAt: new Date("2026-09-29T12:00:00Z"), endedAt: new Date("2026-09-29T13:30:00Z"), taskId: 7, taskTitle: "Login" },
+      { status: "WORKING" as const, startedAt: new Date("2026-09-29T13:30:00Z"), endedAt: new Date("2026-09-29T14:00:00Z"), taskId: null, taskTitle: "Old deleted task" },
+    ];
+    assert.deepEqual(
+      workedByTask(rows, undefined, undefined).map(({ title, ms }) => ({ title, ms })),
+      [
+        { title: "Login", ms: 3.5 * HOUR },
+        { title: "Old deleted task", ms: 0.5 * HOUR },
+        { title: null, ms: 1 * HOUR },
       ]
     );
   });

@@ -121,6 +121,41 @@ export function workedByDay(
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
+/**
+ * Worked time split per task, most time first. WORKING time with no declared
+ * task gets its own bucket (taskId and title null) so the per-task lines add up
+ * to the worked total. A deleted task is keyed by its title snapshot, like
+ * summarize does.
+ */
+export function workedByTask(
+  rows: (Pick<SummaryRow, "status" | "startedAt" | "endedAt"> & {
+    taskId?: number | null;
+    taskTitle?: string | null;
+  })[],
+  from: Date | undefined,
+  to: Date | undefined,
+  now: Date = new Date()
+): { key: string; taskId: number | null; title: string | null; ms: number }[] {
+  const tasks = new Map<string, { key: string; taskId: number | null; title: string | null; ms: number }>();
+  for (const row of rows) {
+    if (row.status !== "WORKING") continue;
+    const ms = segmentMs(row, from, to, now);
+    if (ms <= 0) continue;
+    const taskId = row.taskId ?? null;
+    const title = row.taskTitle ?? null;
+    const key = taskId != null ? `id:${taskId}` : title ? `title:${title}` : "none";
+    const bucket = tasks.get(key) ?? { key, taskId, title, ms: 0 };
+    bucket.ms += ms;
+    tasks.set(key, bucket);
+  }
+  return [...tasks.values()].sort((a, b) => {
+    // "No task" always last, whatever its size.
+    if (a.key === "none") return 1;
+    if (b.key === "none") return -1;
+    return b.ms - a.ms;
+  });
+}
+
 export type ActivitySummary = {
   /** Only WORKING time: the hours worked in the period. */
   workedMs: number;

@@ -1,7 +1,7 @@
 import type { ActivityStatus } from "@prisma/client";
 import { LOCALE } from "../locale";
 import { STATUS_META } from "../activities/activity-status";
-import { segmentMs, workedByDay, workedMs } from "../activities/activity-summary";
+import { segmentMs, workedByDay, workedByTask, workedMs } from "../activities/activity-summary";
 import {
   PAGE,
   REPORT_COLORS,
@@ -17,6 +17,7 @@ export type ReportActivity = {
   detail: string;
   /** Snapshot of the declared task's title, if there was one. */
   taskTitle?: string | null;
+  taskId?: number | null;
   startedAt: Date;
   endedAt: Date | null;
   employee: {
@@ -113,24 +114,31 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   const drawWorkedHeader = () => {
     doc.roundedRect(margin, chrome.y, contentWidth, 24, 5).fill(COLORS.ink);
     doc.fillColor(COLORS.white).font("Helvetica-Bold").fontSize(7.5);
-    doc.text("EMPLOYEE / DAY", margin + 10, chrome.y + 8, { width: 300 });
+    doc.text("EMPLOYEE / DAY / TASK", margin + 10, chrome.y + 8, { width: 300 });
     doc.text("HOURS WORKED", margin + 360, chrome.y + 8, { width: 140, align: "right" });
     chrome.y += 30;
   };
   const drawWorkedRow = (label: string, ms: number, bold: boolean) => {
-    const rowHeight = bold ? 24 : 20;
+    const rowHeight = bold ? 24 : 18;
     chrome.ensureRoom(rowHeight, drawWorkedHeader);
     if (bold) doc.roundedRect(margin, chrome.y, contentWidth, rowHeight - 4, 5).fill(COLORS.surface);
     doc.fillColor(bold ? COLORS.ink : COLORS.muted).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
-    doc.text(label, margin + (bold ? 10 : 24), chrome.y + 5, { width: 320 });
+    doc.text(label, margin + (bold ? 10 : 30), chrome.y + 5, { width: 320, lineBreak: false, ellipsis: true });
     doc.fillColor(bold ? COLORS.primary : COLORS.ink).font("Helvetica-Bold").fontSize(8.5);
     doc.text(formatDuration(ms), margin + 360, chrome.y + 5, { width: 140, align: "right" });
     chrome.y += rowHeight;
   };
+  /** Small caps label that opens the "by day" / "by task" block of an employee. */
+  const drawWorkedGroup = (label: string) => {
+    chrome.ensureRoom(18 + 18, drawWorkedHeader);
+    doc.fillColor(COLORS.primary).font("Helvetica-Bold").fontSize(6.5);
+    doc.text(label, margin + 18, chrome.y + 6, { width: 300, characterSpacing: 0.6 });
+    chrome.y += 16;
+  };
 
   chrome.drawSectionTitle(
     "Hours worked",
-    "Only time spent in the Working status counts. Breaks, lunch, meetings and away time are logged but not counted as worked."
+    "Only time spent in the Working status counts, split by day and by the task declared while working. Breaks, lunch, meetings and away time are logged but not counted as worked."
   );
   drawWorkedHeader();
   if (options.rows.length === 0) {
@@ -142,9 +150,23 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
       workedMs(rows, from, to, generatedAt),
       true
     );
-    for (const { day, ms } of workedByDay(rows, from, to, timeZone, generatedAt)) {
-      drawWorkedRow(formatDay(day), ms, false);
+    const days = workedByDay(rows, from, to, timeZone, generatedAt);
+    if (days.length > 0) {
+      drawWorkedGroup("BY DAY");
+      for (const { day, ms } of days) drawWorkedRow(formatDay(day), ms, false);
     }
+    // What those hours were spent on: the task declared while Working.
+    const tasks = workedByTask(rows, from, to, generatedAt);
+    if (tasks.length > 0) {
+      drawWorkedGroup("BY TASK");
+      for (const task of tasks) {
+        const label = task.title
+          ? `${task.taskId != null ? `#${task.taskId} ` : ""}${truncate(task.title, 60)}${task.taskId == null ? " (deleted)" : ""}`
+          : "No task declared";
+        drawWorkedRow(label, task.ms, false);
+      }
+    }
+    chrome.y += 6;
   }
   chrome.y += 14;
   chrome.ensureRoom(90, () => {});
