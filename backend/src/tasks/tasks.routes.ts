@@ -21,6 +21,7 @@ import {
 } from "./task-validation";
 import { TASK_STATE_META, taskArchiveCutoff, visibleTasksWhere } from "./task-state";
 import { applyChecklistAutoComplete, diffChecklist } from "./task-checklist";
+import { syncTaskProgress } from "./task-timing";
 import {
   ensureTaskConversation,
   postMessage,
@@ -311,6 +312,8 @@ router.post("/", requireTaskManagement, async (req, res) => {
       },
       select: { id: true, title: true, state: true },
     });
+    // Created straight into IN_PROGRESS: the clock starts now.
+    await syncTaskProgress(tx, created.id, null, created.state);
 
     await ensureTaskConversation(tx, created, participantIds);
 
@@ -430,6 +433,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
         ...(stateChanged ? { boardPosition: null } : {}),
       },
     });
+    if (stateChanged) await syncTaskProgress(tx, id, current.state, parsed.data.state!);
 
     if (removed.length) {
       await tx.taskParticipant.deleteMany({
@@ -596,6 +600,8 @@ router.patch("/:id/state", async (req, res) => {
         ...(parsed.data.state !== exists.state ? { boardPosition: null } : {}),
       },
     });
+    // Real time taken: counted only while the task sits in IN_PROGRESS.
+    await syncTaskProgress(tx, id, exists.state, parsed.data.state);
     // The task chat closes on DONE and reopens when moved back.
     await syncTaskConversationState(tx, id, parsed.data.state);
     // Re-read AFTER the sync: otherwise the DTO returns the stale chatClosed.

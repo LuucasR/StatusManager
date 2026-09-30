@@ -62,6 +62,13 @@ export type Task = {
   autoPausedAt: string | null;
   /** endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
+  /**
+   * Real time the task spent In progress, CLOSED stretches only. startsAt/endsAt
+   * are just the deadline. Optional: older backends do not send it.
+   */
+  workedMs?: number;
+  /** Start of the current In progress stretch, or null when it is not in progress. */
+  inProgressSince?: string | null;
   /** The task broken into steps, in the order the author wrote them. */
   checklist: TaskChecklistItem[];
   /** Move the task to Done on its own once every item is ticked. */

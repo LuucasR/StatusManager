@@ -1,8 +1,8 @@
 import { Avatar, Box, Chip, Stack, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { formatDuration, formatRange } from "./datetime";
+import { formatDuration, formatMsDuration, formatRange, useTaskWorkedMs } from "./datetime";
 import { STATE_META, participantColor, type TaskParticipant, type TaskState } from "./types";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 /**
  * Deliberately NARROWER than `Task`: the activity summary carries the task data
@@ -17,6 +17,9 @@ export type TaskFactsData = {
   endsAt: string;
   participants: TaskParticipant[];
   createdBy?: TaskParticipant | null;
+  /** Real time in progress. Absent where the caller does not carry it (the activity summary). */
+  workedMs?: number;
+  inProgressSince?: string | null;
 };
 
 type Props = {
@@ -28,12 +31,15 @@ type Props = {
 };
 
 /**
- * The hard facts of a task: description, duration, participants and authorship.
+ * The hard facts of a task: description, deadline, real time in progress,
+ * participants and authorship.
  * Extracted from TaskDetailDialog so the activity summary shows exactly the same
  * thing without dragging in the chat thread, which has its own ACL.
  */
 export default function TaskFacts({ task, showState = false, asOfNote }: Props) {
   const meta = STATE_META[task.state];
+  const workedMs = useTaskWorkedMs(task);
+  const tracksTime = task.workedMs !== undefined;
 
   return (
     <Stack spacing={2.5}>
@@ -66,17 +72,32 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
         <Typography sx={{ whiteSpace: "pre-wrap" }}>{task.description}</Typography>
       </Box>
 
+      {/* The planned window is only informative: how much time there is. */}
       <Box>
         <Typography variant="overline" color="text.secondary">
-          {t("common.duration")}
+          {t("task.deadline")}
         </Typography>
         <Typography>
           {formatRange(task.startsAt, task.endsAt)}{" "}
           <Typography component="span" color="text.secondary">
-            ({formatDuration(task.startsAt, task.endsAt)})
+            ({tf("task.deadlineAvailable", { time: formatDuration(task.startsAt, task.endsAt) })})
           </Typography>
         </Typography>
       </Box>
+
+      {tracksTime && (
+        <Box>
+          <Typography variant="overline" color="text.secondary">
+            {t("task.realTime")}
+          </Typography>
+          <Typography sx={{ fontWeight: 700 }}>
+            {workedMs > 0 || task.inProgressSince ? formatMsDuration(workedMs) : t("task.notStarted")}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t("task.realTimeNote")}
+          </Typography>
+        </Box>
+      )}
 
       <Box>
         <Typography variant="overline" color="text.secondary">
@@ -112,7 +133,10 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
 
       {task.createdBy && (
         <Typography variant="caption" color="text.secondary">
-          Creada por {task.createdBy.name} (#{task.createdBy.employeeNumber})
+          {tf("task.createdBy", {
+            name: task.createdBy.name,
+            number: task.createdBy.employeeNumber,
+          })}
         </Typography>
       )}
     </Stack>

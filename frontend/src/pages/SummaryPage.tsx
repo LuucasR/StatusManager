@@ -52,6 +52,8 @@ type TaskBucket = {
 type Summary = {
   from: string | null;
   to: string | null;
+  /** Only WORKING time: the hours worked. */
+  workedMs: number;
   totalMs: number;
   byStatus: StatusBucket[];
   byTask: TaskBucket[];
@@ -142,14 +144,20 @@ export default function SummaryPage() {
         <Stack spacing={3}>
           <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
             <Typography variant="overline" color="text.secondary">
-              {t("summary.timeLogged")}
+              {t("summary.hoursWorked")}
             </Typography>
             <Typography variant="h3" sx={{ fontWeight: 800 }}>
-              {formatMs(summary.totalMs)}
+              {formatMs(summary.workedMs ?? 0)}
             </Typography>
-            {/* "Time logged" and not "% of the working day" on purpose: there
-                are real gaps between segments and Disconnected periods stay out
-                of the history, so the total does not match the clock. */}
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              {t("summary.hoursWorkedNote")}
+            </Typography>
+            {/* Everything logged, breaks and lunch included, stays as secondary
+                context. Not "% of the working day": there are real gaps between
+                segments and Disconnected periods stay out of the history. */}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {tf("summary.timeLoggedAll", { time: formatMs(summary.totalMs) })}
+            </Typography>
             <Typography variant="caption" color="text.secondary">
               {t("summary.timeLoggedNote")}
             </Typography>

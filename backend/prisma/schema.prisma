@@ -221,9 +221,26 @@ model Task {
   activities    ActivityHistory[]
   patchEntries  PatchEntry[]
 
+  progressSegments TaskProgressSegment[]
+
   @@index([state, startsAt])
   @@index([startsAt])
   @@index([pinned, endsAt])
+}
+
+/// One stretch of time a task spent in IN_PROGRESS. A row is opened every time
+/// the task enters the column and closed when it leaves it, so the real time a
+/// task took is the sum of its segments. startsAt/endsAt on Task are only the
+/// planned window (the deadline), not the time it took.
+model TaskProgressSegment {
+  id        Int       @id @default(autoincrement())
+  taskId    Int
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startedAt DateTime  @default(now())
+  /// Null while the task is still in progress.
+  endedAt   DateTime?
+
+  @@index([taskId])
 }
 
 model TaskParticipant {

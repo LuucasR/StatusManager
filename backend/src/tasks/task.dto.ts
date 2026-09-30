@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { taskArchivesAt } from "./task-state";
+import { PROGRESS_SEGMENTS_SELECT, inProgressSince, progressMs } from "./task-timing";
 
 const EMPLOYEE_SUMMARY = {
   select: { id: true, employeeNumber: true, name: true },
@@ -37,6 +38,7 @@ export const TASK_INCLUDE = {
   conversation: {
     select: { id: true, closed: true, _count: { select: { messages: true } } },
   },
+  progressSegments: PROGRESS_SEGMENTS_SELECT,
 } satisfies Prisma.TaskInclude;
 
 /** Detail shape: adds the message thread. */
@@ -102,6 +104,11 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
           : null),
     })),
     autoCompleteOnChecklist: task.autoCompleteOnChecklist,
+    // Real time spent in IN_PROGRESS (startsAt/endsAt are only the deadline).
+    // workedMs covers the CLOSED stretches only; the open one runs from
+    // inProgressSince, so the client can tick it live against its own clock.
+    workedMs: progressMs(task.progressSegments.filter((segment) => segment.endedAt != null)),
+    inProgressSince: inProgressSince(task.progressSegments),
     // Always computed, even when pinned: the frontend needs it to tell
     // "pinned and current" from "pinned and already past the cutoff", and it
     // keeps the 14-day constant living in one place.

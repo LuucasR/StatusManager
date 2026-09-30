@@ -197,10 +197,14 @@ router.get("/report.pdf", async (req, res) => {
     ? `${from ? from.toLocaleDateString(LOCALE) : "Start"} to ${to ? to.toLocaleDateString(LOCALE) : "now"}`
     : "Full history";
 
+  const config = await getWorkdayConfig();
   renderActivityReport(doc, {
     title: "My activity log",
     subtitle: `Employee #${employee.employeeNumber} - ${employee.name}`,
     periodLabel,
+    from,
+    to,
+    timeZone: config.timezone,
     rows: rows.map((row) => ({
       ...row,
       employee: {

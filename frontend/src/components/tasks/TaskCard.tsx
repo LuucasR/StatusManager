@@ -28,7 +28,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { formatDuration, formatRange } from "./datetime";
+import { formatMsDuration, formatRange, useTaskWorkedMs } from "./datetime";
 import {
   ARCHIVE_WARNING_DAYS,
   STATE_META,
@@ -91,6 +91,7 @@ export default function TaskCard({
   onColor,
 }: Props) {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const workedMs = useTaskWorkedMs(task);
   const meta = STATE_META[task.state];
 
   // Sortable rather than merely draggable: the same drag both moves a card to
@@ -192,11 +193,14 @@ export default function TaskCard({
             {formatRange(task.startsAt, task.endsAt)}
           </Typography>
           <Box sx={{ flex: 1 }} />
-          <Chip
-            size="small"
-            className="note-chip"
-            label={formatDuration(task.startsAt, task.endsAt)}
-          />
+          {/* Real time spent In progress; the range on the left is only the deadline. */}
+          {(workedMs > 0 || task.inProgressSince) && (
+            <Chip
+              size="small"
+              className="note-chip"
+              label={tf("task.realTimeChip", { time: formatMsDuration(workedMs) })}
+            />
+          )}
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 1.5 }}>

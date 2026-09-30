@@ -7,10 +7,10 @@ import { cancelConfirmation, emitStatusChanged, sendConfirmationRequest } from "
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { approvePasswordReset } from "../auth/auth.service";
-import { visibleHistoryWhere } from "../activities/activity-status";
+import { overlappingWhere, visibleHistoryWhere } from "../activities/activity-status";
 import { WorkingTaskError, resolveWorkingTask } from "../activities/activity-task";
 import { z } from "zod";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { LOCALE } from "../locale";
 import {
   WORKDAY_SETTINGS_ID,
@@ -19,7 +19,9 @@ import {
   isValidTimeOfDay,
   isValidTimeZone,
   parseTimeOfDay,
+  zonedNow,
 } from "../scheduler/workday";
+import { addDays, zonedMidnight } from "../patch-notes/patch-week";
 import { currentMonth, syncLateWarningsForMonth } from "../warnings/late-warning";
 
 
@@ -518,46 +520,35 @@ router.delete("/employees/:id", requireAdmin, async (req, res) => {
 router.get("/report.pdf", requireStaff, async (req, res) => {
   const employeeId = req.query.employeeId;
 
-  const where: any = { ...visibleHistoryWhere };
+  const period = req.query.period as string | undefined;
+  const fromDay = req.query.from as string | undefined;
+  const toDay = req.query.to as string | undefined;
 
+  // Day boundaries are local midnights in the team's timezone, not the
+  // server's (Render runs in UTC). `to` is exclusive.
+  const config = await getWorkdayConfig();
+  const today = zonedNow(config.timezone).day;
+  let from: Date | undefined;
+  let to: Date | undefined;
+  if (period === "today") from = zonedMidnight(today, config.timezone);
+  if (period === "last7") from = zonedMidnight(addDays(today, -6), config.timezone);
+  if (fromDay && toDay) {
+    if (!isCalendarDay(fromDay) || !isCalendarDay(toDay)) {
+      return res.status(400).json({ code: "INVALID_DATE_RANGE", message: "Invalid date range" });
+    }
+    from = zonedMidnight(fromDay, config.timezone);
+    to = zonedMidnight(addDays(toDay, 1), config.timezone);
+  }
+
+  // Segments that OVERLAP the range: one left open from before it still
+  // counts its share (clipped in the report).
+  const where: Prisma.ActivityHistoryWhereInput = {
+    ...visibleHistoryWhere,
+    ...overlappingWhere(from, to),
+  };
   if (employeeId && employeeId !== "all") {
     where.employeeId = Number(employeeId);
   }
-
-  const period = req.query.period as string | undefined;
-const from = req.query.from as string | undefined;
-const to = req.query.to as string | undefined;
-
-if (period === "today") {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  where.startedAt = {
-    gte: start,
-  };
-}
-
-if (period === "last7") {
-  const start = new Date();
-  start.setDate(start.getDate() - 7);
-
-  where.startedAt = {
-    gte: start,
-  };
-}
-
-if (from && to) {
-  const start = new Date(from);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(to);
-  end.setHours(23, 59, 59, 999);
-
-  where.startedAt = {
-    gte: start,
-    lte: end,
-  };
-}
 
   const rows = await prisma.activityHistory.findMany({
     where,
@@ -572,7 +563,6 @@ if (from && to) {
     orderBy: {
       startedAt: "desc",
     },
-    take: 1000,
   });
 
   res.setHeader("Content-Type", "application/pdf");
@@ -594,8 +584,9 @@ if (from && to) {
   let periodLabel = "Full history";
   if (period === "today") periodLabel = "Today";
   if (period === "last7") periodLabel = "Last 7 days";
-  if (from && to) {
-    periodLabel = `${new Date(from).toLocaleDateString(LOCALE)} to ${new Date(to).toLocaleDateString(LOCALE)}`;
+  if (fromDay && toDay) {
+    const label = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString(LOCALE, { timeZone: "UTC" });
+    periodLabel = `${label(fromDay)} to ${label(toDay)}`;
   }
 
   // The employee is looked up separately rather than from rows[0]: if during the
@@ -615,6 +606,9 @@ if (from && to) {
       ? `Employee #${selectedEmployee.employeeNumber} - ${selectedEmployee.name}`
       : "Team overview",
     periodLabel,
+    from,
+    to,
+    timeZone: config.timezone,
     rows,
   });
 });

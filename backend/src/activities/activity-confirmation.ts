@@ -1,5 +1,6 @@
 import { ActivityStatus, TaskState } from "@prisma/client";
 import prisma from "../prisma/client";
+import { closeProgress } from "../tasks/task-timing";
 import { emitStatusChanged, emitTaskChanged, setConfirmationTimeoutHandler } from "../realtime";
 import { notify } from "../notifications/notification.service";
 import { getWorkdayConfig, formatZoned } from "../scheduler/workday";
@@ -91,7 +92,9 @@ async function autoDisconnect(employeeId: number, detail: string) {
  * the tasks carrying that stamp and leaves alone the ones nobody ever started.
  */
 async function pauseDeclaredTask(taskId: number, employeeId: number) {
-  const paused = await prisma.task.updateMany({
+  const now = new Date();
+  const paused = await prisma.$transaction(async (tx) => {
+    const result = await tx.task.updateMany({
     where: {
       id: taskId,
       state: TaskState.IN_PROGRESS,
@@ -104,7 +107,10 @@ async function pauseDeclaredTask(taskId: number, employeeId: number) {
         },
       },
     },
-    data: { state: TaskState.PENDING, autoPausedAt: new Date() },
+    data: { state: TaskState.PENDING, autoPausedAt: now },
+    });
+    if (result.count > 0) await closeProgress(tx, [taskId], now);
+    return result;
   });
 
   if (paused.count > 0) emitTaskChanged({ type: "bulk" });

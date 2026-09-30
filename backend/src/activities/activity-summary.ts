@@ -1,4 +1,6 @@
 import type { ActivityStatus, TaskState } from "@prisma/client";
+import { addDays, zonedMidnight } from "../patch-notes/patch-week";
+import { zonedNow } from "../scheduler/workday";
 
 type Participant = { id: number; employeeNumber: number; name: string };
 
@@ -69,7 +71,60 @@ export function segmentMs(
   return Math.max(0, end - start);
 }
 
+/**
+ * Hours actually worked: only WORKING segments count. Break, lunch, meetings,
+ * away and the like are logged time, not worked time, so they stay out of the
+ * total that answers "how many hours did this person work".
+ */
+export function workedMs(
+  rows: Pick<SummaryRow, "status" | "startedAt" | "endedAt">[],
+  from: Date | undefined,
+  to: Date | undefined,
+  now: Date = new Date()
+) {
+  return rows.reduce(
+    (total, row) => (row.status === "WORKING" ? total + segmentMs(row, from, to, now) : total),
+    0
+  );
+}
+
+/**
+ * Worked time split per calendar day ("YYYY-MM-DD" in `timeZone`), oldest
+ * first. A segment that crosses midnight is split between both days.
+ */
+export function workedByDay(
+  rows: Pick<SummaryRow, "status" | "startedAt" | "endedAt">[],
+  from: Date | undefined,
+  to: Date | undefined,
+  timeZone: string,
+  now: Date = new Date()
+): { day: string; ms: number }[] {
+  const days = new Map<string, number>();
+  for (const row of rows) {
+    if (row.status !== "WORKING") continue;
+    const start = Math.max(row.startedAt.getTime(), from ? from.getTime() : -Infinity);
+    const end = Math.min(
+      row.endedAt ? row.endedAt.getTime() : now.getTime(),
+      to ? to.getTime() : Infinity
+    );
+    let cursor = start;
+    while (cursor < end) {
+      const day = zonedNow(timeZone, new Date(cursor)).day;
+      const next = zonedMidnight(addDays(day, 1), timeZone).getTime();
+      const pieceEnd = Math.min(end, next);
+      days.set(day, (days.get(day) ?? 0) + (pieceEnd - cursor));
+      cursor = pieceEnd;
+    }
+  }
+  return [...days.entries()]
+    .map(([day, ms]) => ({ day, ms }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+}
+
 export type ActivitySummary = {
+  /** Only WORKING time: the hours worked in the period. */
+  workedMs: number;
+  /** Every visible status added up (worked plus breaks, lunch, away...). */
   totalMs: number;
   byStatus: StatusBucket[];
   byTask: TaskBucket[];
@@ -84,6 +139,7 @@ export function summarize(
   const statuses = new Map<ActivityStatus, StatusBucket>();
   const tasks = new Map<string, TaskBucket>();
   let totalMs = 0;
+  let worked = 0;
 
   for (const row of rows) {
     const ms = segmentMs(row, from, to, now);
@@ -91,6 +147,7 @@ export function summarize(
     // no time, and should not inflate the segment counter either.
     if (ms <= 0) continue;
     totalMs += ms;
+    if (row.status === "WORKING") worked += ms;
 
     const status = statuses.get(row.status) ?? { status: row.status, totalMs: 0, segments: 0 };
     status.totalMs += ms;
@@ -135,6 +192,7 @@ export function summarize(
   }
 
   return {
+    workedMs: worked,
     totalMs,
     byStatus: [...statuses.values()].sort((a, b) => b.totalMs - a.totalMs),
     byTask: [...tasks.values()].sort((a, b) => b.totalMs - a.totalMs),

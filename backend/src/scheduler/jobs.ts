@@ -1,5 +1,6 @@
-import { ActivityStatus, TaskState } from "@prisma/client";
+import { ActivityStatus, Prisma, TaskState } from "@prisma/client";
 import prisma from "../prisma/client";
+import { closeProgress, openProgress } from "../tasks/task-timing";
 import {
   emitTaskChanged,
   hasPendingConfirmation,
@@ -138,16 +139,26 @@ export async function runActivityCheck(config: WorkdayConfig, day: ResolvedDay, 
  * it alive: it is paused only when NONE of its participants is WORKING.
  */
 export async function runClose(_config: WorkdayConfig) {
-  const paused = await prisma.task.updateMany({
-    where: {
-      state: TaskState.IN_PROGRESS,
-      NOT: {
-        participants: {
-          some: { employee: { active: true, currentStatus: ActivityStatus.WORKING } },
-        },
+  const now = new Date();
+  const where = {
+    state: TaskState.IN_PROGRESS,
+    NOT: {
+      participants: {
+        some: { employee: { active: true, currentStatus: ActivityStatus.WORKING } },
       },
     },
-    data: { state: TaskState.PENDING, autoPausedAt: new Date() },
+  } satisfies Prisma.TaskWhereInput;
+
+  // The ids are read first so the progress clock of exactly those tasks can be
+  // stopped: the night must not count as time spent on them.
+  const paused = await prisma.$transaction(async (tx) => {
+    const ids = (await tx.task.findMany({ where, select: { id: true } })).map((task) => task.id);
+    const result = await tx.task.updateMany({
+      where: { id: { in: ids }, state: TaskState.IN_PROGRESS },
+      data: { state: TaskState.PENDING, autoPausedAt: now },
+    });
+    await closeProgress(tx, ids, now);
+    return result;
   });
 
   if (paused.count > 0) emitTaskChanged({ type: "bulk" });
@@ -167,9 +178,21 @@ export async function runClose(_config: WorkdayConfig) {
  * A stamp surviving the weekend is intended: paused Friday, resumed Monday.
  */
 export async function runStartOfDay(_config: WorkdayConfig) {
-  const resumed = await prisma.task.updateMany({
-    where: { autoPausedAt: { not: null }, state: TaskState.PENDING },
-    data: { state: TaskState.IN_PROGRESS, autoPausedAt: null },
+  const now = new Date();
+  const resumed = await prisma.$transaction(async (tx) => {
+    const ids = (
+      await tx.task.findMany({
+        where: { autoPausedAt: { not: null }, state: TaskState.PENDING },
+        select: { id: true },
+      })
+    ).map((task) => task.id);
+    const result = await tx.task.updateMany({
+      where: { id: { in: ids }, autoPausedAt: { not: null }, state: TaskState.PENDING },
+      data: { state: TaskState.IN_PROGRESS, autoPausedAt: null },
+    });
+    // Back in progress: the clock starts again.
+    await openProgress(tx, ids, now);
+    return result;
   });
 
   // Anything still stamped was resolved by a person overnight (finished, or

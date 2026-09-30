@@ -78,7 +78,7 @@ export type ReportChrome = {
   y: number;
   /** Brand band + PERIOD block + "Generated on". Leaves y = 195. */
   drawCover(): void;
-  /** Row of 3 summary cards. Advances y += 78. */
+  /** Row of summary cards (usually 3), sharing the width. Advances y += 78. */
   drawKpiCards(cards: KpiCard[]): void;
   /** 14pt title + optional 8pt note. Advances y += 42. */
   drawSectionTitle(title: string, note?: string): void;
@@ -135,7 +135,7 @@ export function createReportChrome(doc: any, options: ReportChromeOptions): Repo
 
     drawKpiCards(cards) {
       const cardGap = 10;
-      const cardWidth = (contentWidth - cardGap * 2) / 3;
+      const cardWidth = (contentWidth - cardGap * (cards.length - 1)) / cards.length;
       cards.forEach((card, index) => {
         const x = margin + index * (cardWidth + cardGap);
         doc.roundedRect(x, chrome.y, cardWidth, 58, 8).fill(REPORT_COLORS.surface);

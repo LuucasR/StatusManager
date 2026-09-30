@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { syncTaskConversationState } from "../chat/chat.service";
+import { syncTaskProgress } from "./task-timing";
 
 type Tx = Prisma.TransactionClient;
 
@@ -104,6 +105,7 @@ export async function applyChecklistAutoComplete(tx: Tx, taskId: number) {
 
   // boardPosition cleared like every other change of column.
   await tx.task.update({ where: { id: taskId }, data: { state: "DONE", boardPosition: null } });
+  await syncTaskProgress(tx, taskId, task.state, "DONE");
   // Without this the task's chat would stay open on a finished task, which no
   // other route that reaches DONE allows.
   await syncTaskConversationState(tx, taskId, "DONE");

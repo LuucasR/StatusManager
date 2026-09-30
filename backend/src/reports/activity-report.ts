@@ -1,5 +1,7 @@
 import type { ActivityStatus } from "@prisma/client";
+import { LOCALE } from "../locale";
 import { STATUS_META } from "../activities/activity-status";
+import { segmentMs, workedByDay, workedMs } from "../activities/activity-summary";
 import {
   PAGE,
   REPORT_COLORS,
@@ -38,23 +40,44 @@ type ReportOptions = {
   subtitle: string;
   periodLabel: string;
   rows: ReportActivity[];
+  /** Report range. Segments are clipped to it, so a status left open before or after the period only adds its share. */
+  from?: Date;
+  to?: Date;
+  /** Timezone the per-day split is computed in. */
+  timeZone: string;
   generatedAt?: Date;
 };
 
 const COLORS = REPORT_COLORS;
 const STATUS = STATUS_META;
 
-/** Open segments (endedAt null) are counted up to generation time. */
-function durationMs(row: ReportActivity, generatedAt: Date) {
-  return Math.max(0, (row.endedAt ?? generatedAt).getTime() - row.startedAt.getTime());
+/** "Mon 21/09/2026" for the per-day table. The day is already a calendar day in the team's zone. */
+function formatDay(day: string) {
+  return new Intl.DateTimeFormat(LOCALE, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T12:00:00Z`));
 }
 
 export function renderActivityReport(doc: any, options: ReportOptions) {
   const generatedAt = options.generatedAt ?? new Date();
   const { width: pageWidth, margin, contentWidth } = PAGE;
 
-  const employeeCount = new Set(options.rows.map((row) => row.employee.employeeNumber)).size;
-  const totalDuration = options.rows.reduce((total, row) => total + durationMs(row, generatedAt), 0);
+  const { from, to, timeZone } = options;
+  // Open segments are counted up to generation time, clipped to the range.
+  const durationMs = (row: ReportActivity) => segmentMs(row, from, to, generatedAt);
+
+  const employees = new Map<number, { employee: ReportActivity["employee"]; rows: ReportActivity[] }>();
+  for (const row of options.rows) {
+    const entry = employees.get(row.employee.employeeNumber) ?? { employee: row.employee, rows: [] };
+    entry.rows.push(row);
+    employees.set(row.employee.employeeNumber, entry);
+  }
+  const totalDuration = options.rows.reduce((total, row) => total + durationMs(row), 0);
+  const totalWorked = workedMs(options.rows, from, to, generatedAt);
 
   const chrome = createReportChrome(doc, {
     title: options.title,
@@ -79,14 +102,56 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   chrome.drawCover();
 
   chrome.drawKpiCards([
-    { label: "RECORDS", value: String(options.rows.length) },
-    { label: "EMPLOYEES", value: String(employeeCount) },
-    { label: "TIME LOGGED", value: formatDuration(totalDuration), highlight: true },
+    { label: "HOURS WORKED", value: formatDuration(totalWorked), highlight: true },
+    { label: "TIME LOGGED (ALL STATUSES)", value: formatDuration(totalDuration) },
+    employees.size > 1
+      ? { label: "EMPLOYEES", value: String(employees.size) }
+      : { label: "RECORDS", value: String(options.rows.length) },
   ]);
+
+  // Worked hours, per employee when the report covers several, and per workday.
+  const drawWorkedHeader = () => {
+    doc.roundedRect(margin, chrome.y, contentWidth, 24, 5).fill(COLORS.ink);
+    doc.fillColor(COLORS.white).font("Helvetica-Bold").fontSize(7.5);
+    doc.text("EMPLOYEE / DAY", margin + 10, chrome.y + 8, { width: 300 });
+    doc.text("HOURS WORKED", margin + 360, chrome.y + 8, { width: 140, align: "right" });
+    chrome.y += 30;
+  };
+  const drawWorkedRow = (label: string, ms: number, bold: boolean) => {
+    const rowHeight = bold ? 24 : 20;
+    chrome.ensureRoom(rowHeight, drawWorkedHeader);
+    if (bold) doc.roundedRect(margin, chrome.y, contentWidth, rowHeight - 4, 5).fill(COLORS.surface);
+    doc.fillColor(bold ? COLORS.ink : COLORS.muted).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
+    doc.text(label, margin + (bold ? 10 : 24), chrome.y + 5, { width: 320 });
+    doc.fillColor(bold ? COLORS.primary : COLORS.ink).font("Helvetica-Bold").fontSize(8.5);
+    doc.text(formatDuration(ms), margin + 360, chrome.y + 5, { width: 140, align: "right" });
+    chrome.y += rowHeight;
+  };
+
+  chrome.drawSectionTitle(
+    "Hours worked",
+    "Only time spent in the Working status counts. Breaks, lunch, meetings and away time are logged but not counted as worked."
+  );
+  drawWorkedHeader();
+  if (options.rows.length === 0) {
+    chrome.drawEmptyState("No activity recorded for the selected period.");
+  }
+  for (const { employee, rows } of [...employees.values()].sort((a, b) => a.employee.name.localeCompare(b.employee.name))) {
+    drawWorkedRow(
+      `${truncate(employee.name, 40)}  #${employee.employeeNumber}`,
+      workedMs(rows, from, to, generatedAt),
+      true
+    );
+    for (const { day, ms } of workedByDay(rows, from, to, timeZone, generatedAt)) {
+      drawWorkedRow(formatDay(day), ms, false);
+    }
+  }
+  chrome.y += 14;
+  chrome.ensureRoom(90, () => {});
 
   chrome.drawSectionTitle(
     "Activity detail",
-    "Open statuses are counted up to the moment the report was generated. Disconnected periods are not included."
+    "Open statuses are counted up to the moment the report was generated, clipped to the report period. Disconnected periods are not included."
   );
   drawTableHeader();
 
@@ -122,7 +187,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
     doc.text(formatTime(row.startedAt), margin + 203, chrome.y + 24, { width: 72 });
 
     doc.fillColor(COLORS.ink).font("Helvetica-Bold").fontSize(8);
-    doc.text(formatDuration(durationMs(row, generatedAt)), margin + 280, chrome.y + 16, { width: 62 });
+    doc.text(formatDuration(durationMs(row)), margin + 280, chrome.y + 16, { width: 62 });
 
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(7.5);
     doc.text(truncate(detailText(row), 92), margin + 347, chrome.y + 9, {

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { LOCALE } from "../../locale";
 import { t } from "../../i18n";
 
@@ -77,4 +78,33 @@ export function relativeDay(iso: string) {
   if (days <= 0) return t("date.today");
   if (days === 1) return t("date.yesterday");
   return dayFormatter.format(date);
+}
+
+/** "2 h 05 min" from milliseconds, same format as formatDuration. */
+export function formatMsDuration(ms: number) {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} min`;
+  if (rest === 0) return `${hours} h`;
+  return `${hours} h ${pad(rest)} min`;
+}
+
+/**
+ * Real time a task has spent In progress, ticking every 30 s while it is still
+ * there: closed stretches plus the open one measured against this clock.
+ */
+export function useTaskWorkedMs(task: { workedMs?: number; inProgressSince?: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  const since = task.inProgressSince;
+
+  useEffect(() => {
+    if (!since) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [since]);
+
+  const open = since ? Math.max(0, now - new Date(since).getTime()) : 0;
+  return (task.workedMs ?? 0) + open;
 }

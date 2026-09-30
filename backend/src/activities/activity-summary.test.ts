@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { teamTaskTimes, type TeamTimeRow } from "./activity-summary";
+import { teamTaskTimes, workedByDay, workedMs, type TeamTimeRow } from "./activity-summary";
 
 const HOUR = 3_600_000;
 
@@ -64,5 +64,51 @@ describe("teamTaskTimes", () => {
       to
     );
     assert.deepEqual(result.map((task) => task.title), ["Old B", "Old A"]);
+  });
+});
+
+describe("workedMs", () => {
+  const segment = (status: "WORKING" | "BREAK" | "LUNCH", startedAt: string, endedAt: string | null) => ({
+    status,
+    startedAt: new Date(startedAt),
+    endedAt: endedAt ? new Date(endedAt) : null,
+  });
+
+  it("counts only the time spent WORKING", () => {
+    const rows = [
+      segment("WORKING", "2026-09-28T12:00:00Z", "2026-09-28T14:00:00Z"),
+      segment("LUNCH", "2026-09-28T14:00:00Z", "2026-09-28T15:00:00Z"),
+      segment("WORKING", "2026-09-28T15:00:00Z", "2026-09-28T16:30:00Z"),
+      segment("BREAK", "2026-09-28T16:30:00Z", "2026-09-28T17:00:00Z"),
+    ];
+    assert.equal(workedMs(rows, undefined, undefined), 3.5 * HOUR);
+  });
+
+  it("clips segments to the range and counts the open one up to now", () => {
+    const rows = [
+      segment("WORKING", "2026-09-27T22:00:00Z", "2026-09-28T02:00:00Z"),
+      segment("WORKING", "2026-09-28T10:00:00Z", null),
+    ];
+    const from = new Date("2026-09-28T00:00:00Z");
+    const to = new Date("2026-09-29T00:00:00Z");
+    const now = new Date("2026-09-28T11:00:00Z");
+    assert.equal(workedMs(rows, from, to, now), 3 * HOUR);
+  });
+
+  it("splits worked time per day in the team's timezone", () => {
+    // 23:00Z-04:00Z is 20:00-01:00 in Buenos Aires (UTC-3): 4 h on the 28th and
+    // 1 h on the 29th, plus 13:00Z-15:00Z (10:00-12:00 local) on the 29th.
+    const rows = [
+      segment("WORKING", "2026-09-28T23:00:00Z", "2026-09-29T04:00:00Z"),
+      segment("WORKING", "2026-09-29T13:00:00Z", "2026-09-29T15:00:00Z"),
+      segment("BREAK", "2026-09-29T15:00:00Z", "2026-09-29T16:00:00Z"),
+    ];
+    assert.deepEqual(
+      workedByDay(rows, undefined, undefined, "America/Argentina/Buenos_Aires"),
+      [
+        { day: "2026-09-28", ms: 4 * HOUR },
+        { day: "2026-09-29", ms: 3 * HOUR },
+      ]
+    );
   });
 });
