@@ -8,11 +8,20 @@ import prisma from "../prisma/client";
  * 17:30 in Buenos Aires and the whole feature would fire three hours late.
  */
 
+/** Hours of one weekday, overriding the global start and end. */
+export type WeekdayHours = { start: string; end: string };
+
+/** Keyed by weekday "0".."6". A weekday missing here uses the global hours. */
+export type WeekdaySchedule = Partial<Record<string, WeekdayHours>>;
+
 export type WorkdayConfig = {
   /** 0 = Sunday .. 6 = Saturday. */
   workingWeekdays: number[];
+  /** Global hours, used by any weekday without its own entry. */
   startTime: string;
   endTime: string;
+  /** Per-weekday hours, e.g. a shorter Tuesday. */
+  weekdaySchedule: WeekdaySchedule;
   timezone: string;
   confirmationDelayMinutes: number;
   confirmationTimeoutSeconds: number;
@@ -38,6 +47,7 @@ const DEFAULTS: WorkdayConfig = {
   workingWeekdays: [1, 2, 3, 4, 5],
   startTime: "09:00",
   endTime: "17:30",
+  weekdaySchedule: {},
   timezone: "America/Argentina/Buenos_Aires",
   confirmationDelayMinutes: 0,
   confirmationTimeoutSeconds: 120,
@@ -65,6 +75,7 @@ export async function getWorkdayConfig(): Promise<WorkdayConfig> {
     workingWeekdays: row.workingWeekdays,
     startTime: row.startTime,
     endTime: row.endTime,
+    weekdaySchedule: parseWeekdaySchedule(row.weekdaySchedule),
     timezone: row.timezone,
     confirmationDelayMinutes: row.confirmationDelayMinutes,
     confirmationTimeoutSeconds: row.confirmationTimeoutSeconds,
@@ -76,6 +87,24 @@ export async function getWorkdayConfig(): Promise<WorkdayConfig> {
 }
 
 export const WORKDAY_DEFAULTS = DEFAULTS;
+
+/**
+ * The stored JSON, keeping only well-formed entries. A malformed one is dropped
+ * rather than trusted, so that weekday falls back to the global hours instead
+ * of silently disabling its jobs.
+ */
+export function parseWeekdaySchedule(value: unknown): WeekdaySchedule {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const schedule: WeekdaySchedule = {};
+  for (const [key, hours] of Object.entries(value as Record<string, unknown>)) {
+    if (!/^[0-6]$/.test(key) || !hours || typeof hours !== "object") continue;
+    const { start, end } = hours as Record<string, unknown>;
+    if (typeof start !== "string" || typeof end !== "string") continue;
+    if (!isValidTimeOfDay(start) || !isValidTimeOfDay(end)) continue;
+    schedule[key] = { start, end };
+  }
+  return schedule;
+}
 
 /** "HH:MM" -> minutes since local midnight, or null when malformed. */
 export function parseTimeOfDay(value: string): number | null {
@@ -166,6 +195,9 @@ export type ResolvedDay = {
  * Pure on purpose - no database, no clock - because this is the rule the whole
  * feature turns on and it has to be testable directly.
  *
+ * Hours come from the exception, else that weekday's own entry, else the
+ * global start and end.
+ *
  * A dated exception BEATS the weekly pattern in both directions: it closes a
  * Tuesday for a holiday, and it opens a Saturday for a crunch day. Its times
  * are optional, so one row covers a holiday, a half day and an extra working
@@ -180,10 +212,17 @@ export function resolveWorkday(
     ? exception.working
     : config.workingWeekdays.includes(weekday);
 
+  // Exception first, then that weekday's own hours, then the global ones.
+  const weekdayHours = config.weekdaySchedule[String(weekday)];
+
   return {
     working,
-    startMinutes: parseTimeOfDay(exception?.startTime ?? config.startTime),
-    endMinutes: parseTimeOfDay(exception?.endTime ?? config.endTime),
+    startMinutes: parseTimeOfDay(
+      exception?.startTime ?? weekdayHours?.start ?? config.startTime
+    ),
+    endMinutes: parseTimeOfDay(
+      exception?.endTime ?? weekdayHours?.end ?? config.endTime
+    ),
   };
 }
 

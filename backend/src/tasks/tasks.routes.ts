@@ -1,10 +1,11 @@
 import { Router } from "express";
+import { z } from "zod";
 import { Prisma, TaskState } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { renderTaskReport } from "../reports/task-report";
 import { requireAdmin, requireAuth, requireTaskManagement } from "../auth/auth.middleware";
-import { canManageTasks, isStaff } from "../auth/roles";
+import { canManageTasks, isAdmin, isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
 import { emitTaskChanged } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
@@ -93,6 +94,39 @@ const INVALID_ASSIGNEE = {
   message: "Whoever is in charge of an item has to take part in the task",
 };
 
+/**
+ * A task created by anyone but an ADMIN waits for an admin's approval. Until
+ * then it is off the board: only admins and its creator see it, and nobody can
+ * move, pin, tick, edit or comment on it.
+ */
+const TASK_NOT_APPROVED = {
+  code: "TASK_NOT_APPROVED",
+  message: "This task is waiting for an admin's approval",
+};
+
+/** Who sees tasks that are not approved: admins, and the creator their own. */
+function approvalVisibleWhere(auth: AuthPayload): Prisma.TaskWhereInput {
+  if (isAdmin(auth.role)) return {};
+  return { OR: [{ approval: "APPROVED" }, { createdById: auth.employeeId }] };
+}
+
+async function isApproved(taskId: number) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { approval: true },
+  });
+  return task?.approval === "APPROVED";
+}
+
+/** Active admins, the ones asked to approve. */
+async function adminIds() {
+  const admins = await prisma.employee.findMany({
+    where: { role: "ADMIN", active: true },
+    select: { id: true },
+  });
+  return admins.map((admin) => admin.id);
+}
+
 /** Stops a non-existent id reaching Prisma and surfacing as a 500 (P2003). */
 async function assertParticipantsExist(ids: number[]) {
   const unique = [...new Set(ids)];
@@ -107,14 +141,19 @@ router.get("/", async (req, res) => {
   const participantId = parseId(req.query.participantId);
 
   const tasks = await prisma.task.findMany({
-    // CAREFUL: visibleTasksWhere contributes an `OR`. The other two fragments
-    // are flat keys, so Prisma ANDs them without conflict. If some future filter
-    // brings its own `OR`, everything has to be wrapped in `AND: [...]` or one
-    // silently overwrites the other.
+    // CAREFUL: visibleTasksWhere and approvalVisibleWhere each contribute an
+    // `OR`, which is why they sit in separate entries of `AND: [...]`: spread
+    // into one object, one would silently overwrite the other.
     where: {
-      ...(state && state in TaskState ? { state: state as TaskState } : {}),
-      ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
-      ...visibleTasksWhere(),
+      AND: [
+        {
+          ...(state && state in TaskState ? { state: state as TaskState } : {}),
+          ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
+        },
+        // Tasks awaiting a decision never archive out of sight.
+        { OR: [...visibleTasksWhere().OR, { approval: { not: "APPROVED" } }] },
+        approvalVisibleWhere(req.auth!),
+      ],
     },
     include: TASK_INCLUDE,
     // Pinned first, then the order somebody dragged the cards into, then - for
@@ -152,7 +191,10 @@ router.patch("/order", requireTaskManagement, async (req, res) => {
   // a column it no longer belongs to.
   await prisma.$transaction(
     taskIds.map((id, index) =>
-      prisma.task.updateMany({ where: { id, state }, data: { boardPosition: index } })
+      prisma.task.updateMany({
+        where: { id, state, approval: "APPROVED" },
+        data: { boardPosition: index },
+      })
     )
   );
 
@@ -180,6 +222,8 @@ router.get("/report.pdf", async (req, res) => {
   // archived tasks on purpose, it is the only place they can be seen. If someone
   // added it by mistake, the ARCHIVED KPI would read 0 and give it away.
   const where: Prisma.TaskWhereInput = {
+    // Not approved yet means not part of the team's work.
+    approval: "APPROVED",
     ...(state ? { state } : {}),
     ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
   };
@@ -255,11 +299,23 @@ router.get("/:id", async (req, res) => {
     include: TASK_DETAIL_INCLUDE,
   });
   if (!task) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (
+    task.approval !== "APPROVED" &&
+    !isAdmin(req.auth!.role) &&
+    task.createdById !== req.auth!.employeeId
+  ) {
+    return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  }
 
   res.json(toTaskDto(task));
 });
 
-router.post("/", requireTaskManagement, async (req, res) => {
+/**
+ * Anyone can create a task. An ADMIN's goes straight to the board; anybody
+ * else's waits PENDING for an admin, and only on approval does it start its
+ * clock, open its chat and tell its participants.
+ */
+router.post("/", async (req, res) => {
   const parsed = createTaskSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
@@ -284,6 +340,8 @@ router.post("/", requireTaskManagement, async (req, res) => {
     return res.status(400).json(INVALID_ASSIGNEE);
   }
 
+  const needsApproval = !isAdmin(req.auth!.role);
+
   // A transaction because the conversation needs the task id for its key.
   const task = await prisma.$transaction(async (tx) => {
     const created = await tx.task.create({
@@ -294,6 +352,7 @@ router.post("/", requireTaskManagement, async (req, res) => {
         startsAt: parsed.data.startsAt,
         endsAt: parsed.data.endsAt,
         createdById: req.auth!.employeeId,
+        approval: needsApproval ? "PENDING" : "APPROVED",
         autoCompleteOnChecklist: parsed.data.autoCompleteOnChecklist,
         participants: {
           create: participantIds.map((employeeId) => ({ employeeId })),
@@ -312,25 +371,154 @@ router.post("/", requireTaskManagement, async (req, res) => {
       },
       select: { id: true, title: true, state: true },
     });
-    // Created straight into IN_PROGRESS: the clock starts now.
-    await syncTaskProgress(tx, created.id, null, created.state);
-
-    await ensureTaskConversation(tx, created, participantIds);
+    if (!needsApproval) {
+      // Created straight into IN_PROGRESS: the clock starts now.
+      await syncTaskProgress(tx, created.id, null, created.state);
+      await ensureTaskConversation(tx, created, participantIds);
+    }
 
     return tx.task.findUniqueOrThrow({ where: { id: created.id }, include: TASK_INCLUDE });
   });
 
   emitTaskChanged({ type: "created", taskId: task.id });
+  if (needsApproval) {
+    await notify({
+      recipientIds: await adminIds(),
+      actorId: req.auth!.employeeId,
+      type: "TASK_APPROVAL_REQUEST",
+      title: task.title,
+      body: `${task.createdBy?.name ?? "Someone"} created "${task.title}" and it needs your approval`,
+      taskId: task.id,
+    });
+  } else {
+    await notify({
+      recipientIds: participantIds,
+      actorId: req.auth!.employeeId,
+      type: "TASK_ADDED",
+      title: task.title,
+      body: `You were added to task "${task.title}"`,
+      taskId: task.id,
+    });
+  }
+
+  res.status(201).json(toTaskDto(task));
+});
+
+const rejectTaskSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
+/**
+ * An admin's decision on a pending task. Approving does now what creating
+ * would have done for an admin: starts the clock if it was created in
+ * progress, opens its chat and tells the participants.
+ */
+router.post("/:id/approve", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const current = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      state: true,
+      approval: true,
+      createdById: true,
+      participants: { select: { employeeId: true } },
+    },
+  });
+  if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (current.approval === "APPROVED") {
+    return res
+      .status(409)
+      .json({ code: "TASK_ALREADY_REVIEWED", message: "This task was already reviewed" });
+  }
+
+  const participantIds = current.participants.map((link) => link.employeeId);
+  const task = await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id },
+      data: {
+        approval: "APPROVED",
+        reviewedById: req.auth!.employeeId,
+        reviewedAt: new Date(),
+        rejectReason: null,
+      },
+    });
+    await syncTaskProgress(tx, id, null, current.state);
+    await ensureTaskConversation(tx, current, participantIds);
+    return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
+  });
+
+  emitTaskChanged({ type: "updated", taskId: id });
   await notify({
     recipientIds: participantIds,
     actorId: req.auth!.employeeId,
     type: "TASK_ADDED",
     title: task.title,
     body: `You were added to task "${task.title}"`,
-    taskId: task.id,
+    taskId: id,
+  });
+  if (current.createdById) {
+    await notify({
+      recipientIds: [current.createdById],
+      actorId: req.auth!.employeeId,
+      type: "TASK_APPROVED",
+      title: task.title,
+      body: `Your task "${task.title}" was approved`,
+      taskId: id,
+    });
+  }
+
+  res.json(toTaskDto(task));
+});
+
+router.post("/:id/reject", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const parsed = rejectTaskSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
+  }
+
+  const current = await prisma.task.findUnique({
+    where: { id },
+    select: { approval: true, createdById: true },
+  });
+  if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (current.approval !== "PENDING") {
+    return res
+      .status(409)
+      .json({ code: "TASK_ALREADY_REVIEWED", message: "This task was already reviewed" });
+  }
+
+  const reason = parsed.data.reason || null;
+  const task = await prisma.task.update({
+    where: { id },
+    data: {
+      approval: "REJECTED",
+      reviewedById: req.auth!.employeeId,
+      reviewedAt: new Date(),
+      rejectReason: reason,
+    },
+    include: TASK_INCLUDE,
   });
 
-  res.status(201).json(toTaskDto(task));
+  emitTaskChanged({ type: "updated", taskId: id });
+  if (current.createdById) {
+    await notify({
+      recipientIds: [current.createdById],
+      actorId: req.auth!.employeeId,
+      type: "TASK_REJECTED",
+      title: task.title,
+      body: `Your task "${task.title}" was rejected${reason ? `: ${reason.slice(0, 200)}` : ""}`,
+      taskId: id,
+    });
+  }
+
+  res.json(toTaskDto(task));
 });
 
 router.patch("/:id", requireTaskManagement, async (req, res) => {
@@ -361,9 +549,11 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       checklist: {
         select: { id: true, text: true, position: true, assignees: { select: { employeeId: true } } },
       },
+      approval: true,
     },
   });
   if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (current.approval !== "APPROVED") return res.status(409).json(TASK_NOT_APPROVED);
 
   const startsAt = parsed.data.startsAt ?? current.startsAt;
   const endsAt = parsed.data.endsAt ?? current.endsAt;
@@ -580,9 +770,10 @@ router.patch("/:id/state", async (req, res) => {
 
   const exists = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, state: true },
+    select: { id: true, state: true, approval: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (exists.approval !== "APPROVED") return res.status(409).json(TASK_NOT_APPROVED);
 
   if (!(await canMoveTask(req.auth!, id))) {
     return res
@@ -640,6 +831,8 @@ router.patch("/:id/pin", async (req, res) => {
     select: { id: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+
+  if (!(await isApproved(id))) return res.status(409).json(TASK_NOT_APPROVED);
 
   if (!(await canMoveTask(req.auth!, id))) {
     return res
@@ -762,6 +955,8 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
     return res.status(404).json(CHECKLIST_ITEM_NOT_FOUND);
   }
 
+  if (!(await isApproved(id))) return res.status(409).json(TASK_NOT_APPROVED);
+
   if (!(await canMoveTask(req.auth!, id))) {
     return res
       .status(403)
@@ -815,15 +1010,27 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
   res.json(toTaskDto(task));
 });
 
-router.delete("/:id", requireTaskManagement, async (req, res) => {
+/**
+ * Board managers delete any task. The creator of a task that never made it to
+ * the board (pending or rejected) can withdraw it too.
+ */
+router.delete("/:id", async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
 
   const exists = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, approval: true, createdById: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+
+  const ownUnapproved =
+    exists.approval !== "APPROVED" && exists.createdById === req.auth!.employeeId;
+  if (!canManageTasks(req.auth!.role) && !ownUnapproved) {
+    return res
+      .status(403)
+      .json({ code: "DELETE_NOT_ALLOWED", message: "You cannot delete this task" });
+  }
 
   await prisma.$transaction(async (tx) => {
     // Close the conversation BEFORE deleting: the FK's SetNull handles taskId
@@ -866,6 +1073,8 @@ router.post("/:id/comments", async (req, res) => {
     },
   });
   if (!task) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+
+  if (!(await isApproved(id))) return res.status(409).json(TASK_NOT_APPROVED);
 
   if (!(await canCommentOnTask(req.auth!, id))) {
     return res

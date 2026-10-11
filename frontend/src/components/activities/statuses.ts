@@ -45,10 +45,11 @@ export const STATUS_ORDER: Status[] = [
 
 export const STATUS_LABELS = lazyLabels(STATUS_ORDER, (status) => `status.${status}` as const);
 
-/** Hex per status, matching the palette the PDF reports use. */
+/** Colour per status, matching the PDF palette (WORKING follows the chosen app palette). */
 export const STATUS_COLORS: Record<Status, string> = {
   AVAILABLE: "#208454",
-  WORKING: "#4C4DC9",
+  // The palette's accent: working is the app's main state.
+  WORKING: "var(--accent-base)",
   BREAK: "#A66A00",
   LUNCH: "#8C4EA3",
   MEETING: "#16738B",

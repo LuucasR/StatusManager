@@ -18,7 +18,7 @@ const ROLE_COLORS: Record<Role, string> = {
   EMPLOYEE: "#4a4d63",
   TASK_MANAGER: "#a35b12",
   SUPERVISOR: "#16738b",
-  ADMIN: "#4c4dc9",
+  ADMIN: "var(--accent-base)",
 };
 
 /**

@@ -68,6 +68,39 @@ enum NotificationType {
   WARNING_GRANTED
   /// A warning was revoked, by an admin or because a correction undid it.
   WARNING_REVOKED
+  /// Sent to admins: a task created by a non-admin is waiting for approval.
+  TASK_APPROVAL_REQUEST
+  /// Sent to the creator: an admin approved their task.
+  TASK_APPROVED
+  /// Sent to the creator: an admin rejected their task.
+  TASK_REJECTED
+  /// Sent to admins: a half went over the late allowance and needs a decision.
+  LATE_WARNING_REVIEW
+  /// A new announcement was published for the team.
+  ANNOUNCEMENT
+}
+
+/// How much an announcement matters. CRITICAL ones have to be read by the
+/// whole team, and the app tracks until everyone has.
+enum AnnouncementPriority {
+  CRITICAL
+  IMPORTANT
+  INFO
+}
+
+/// Whether a task is live on the board. Tasks created by anyone but an ADMIN
+/// start PENDING and stay off the board until an admin decides.
+enum TaskApproval {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+/// Automatic warnings start PENDING and only count once an admin grants them.
+enum WarningStatus {
+  ACTIVE
+  PENDING
+  REJECTED
 }
 
 model Employee {
@@ -132,6 +165,9 @@ model Employee {
 
   patchEntries       PatchEntry[]      @relation("PatchEntryAuthor")
   patchWeeksPublished PatchWeek[]      @relation("PatchWeekPublisher")
+
+  announcements     Announcement[]     @relation("AnnouncementAuthor")
+  announcementReads AnnouncementRead[]
 
   warnings        Warning[] @relation("WarningEmployee")
   warningsGranted Warning[] @relation("WarningGranter")
@@ -208,6 +244,13 @@ model Task {
   /// TEXT validated by Zod against TASK_COLORS rather than a Postgres enum, so a
   /// new colour is a code change and not a migration.
   color                   String?
+  /// Existing tasks and tasks created by an ADMIN are APPROVED.
+  approval                TaskApproval @default(APPROVED)
+  /// Who approved or rejected it. A plain id with no relation: the UI only
+  /// needs to know that it was reviewed and when.
+  reviewedById            Int?
+  reviewedAt              DateTime?
+  rejectReason            String?
   createdById             Int?
   createdBy               Employee? @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt               DateTime  @default(now())
@@ -226,6 +269,7 @@ model Task {
   @@index([state, startsAt])
   @@index([startsAt])
   @@index([pinned, endsAt])
+  @@index([approval])
 }
 
 /// One stretch of time a task spent in IN_PROGRESS. A row is opened every time
@@ -390,6 +434,10 @@ model WorkdaySettings {
   /// Weekdays that are working days, 0 = Sunday .. 6 = Saturday.
   /// Replaces what used to be a hardcoded Monday-to-Friday check.
   workingWeekdays            Int[]    @default([1, 2, 3, 4, 5])
+  /// Per-weekday hours, e.g. {"2": {"start":"09:00","end":"15:00"}}, keyed by
+  /// weekday 0..6. A weekday missing here uses startTime/endTime, and a date
+  /// exception still wins over both.
+  weekdaySchedule            Json?
   /// HH:MM in `timezone`. Resume paused tasks at this time.
   startTime                  String   @default("09:00")
   /// HH:MM in `timezone`. Run the activity check and pause tasks at this time.
@@ -486,6 +534,17 @@ model Warning {
   /// Only these come back on their own if the half goes over again; one an
   /// admin revoked stays revoked.
   revokedBySystem Boolean       @default(false)
+  /// AUTO_LATE ones start PENDING until an admin grants or rejects them.
+  /// Existing rows and manual ones are ACTIVE.
+  status              WarningStatus @default(ACTIVE)
+  /// Optional note the admin adds when granting or rejecting.
+  adminComment        String?
+  reviewedById        Int?
+  reviewedByName      String?
+  reviewedAt          DateTime?
+  /// Late minutes of the half when it was rejected. If the half gets worse
+  /// past this, the admins are asked again.
+  reviewedLateMinutes Int?
 
   employee  Employee  @relation("WarningEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
   createdBy Employee? @relation("WarningGranter", fields: [createdById], references: [id], onDelete: SetNull)
@@ -520,6 +579,43 @@ model WorkdayException {
   label     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/**
+ * A news item or notice for the whole team, posted by staff from the
+ * Announcements tab. Reads are tracked for every one, so the author can see who
+ * has not seen it yet; on a CRITICAL one that is the whole point.
+ */
+model Announcement {
+  id         Int                  @id @default(autoincrement())
+  title      String
+  body       String
+  priority   AnnouncementPriority @default(INFO)
+  /// Kept at the top of its priority group.
+  pinned     Boolean              @default(false)
+  /// SetNull + name snapshot, like Message.authorName.
+  authorId   Int?
+  authorName String
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  author Employee?          @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reads  AnnouncementRead[]
+
+  @@index([priority, createdAt])
+}
+
+/// One person having seen one announcement.
+model AnnouncementRead {
+  announcementId Int
+  employeeId     Int
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, employeeId])
+  @@index([employeeId])
 }
 
 model Notification {

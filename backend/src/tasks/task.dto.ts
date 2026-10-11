@@ -86,6 +86,10 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     // admin's colour flag.
     boardPosition: task.boardPosition,
     color: task.color,
+    // Tasks created by a non-admin wait for an admin before reaching the board.
+    approval: task.approval,
+    rejectReason: task.rejectReason,
+    reviewedAt: task.reviewedAt,
     checklist: task.checklist.map((item) => ({
       id: item.id,
       text: item.text,

@@ -1,5 +1,9 @@
 import {
+  CampaignRounded,
   ChatBubbleRounded,
+  FactCheckRounded,
+  HighlightOffRounded,
+  HourglassTopRounded,
   GavelRounded,
   TaskAltRounded,
   PersonAddAlt1Rounded,
@@ -18,7 +22,12 @@ export type NotificationType =
   | "ACTIVITY_NO_RESPONSE"
   | "LATE_WARNING"
   | "WARNING_GRANTED"
-  | "WARNING_REVOKED";
+  | "WARNING_REVOKED"
+  | "TASK_APPROVAL_REQUEST"
+  | "TASK_APPROVED"
+  | "TASK_REJECTED"
+  | "LATE_WARNING_REVIEW"
+  | "ANNOUNCEMENT";
 
 export type AppNotification = {
   id: number;
@@ -40,12 +49,17 @@ export const NOTIFICATION_META: Record<
   // dark one. The accents stay literal: they carry meaning and read on both.
   TASK_ADDED: { Icon: PersonAddAlt1Rounded, accent: "#2eae70", soft: softOf("#2eae70") },
   TASK_REMOVED: { Icon: PersonRemoveAlt1Rounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
-  TASK_STATE: { Icon: SwapHorizRounded, accent: "#5b5ce2", soft: softOf("#5b5ce2") },
+  TASK_STATE: { Icon: SwapHorizRounded, accent: "var(--accent-base)", soft: softOf("var(--accent-base)") },
   TASK_MESSAGE: { Icon: ChatBubbleRounded, accent: "#16738b", soft: softOf("#16738b") },
   ACTIVITY_NO_RESPONSE: { Icon: ReportProblemRounded, accent: "#c2410c", soft: softOf("#c2410c") },
   LATE_WARNING: { Icon: GavelRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
   WARNING_GRANTED: { Icon: GavelRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
   WARNING_REVOKED: { Icon: TaskAltRounded, accent: "#2eae70", soft: softOf("#2eae70") },
+  TASK_APPROVAL_REQUEST: { Icon: HourglassTopRounded, accent: "#b7791f", soft: softOf("#b7791f") },
+  TASK_APPROVED: { Icon: FactCheckRounded, accent: "#2eae70", soft: softOf("#2eae70") },
+  TASK_REJECTED: { Icon: HighlightOffRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
+  LATE_WARNING_REVIEW: { Icon: GavelRounded, accent: "#b7791f", soft: softOf("#b7791f") },
+  ANNOUNCEMENT: { Icon: CampaignRounded, accent: "var(--accent-base)", soft: softOf("var(--accent-base)") },
 };
 
 /** Types that open the Warnings page instead of a task. */
@@ -53,6 +67,7 @@ export const WARNING_NOTIFICATIONS: ReadonlySet<string> = new Set([
   "LATE_WARNING",
   "WARNING_GRANTED",
   "WARNING_REVOKED",
+  "LATE_WARNING_REVIEW",
 ]);
 
 /**

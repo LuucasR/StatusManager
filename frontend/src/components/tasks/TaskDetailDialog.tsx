@@ -193,7 +193,7 @@ export default function TaskDetailDialog({
                 <DialogTitle
                   sx={{
                     bgcolor: meta.soft,
-                    borderBottom: `1px solid ${alpha(meta.accent, 0.2)}`,
+                    borderBottom: `1px solid color-mix(in srgb, ${meta.accent} 20%, transparent)`,
                   }}
                 >
                   <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
@@ -207,7 +207,7 @@ export default function TaskDetailDialog({
                         bgcolor: "var(--surface)",
                         color: meta.ink,
                         fontWeight: 700,
-                        border: `1px solid ${alpha(meta.accent, 0.35)}`,
+                        border: `1px solid color-mix(in srgb, ${meta.accent} 35%, transparent)`,
                         "& .MuiChip-icon": { color: meta.accent, fontSize: 16 },
                       }}
                     />
@@ -386,7 +386,7 @@ export default function TaskDetailDialog({
                   <Box
                     sx={{
                       mt: 1,
-                      border: "1px solid #e8e9f1",
+                      border: "1px solid var(--border)",
                       borderRadius: "14px",
                       overflow: "hidden",
                       display: "flex",

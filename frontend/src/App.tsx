@@ -8,6 +8,7 @@ import AttendancePage from "./pages/AttendancePage";
 import PatchNotesPage from "./pages/PatchNotesPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import WarningsPage from "./pages/WarningsPage";
+import AnnouncementsPage from "./pages/AnnouncementsPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -53,7 +54,7 @@ export default function App() {
           anyone who cannot read it. */}
       {!authenticated && <AppSettings floating />}
       <Routes>
-      <Route path="/" element={authenticated ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/" element={authenticated ? <Navigate to="/announcements" /> : <LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
@@ -64,6 +65,8 @@ export default function App() {
       {/* Pathless layout route: provides the shared AppBar and inherits the
           same guard the authenticated pages already had. */}
       <Route element={authenticated ? <AppLayout /> : <Navigate to="/" replace />}>
+        {/* The landing tab: news and notices for everyone; staff publishes. */}
+        <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/summary" element={<SummaryPage />} />

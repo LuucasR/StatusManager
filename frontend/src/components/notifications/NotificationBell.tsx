@@ -27,6 +27,7 @@ export default function NotificationBell() {
     if (!notification.readAt) void markRead(notification.id);
     if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
     else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
+    else if (notification.type === "ANNOUNCEMENT") navigate("/announcements");
   }
 
   let lastDay = "";
@@ -48,7 +49,7 @@ export default function NotificationBell() {
             badgeContent={unread}
             max={99}
             slotProps={{ badge: { "aria-hidden": true } as never }}
-            sx={{ "& .MuiBadge-badge": { bgcolor: "#b23c4a", color: "#fff", fontWeight: 700 } }}
+            sx={{ "& .MuiBadge-badge": { bgcolor: "var(--danger)", color: "#fff", fontWeight: 700 } }}
           >
             {unread ? (
               <NotificationsActiveRounded sx={{ color: "var(--accent)" }} />

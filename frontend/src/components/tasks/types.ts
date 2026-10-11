@@ -46,6 +46,11 @@ export type TaskChecklistItem = {
   doneBy: TaskParticipant | null;
 };
 
+export type TaskApproval = "APPROVED" | "PENDING" | "REJECTED";
+
+/** On the board: approved, or sent by a backend that predates approvals. */
+export const isApprovedTask = (task: Task) => (task.approval ?? "APPROVED") === "APPROVED";
+
 export type Task = {
   id: number;
   title: string;
@@ -58,6 +63,14 @@ export type Task = {
   boardPosition: number | null;
   /** Colour flag an admin put on the card, or none. */
   color: TaskColor | null;
+  /**
+   * Tasks created by anyone but an admin wait for one. Optional: older
+   * backends do not send it, and everything they send is on the board.
+   */
+  approval?: TaskApproval;
+  /** Why an admin rejected it, if they said. */
+  rejectReason?: string | null;
+  reviewedAt?: string | null;
   /** Set while the task is one the end-of-day job paused, cleared when resumed. */
   autoPausedAt: string | null;
   /** endsAt + 14 days. The backend owns the constant. */
@@ -152,7 +165,8 @@ export type StateMeta = {
  */
 const STATE_ACCENTS: Record<TaskState, { accent: string; Icon: SvgIconComponent }> = {
   PENDING: { accent: "#8a8da0", Icon: RadioButtonUncheckedRounded },
-  IN_PROGRESS: { accent: "#5b5ce2", Icon: AutorenewRounded },
+  // The palette's own accent, under the name stateVars does not overwrite.
+  IN_PROGRESS: { accent: "var(--accent-base)", Icon: AutorenewRounded },
   DONE: { accent: "#2eae70", Icon: CheckCircleRounded },
 };
 

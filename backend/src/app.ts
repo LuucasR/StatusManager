@@ -25,6 +25,7 @@ import attendanceRoutes from "./attendance/attendance.routes";
 import patchNotesRoutes from "./patch-notes/patch-notes.routes";
 import downloadsRoutes from "./downloads/downloads.routes";
 import warningsRoutes from "./warnings/warnings.routes";
+import announcementsRoutes from "./announcements/announcements.routes";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -96,6 +97,8 @@ app.use("/patch-notes", patchNotesRoutes);
 app.use("/downloads", downloadsRoutes);
 // Everyone reads their own; the team view and the writes are admin, inside.
 app.use("/warnings", warningsRoutes);
+// Everyone reads and marks read; staff publishes, guarded inside.
+app.use("/announcements", announcementsRoutes);
 
 /**
  * Touches the database on purpose. The previous version returned a static OK,

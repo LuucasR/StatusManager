@@ -8,6 +8,7 @@ import {
   confirmationSecondsLeft,
   isOffHours,
   promptMinutes,
+  parseWeekdaySchedule,
   resolveWorkday,
   zonedNow,
   type WorkdayConfig,
@@ -28,6 +29,7 @@ const config: WorkdayConfig = {
   workingWeekdays: [1, 2, 3, 4, 5],
   startTime: "09:00",
   endTime: "17:30",
+  weekdaySchedule: {},
   timezone: BA,
   confirmationDelayMinutes: 0,
   confirmationTimeoutSeconds: 120,
@@ -114,6 +116,30 @@ describe("resolveWorkday", () => {
       endTime: "13:00",
     });
     assert.equal(day.endMinutes, 13 * 60);
+  });
+
+  it("uses a weekday's own hours over the global ones", () => {
+    const short = { ...config, weekdaySchedule: { "2": { start: "09:00", end: "15:00" } } };
+    const tuesday = resolveWorkday(short, 2, null);
+    assert.equal(tuesday.startMinutes, 9 * 60);
+    assert.equal(tuesday.endMinutes, 15 * 60);
+    // Monday has no entry and keeps the global hours.
+    assert.equal(resolveWorkday(short, 1, null).endMinutes, 17 * 60 + 30);
+  });
+
+  it("lets a date exception beat the weekday's own hours", () => {
+    const short = { ...config, weekdaySchedule: { "2": { start: "10:00", end: "15:00" } } };
+    const day = resolveWorkday(short, 2, { working: true, startTime: null, endTime: "12:00" });
+    assert.equal(day.startMinutes, 10 * 60);
+    assert.equal(day.endMinutes, 12 * 60);
+  });
+
+  it("drops malformed weekday entries", () => {
+    assert.deepEqual(
+      parseWeekdaySchedule({ "2": { start: "9", end: "15:00" }, "7": { start: "09:00", end: "10:00" }, "3": { start: "08:00", end: "14:00" } }),
+      { "3": { start: "08:00", end: "14:00" } }
+    );
+    assert.deepEqual(parseWeekdaySchedule(null), {});
   });
 
   it("returns null minutes for a malformed time instead of throwing", () => {

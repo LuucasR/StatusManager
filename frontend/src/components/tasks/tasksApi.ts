@@ -61,6 +61,17 @@ export const reorderTasks = (state: TaskState, taskIds: number[]) =>
 export const setTaskColor = (id: number, color: TaskColor | null) =>
   api<Task>(`/tasks/${id}/color`, { method: "PATCH", body: JSON.stringify({ color }) });
 
+/** Admin only: puts a pending task on the board. */
+export const approveTask = (id: number) =>
+  api<Task>(`/tasks/${id}/approve`, { method: "POST" });
+
+/** Admin only. The reason is optional and shown to whoever created it. */
+export const rejectTask = (id: number, reason: string) =>
+  api<Task>(`/tasks/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+
 export const deleteTask =(id: number) =>
   api<{ success: boolean }>(`/tasks/${id}`, { method: "DELETE" });
 

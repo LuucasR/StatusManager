@@ -11,19 +11,21 @@
    and so a system dark preference is honoured immediately rather than
    flashing white first. */
 :root {
-  --bg: #f5f6fa; --surface: #ffffff; --surface-2: #f7f8fc;
-  --border: #e8e9f1; --border-strong: #dcdeeb;
-  --accent: #5b5ce2; --accent-soft: #ecebff;
-  /* --faint was #9296ab, which is 2.93:1 on white - below the 4.5:1 AA floor
-     for the empty-state and chat-timestamp text that uses it. */
-  --text: #17182f; --muted: #6d7087; --faint: #6b6f8a;
-  --shadow: rgba(36, 38, 84, .08); --shadow-strong: rgba(36, 38, 84, .18);
-  --auth-glow: #e8e7ff; --auth-bg: #f7f7fb;
+  /* Indigo, the default palette, as theme.ts generates it. Keep in sync. */
+  --bg: #f7f7fa; --surface: #ffffff; --surface-2: #fbfbfc;
+  --border: #e5e5ee; --border-strong: #d0d1e1;
+  --accent: #5450e0; --accent-base: #5450e0; --accent-2: #8b5cf6; --accent-soft: #ececfc;
+  /* --faint stays at or above 4.5:1 on white: the empty-state and
+     chat-timestamp text use it. */
+  --text: #14152e; --muted: #5c5d7a; --faint: #63647e;
+  --shadow: rgba(31, 32, 71, .07); --shadow-strong: rgba(31, 32, 71, .16);
+  --auth-glow: #e4e3fa; --auth-bg: #f9f9fb;
+  --success: #1f9d63; --warning: #b7791f; --danger: #c0394b;
   /* HUD geometry. Not colours, so they live here rather than in the token
      set: they are identical in both themes. */
-  --bevel: 14px;
-  --bevel-sm: 9px;
-  --grid-line: rgba(23, 24, 47, .045);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --grid-line: rgba(36, 37, 66, .035);
   --cork: #c8a67c; --cork-fleck: rgba(112, 74, 40, .30);
   --cork-fleck-2: rgba(156, 112, 68, .40); --cork-shade: rgba(78, 50, 24, .30);
   --cork-ink: #3a2a17; --cork-ink-halo: rgba(255, 255, 255, .35);
@@ -31,13 +33,14 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e0f1a; --surface: #171930; --surface-2: #1e2039;
-    --border: #262a45; --border-strong: #333861;
-    --accent: #8b8cf0; --accent-soft: #242653;
-    --text: #e6e7f2; --muted: #a2a5bd; --faint: #8589a3;
+    --bg: #0e0e16; --surface: #161722; --surface-2: #1d1e2a;
+    --border: #292938; --border-strong: #38384d;
+    --accent: #8f8cf7; --accent-base: #8f8cf7; --accent-2: #8b5cf6; --accent-soft: #2e2e4d;
+    --text: #e7e7ef; --muted: #a9aabc; --faint: #8f8fa3;
     --shadow: rgba(0, 0, 0, .45); --shadow-strong: rgba(0, 0, 0, .65);
-    --auth-glow: #1d1f42; --auth-bg: #0b0c16;
-    --grid-line: rgba(139, 140, 240, .07);
+    --auth-glow: #272740; --auth-bg: #0a0a10;
+    --success: #46c98b; --warning: #f0b54a; --danger: #f07384;
+    --grid-line: rgba(143, 140, 247, .05);
     --cork: #4b3626; --cork-fleck: rgba(28, 18, 10, .45);
     --cork-fleck-2: rgba(122, 88, 54, .45); --cork-shade: rgba(0, 0, 0, .5);
     --cork-ink: #f6ecdd; --cork-ink-halo: rgba(0, 0, 0, .5);
@@ -50,30 +53,18 @@ html, body, #root { min-height: 100%; margin: 0; }
 body {
   color: var(--text);
   background:
-    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 44px),
-    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 44px),
+    radial-gradient(1200px 600px at 100% -10%, color-mix(in srgb, var(--accent-base) 9%, transparent), transparent 70%),
+    radial-gradient(900px 500px at -10% 110%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 70%),
     var(--bg);
   background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Bevelled HUD panel.
-
-   Two things clip-path takes with it, both learned the hard way: an outer
-   box-shadow (clipped entirely) and the border along the diagonal (cut off,
-   leaving a panel that reads as having a missing edge). So these panels drop
-   the border and lean on the surface/ground step, plus a top accent rule -
-   horizontal, so the cut corners never eat it. */
+/* Card panel: rounded, a hairline border and a soft two-layer shadow. */
 .hud-panel, .status-card, .task-column.task-column, .auth-card {
-  border-radius: 0 !important;
-  border-color: transparent !important;
-  clip-path: polygon(
-    var(--bevel) 0, 100% 0,
-    100% calc(100% - var(--bevel)), calc(100% - var(--bevel)) 100%,
-    0 100%, 0 var(--bevel)
-  );
-}
-.status-card, .auth-card {
-  box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent) !important;
+  border-radius: var(--radius) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 1px 2px var(--shadow), 0 12px 32px -18px var(--shadow-strong) !important;
 }
 a { color: var(--accent); font-weight: 700; text-decoration: none; }
 /* dvh and the insets are for the Android shell: 100vh ignores the browser
@@ -82,18 +73,18 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .auth-shell { min-height: 100dvh; display: flex; align-items: center; padding: calc(40px + env(safe-area-inset-top, 0px)) 0 calc(40px + env(safe-area-inset-bottom, 0px)); background: radial-gradient(circle at 15% 15%, var(--auth-glow) 0, transparent 30%), var(--auth-bg); }
 .auth-grid { display: grid; grid-template-columns: 1.1fr .9fr; align-items: center; gap: 10%; }
 .brand-panel { padding: 40px 0; max-width: 600px; }
-.brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(145deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 32%, transparent); margin-bottom: 28px; }
+.brand-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #fff; background: linear-gradient(135deg, var(--accent-base), color-mix(in srgb, var(--accent-2) 55%, var(--accent-base))); box-shadow: 0 10px 30px -6px color-mix(in srgb, var(--accent-base) 45%, transparent); margin-bottom: 28px; }
 .brand-mark.small { width: 38px; height: 38px; border-radius: 11px; margin: 0 12px 0 0; }
-.eyebrow { color: var(--accent); font-size: 12px !important; letter-spacing: .14em !important; font-weight: 800 !important; margin-bottom: 10px !important; }
+.eyebrow { display: inline-block; color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 999px; font-size: 11px !important; letter-spacing: .12em !important; font-weight: 800 !important; margin-bottom: 12px !important; }
 .hero-copy { font-size: 18px !important; line-height: 1.7 !important; max-width: 520px; margin-top: 25px !important; }
-.auth-card { padding: 46px; border-radius: 24px !important; box-shadow: 0 24px 80px var(--shadow) !important; }
+.auth-card { padding: 46px; border-radius: 24px !important; box-shadow: 0 24px 80px -20px var(--shadow-strong) !important; }
 .page-heading, .section-title { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 36px 0 56px; }
-.status-card { padding: 28px; min-height: 160px; border-radius: 18px !important; }
+.status-card { padding: 28px; min-height: 160px; }
 .status-card.accent { background: linear-gradient(135deg, var(--surface), var(--accent-soft)); }
 .timer { font: 700 46px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: -.02em; color: var(--accent); margin: 12px 0 2px; text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent); }
 .status-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 6px color-mix(in srgb, var(--faint) 22%, var(--surface)); }
-.status-dot.working { background: #5b5ce2; box-shadow: 0 0 0 6px color-mix(in srgb, #5b5ce2 22%, var(--surface)); }
+.status-dot.working { background: var(--accent-base); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-base) 22%, var(--surface)); }
 .status-dot.available { background: #2eae70; box-shadow: 0 0 0 6px color-mix(in srgb, #2eae70 22%, var(--surface)); }
 .status-dot.break, .status-dot.lunch { background: #e3a22b; box-shadow: 0 0 0 6px color-mix(in srgb, #e3a22b 22%, var(--surface)); }
 .status-dot.meeting { background: #16738b; box-shadow: 0 0 0 6px color-mix(in srgb, #16738b 22%, var(--surface)); }
@@ -126,6 +117,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   flex-direction: column;
   background: var(--surface);
   padding: 0;
+  overflow: hidden;
   min-height: 240px;
   max-height: calc(100dvh - 250px);
   overflow: hidden;
@@ -135,7 +127,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .task-column-head { flex: none; display: flex; align-items: center; gap: 9px; padding: 15px 16px 13px; background: var(--soft); box-shadow: inset 0 3px 0 0 var(--accent); }
 .task-column-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
 .task-column-title { font: 800 12px/1 "Inter", "Segoe UI", sans-serif; letter-spacing: .1em; color: var(--ink); }
-.task-column-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; display: grid; place-items: center; border-radius: 0; clip-path: polygon(var(--bevel-sm) 0, 100% 0, 100% calc(100% - var(--bevel-sm)), calc(100% - var(--bevel-sm)) 100%, 0 100%, 0 var(--bevel-sm)); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font: 700 12px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .04em; color: var(--ink); }
+.task-column-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; display: grid; place-items: center; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); font: 700 12px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .04em; color: var(--ink); }
 /* The cork surface. Generated rather than shipped as an image: it stays
    themeable and adds nothing to the bundle. The layers are speckles at
    different sizes and offsets over a tan base, which is what stops it reading
@@ -312,7 +304,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .chat-row:hover { background: var(--surface-2); }
 .chat-row:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 .chat-row.closed { opacity: .65; }
-.chat-badge { min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 10px; background: #b23c4a; color: #fff; font: 700 11px "Inter", "Segoe UI", sans-serif; }
+.chat-badge { min-width: 20px; height: 20px; padding: 0 6px; display: grid; place-items: center; border-radius: 10px; background: var(--danger); color: #fff; font: 700 11px "Inter", "Segoe UI", sans-serif; }
 .chat-scroller { overflow-y: auto; padding: 12px 14px; }
 .chat-day { margin: 14px 0 6px; text-align: center; font: 700 11px "Inter", "Segoe UI", sans-serif; color: var(--faint); }
 .chat-bubble.chat-bubble { max-width: 78%; padding: 8px 11px; border-radius: 14px 14px 14px 4px; background: var(--surface-2); border: 0; }
@@ -348,9 +340,8 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 0;
-  clip-path: polygon(var(--bevel-sm) 0, 100% 0, 100% calc(100% - var(--bevel-sm)), calc(100% - var(--bevel-sm)) 100%, 0 100%, 0 var(--bevel-sm));
-  transition: background-color .15s ease, border-color .15s ease;
+  border-radius: var(--radius-sm);
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
 }
 .cal-cell:hover { border-color: var(--accent); }
 .cal-cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -368,7 +359,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .cal-label { font-size: 10.5px; line-height: 1.25; color: var(--muted); overflow: hidden; }
 .cal-hours { margin-top: auto; font: 600 10px ui-monospace, monospace; color: var(--accent); }
 .cal-key { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
-.cal-swatch { width: 14px; height: 14px; border: 1px solid var(--border); }
+.cal-swatch { width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 4px; }
 .cal-swatch.working { background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
 .cal-swatch.closed { background: var(--surface); }
 .cal-swatch.exception { background: var(--surface-2); box-shadow: inset 3px 0 0 0 var(--accent); }
@@ -450,3 +441,103 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 /* Read-only calendar: no hover affordance, because there is nothing to click. */
 .cal-cell.readonly { cursor: default; }
 .cal-cell.readonly:hover { border-color: var(--border); }
+
+/* Approval queues: tasks waiting for an admin, warnings waiting for a decision.
+   A warm left rule and wash, so they read as "needs you" above everything else. */
+.approval-panel.approval-panel {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border)) !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning) 7%, var(--surface)), var(--surface));
+  box-shadow: inset 4px 0 0 0 var(--warning), 0 12px 32px -18px var(--shadow-strong) !important;
+}
+.approval-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.approval-row:hover { border-color: var(--border-strong); box-shadow: 0 6px 18px -12px var(--shadow-strong); }
+
+/* Weekly schedule: one row per weekday with its own hours. */
+.week-table { display: grid; gap: 8px; }
+.week-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-base) 5%, var(--surface));
+}
+.week-row.off { background: var(--surface-2); }
+.week-row .MuiTextField-root { width: 140px; }
+.week-hours {
+  min-width: 84px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-align: center;
+  font: 700 12px "Inter", "Segoe UI", sans-serif;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.week-hours.invalid { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+
+/* Palette picker swatch. */
+.palette-swatch {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  outline: 2px solid;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+@media (max-width: 800px) {
+  .approval-row { flex-direction: column; align-items: stretch; }
+  .week-row .MuiTextField-root { width: 120px; }
+}
+
+/* Announcements. The priority colour arrives as --priority (a semantic token),
+   so a card reads the same in every palette: a left rule, an icon tile and the
+   priority chip, plus a stronger wash while it is unread. */
+.announcement-card.announcement-card {
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: inset 4px 0 0 0 var(--priority), 0 1px 2px var(--shadow), 0 12px 32px -20px var(--shadow-strong);
+  transition: box-shadow .18s ease, border-color .18s ease;
+}
+.announcement-card.unread {
+  border-color: color-mix(in srgb, var(--priority) 35%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--priority) 6%, var(--surface)), var(--surface) 60%);
+}
+.announcement-icon {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--priority);
+  background: color-mix(in srgb, var(--priority) 14%, var(--surface));
+}
+.announcement-priority.announcement-priority {
+  color: var(--priority);
+  background: color-mix(in srgb, var(--priority) 14%, var(--surface));
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+.announcement-reach {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.critical-gate .MuiDialog-paper { box-shadow: inset 0 4px 0 0 var(--danger), 0 24px 64px -16px var(--shadow-strong); }

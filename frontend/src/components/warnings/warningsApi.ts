@@ -2,6 +2,9 @@ import { api } from "../../api";
 
 export type WarningSource = "AUTO_LATE" | "MANUAL";
 
+/** Automatic ones start PENDING until an admin grants (ACTIVE) or rejects them. */
+export type WarningStatus = "ACTIVE" | "PENDING" | "REJECTED";
+
 export type WarningEmployee = {
   id: number;
   employeeNumber: number;
@@ -24,7 +27,15 @@ export type Warning = {
   revokedByName: string | null;
   revokeReason: string | null;
   revokedBySystem: boolean;
+  /** Optional: older backends do not send it, and all theirs are ACTIVE. */
+  status?: WarningStatus;
+  /** Note the admin added when granting or rejecting. */
+  adminComment?: string | null;
+  reviewedByName?: string | null;
+  reviewedAt?: string | null;
 };
+
+export const warningStatus = (warning: Warning): WarningStatus => warning.status ?? "ACTIVE";
 
 export type TeamWarnings = {
   rows: (Warning & { employee: WarningEmployee })[];
@@ -51,6 +62,14 @@ export function revokeWarning(id: number, reason: string) {
   return api<Warning>(`/warnings/${id}/revoke`, {
     method: "POST",
     body: JSON.stringify({ reason }),
+  });
+}
+
+/** Admin's decision on a pending automatic warning. The comment is optional. */
+export function reviewWarning(id: number, decision: "approve" | "reject", comment: string) {
+  return api<Warning>(`/warnings/${id}/${decision}`, {
+    method: "POST",
+    body: JSON.stringify(comment ? { comment } : {}),
   });
 }
 

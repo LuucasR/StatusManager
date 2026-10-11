@@ -26,6 +26,8 @@ type Props = {
   employees: TaskParticipant[];
   onClose: () => void;
   onSubmit: (payload: TaskPayload, taskId?: number) => Promise<void>;
+  /** A new task from a non-admin waits for an admin before reaching the board. */
+  needsApproval?: boolean;
 };
 
 /**
@@ -56,7 +58,14 @@ function defaultRange() {
   };
 }
 
-export default function TaskFormDialog({ open, task, employees, onClose, onSubmit }: Props) {
+export default function TaskFormDialog({
+  open,
+  task,
+  employees,
+  onClose,
+  onSubmit,
+  needsApproval = false,
+}: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -171,6 +180,7 @@ export default function TaskFormDialog({ open, task, employees, onClose, onSubmi
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {needsApproval && !task && <Alert severity="info">{t("approval.formHint")}</Alert>}
 
           <TextField
             label={t("taskForm.title")}

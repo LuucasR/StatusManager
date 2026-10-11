@@ -142,6 +142,8 @@ export async function runClose(_config: WorkdayConfig) {
   const now = new Date();
   const where = {
     state: TaskState.IN_PROGRESS,
+    // A task waiting for approval is not on the board and has no clock.
+    approval: "APPROVED",
     NOT: {
       participants: {
         some: { employee: { active: true, currentStatus: ActivityStatus.WORKING } },

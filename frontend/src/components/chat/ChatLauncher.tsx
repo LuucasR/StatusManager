@@ -22,7 +22,7 @@ export default function ChatLauncher({ me }: Props) {
         badgeContent={chat.unreadTotal}
         max={99}
         slotProps={{ badge: { "aria-hidden": true } as never }}
-        sx={{ "& .MuiBadge-badge": { bgcolor: "#b23c4a", color: "#fff", fontWeight: 700 } }}
+        sx={{ "& .MuiBadge-badge": { bgcolor: "var(--danger)", color: "#fff", fontWeight: 700 } }}
       >
         <Fab
           color="primary"

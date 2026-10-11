@@ -36,6 +36,8 @@ export function assignableTasksWhere(
     // task that later moves to DONE stays alive on purpose: closing it behind
     // the scenes would erase real time from someone.
     state: { not: TaskState.DONE },
+    // Nobody books time against a task that is not approved yet.
+    approval: "APPROVED",
     // visibleTasksWhere contributes an `OR`; the rest are flat keys, so Prisma
     // ANDs them together without clashing.
     ...visibleTasksWhere(now),

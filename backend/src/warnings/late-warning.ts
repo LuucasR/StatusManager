@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type WarningStatus } from "@prisma/client";
 import prisma from "../prisma/client";
 import { logger } from "../logger";
 import { notify } from "../notifications/notification.service";
@@ -14,18 +14,42 @@ import { halfOf, halvesOf, summarize, type Half } from "../attendance/attendance
  * back within the allowance, which revokes the warning on its own, and a later
  * save that goes over again brings that same warning back - but only if the
  * system revoked it. One an admin revoked by hand stays revoked.
+ *
+ * It is not given on its own: going over creates it PENDING and asks the
+ * admins, who grant it (ACTIVE, the employee is told) or reject it. A rejected
+ * one is asked about again only if the half keeps getting worse after the
+ * rejection.
  */
 
-export type ExistingLateWarning = { revokedAt: Date | null; revokedBySystem: boolean } | null;
+export type ExistingLateWarning = {
+  status: WarningStatus;
+  revokedAt: Date | null;
+  revokedBySystem: boolean;
+  reviewedLateMinutes: number | null;
+} | null;
 
-export type LateWarningAction = "create" | "reactivate" | "autoRevoke" | "update" | "none";
+export type LateWarningAction =
+  | "create"
+  | "reactivate"
+  | "autoRevoke"
+  | "update"
+  | "updatePending"
+  | "dropPending"
+  | "reask"
+  | "none";
 
 /** Pure, so every transition can be tested without a database. */
 export function decideLateWarning(
   exceeded: boolean,
-  existing: ExistingLateWarning
+  existing: ExistingLateWarning,
+  lateMinutes = 0
 ): LateWarningAction {
   if (!existing) return exceeded ? "create" : "none";
+
+  if (existing.status === "PENDING") return exceeded ? "updatePending" : "dropPending";
+  if (existing.status === "REJECTED") {
+    return exceeded && lateMinutes > (existing.reviewedLateMinutes ?? 0) ? "reask" : "none";
+  }
 
   const active = existing.revokedAt === null;
   if (exceeded) {
@@ -46,7 +70,7 @@ export function lateWarningReason(
 }
 
 /** Active administrators, who follow every warning on the Warnings page. */
-async function adminIds() {
+export async function adminIds() {
   const admins = await prisma.employee.findMany({
     where: { role: "ADMIN", active: true },
     select: { id: true },
@@ -86,13 +110,19 @@ export async function syncLateWarningHalf(
     }),
     prisma.warning.findUnique({
       where: { employeeId_month_half: { employeeId, month, half } },
-      select: { id: true, revokedAt: true, revokedBySystem: true },
+      select: {
+        id: true,
+        status: true,
+        revokedAt: true,
+        revokedBySystem: true,
+        reviewedLateMinutes: true,
+      },
     }),
   ]);
 
   const byHalf = summarize(entries, [employeeId], config).get(employeeId)!;
   const summary = half === 1 ? byHalf.first : byHalf.second;
-  const action = decideLateWarning(summary.exceeded, existing);
+  const action = decideLateWarning(summary.exceeded, existing, summary.lateMinutes);
   if (action === "none") return action;
 
   const snapshot = {
@@ -105,14 +135,42 @@ export async function syncLateWarningHalf(
     case "create":
       try {
         await prisma.warning.create({
-          data: { employeeId, source: "AUTO_LATE", month, half, ...snapshot },
+          data: { employeeId, source: "AUTO_LATE", status: "PENDING", month, half, ...snapshot },
         });
       } catch (error) {
         // Two saves racing for the same half: the other one created it.
         if (isUniqueViolation(error)) return "none";
         throw error;
       }
-      break;
+      await askAdmins(employeeId, snapshot.reason);
+      await emitWarningsChanged(employeeId);
+      return action;
+    case "reask":
+      // Rejected earlier, but the half has got worse since: back to the admins.
+      await prisma.warning.update({
+        where: { id: existing!.id },
+        data: {
+          ...snapshot,
+          status: "PENDING",
+          adminComment: null,
+          reviewedAt: null,
+          reviewedById: null,
+          reviewedByName: null,
+        },
+      });
+      await askAdmins(employeeId, snapshot.reason);
+      await emitWarningsChanged(employeeId);
+      return action;
+    case "updatePending":
+      await prisma.warning.update({ where: { id: existing!.id }, data: snapshot });
+      await emitWarningsChanged(employeeId);
+      return action;
+    case "dropPending":
+      // A correction brought the half back before anyone decided: there is
+      // nothing left to decide, and the employee never knew about it.
+      await prisma.warning.delete({ where: { id: existing!.id } });
+      await emitWarningsChanged(employeeId);
+      return action;
     case "reactivate":
       await prisma.warning.update({
         where: { id: existing!.id },
@@ -164,6 +222,24 @@ export async function syncLateWarningHalf(
   });
   await emitWarningsChanged(employeeId);
   return action;
+}
+
+/**
+ * Asks every admin whether the warning should be given. Sent as the system
+ * (actor 0) so the admin who saved the arrival is asked too.
+ */
+async function askAdmins(employeeId: number, reason: string) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { name: true },
+  });
+  await notify({
+    recipientIds: await adminIds(),
+    actorId: 0,
+    type: "LATE_WARNING_REVIEW",
+    title: "Warning awaiting decision",
+    body: `${employee?.name ?? "An employee"}: ${reason}. Grant it or reject it on the Warnings page.`,
+  });
 }
 
 /**

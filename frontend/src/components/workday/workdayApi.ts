@@ -1,9 +1,15 @@
 import { api } from "../../api";
 
+/** Hours of one weekday, keyed "0" (Sunday) .. "6". */
+export type WeekdaySchedule = Partial<Record<string, { start: string; end: string }>>;
+
 export type WorkdaySettings = {
   workingWeekdays: number[];
+  /** Global hours, used by any weekday without its own entry. */
   startTime: string;
   endTime: string;
+  /** Per-weekday hours. Optional: older backends do not send it. */
+  weekdaySchedule?: WeekdaySchedule | null;
   timezone: string;
   /*
    * The activity check's timing. Optional because GET /workday/settings only
@@ -28,6 +34,18 @@ export type WorkdayException = {
   endTime: string | null;
   label: string | null;
 };
+
+/** The hours a weekday runs by: its own entry, else the global ones. */
+export function hoursFor(settings: WorkdaySettings, weekday: number) {
+  const own = settings.weekdaySchedule?.[String(weekday)];
+  return { start: own?.start ?? settings.startTime, end: own?.end ?? settings.endTime };
+}
+
+/** "HH:MM" -> minutes since midnight, or null. */
+export function minutesOf(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
 
 export function getSettings() {
   return api<WorkdaySettings>("/workday/settings");

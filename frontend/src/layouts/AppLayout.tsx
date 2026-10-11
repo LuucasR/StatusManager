@@ -1,6 +1,7 @@
 import {
   AccessTimeRounded,
   CalendarMonthRounded,
+  CampaignRounded,
   DashboardRounded,
   DescriptionRounded,
   DownloadRounded,
@@ -14,6 +15,7 @@ import {
 import type { SvgIconComponent } from "@mui/icons-material";
 import {
   AppBar,
+  Badge,
   Box,
   Divider,
   Drawer,
@@ -25,7 +27,7 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
 import SocketProvider from "../realtime/SocketProvider";
@@ -34,7 +36,8 @@ import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
 import ActivityConfirmationDialog from "../components/activities/ActivityConfirmationDialog";
-import type { Role } from "../components/roles";
+import { isAdminRole, type Role } from "../components/roles";
+import ShellWatchers, { type NavBadges } from "../components/announcements/ShellWatchers";
 import AppSettings from "../components/AppSettings";
 import { t } from "../i18n";
 import { installAttention } from "../alerts/attention";
@@ -55,6 +58,8 @@ export type AppOutletContext = {
 // Labels resolve through t() at render time, so the language switch relabels
 // the nav without any extra wiring.
 const links = [
+  // First, and where the app opens: news and notices for the whole team.
+  { to: "/announcements", key: "nav.announcements", Icon: CampaignRounded },
   { to: "/dashboard", key: "nav.dashboard", Icon: DashboardRounded },
   { to: "/tasks", key: "nav.tasks", Icon: ViewKanbanRounded },
   // No role filter: the summary is always the authenticated employee's own.
@@ -77,7 +82,16 @@ const SIDEBAR_WIDTH = 232;
  * The page links plus logout, shared by the permanent sidebar (md and up) and
  * the phone drawer, so the two can never list different pages.
  */
-function NavList({ pathname, onLogout }: { pathname: string; onLogout: () => void }) {
+function NavList({
+  pathname,
+  onLogout,
+  badges,
+}: {
+  pathname: string;
+  onLogout: () => void;
+  /** Counter per link path: unread announcements, warnings awaiting a decision. */
+  badges: NavBadges;
+}) {
   return (
     <List sx={{ px: 1.5, py: 1.5 }}>
       {links.map(({ to, key, Icon }) => {
@@ -91,9 +105,11 @@ function NavList({ pathname, onLogout }: { pathname: string; onLogout: () => voi
             sx={{
               borderRadius: "12px",
               mb: 0.5,
+              transition: "background-color .15s ease, color .15s ease",
               "&.Mui-selected, &.Mui-selected:hover": {
-                bgcolor: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                bgcolor: "var(--accent-soft)",
                 color: "var(--accent)",
+                boxShadow: "inset 3px 0 0 0 var(--accent)",
               },
             }}
           >
@@ -104,6 +120,16 @@ function NavList({ pathname, onLogout }: { pathname: string; onLogout: () => voi
               primary={t(key)}
               slotProps={{ primary: { sx: { fontWeight: active ? 700 : 500 } } }}
             />
+            {Boolean(badges[to]) && (
+              <Badge
+                badgeContent={badges[to]}
+                max={99}
+                sx={{
+                  mr: 1.5,
+                  "& .MuiBadge-badge": { bgcolor: "var(--danger)", color: "#fff", fontWeight: 700 },
+                }}
+              />
+            )}
           </ListItemButton>
         );
       })}
@@ -127,6 +153,8 @@ export default function AppLayout() {
   const { pathname } = useLocation();
   const [me, setMe] = useState<SessionEmployee | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [badges, setBadges] = useState<NavBadges>({});
+  const handleBadges = useCallback((next: NavBadges) => setBadges(next), []);
 
   // Sound and desktop alerts unlock on the first click; see alerts/attention.ts.
   useEffect(() => installAttention(), []);
@@ -209,7 +237,7 @@ export default function AppLayout() {
           <Divider />
 
           <Box onClick={() => setNavOpen(false)}>
-            <NavList pathname={pathname} onLogout={logout} />
+            <NavList pathname={pathname} onLogout={logout} badges={badges} />
           </Box>
         </Box>
       </Drawer>
@@ -232,11 +260,12 @@ export default function AppLayout() {
             borderColor: "divider",
           }}
         >
-          <NavList pathname={pathname} onLogout={logout} />
+          <NavList pathname={pathname} onLogout={logout} badges={badges} />
         </Box>
 
         <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
           <Outlet context={{ me } satisfies AppOutletContext} />
+          {me && <ShellWatchers isAdmin={isAdminRole(me.role)} onBadges={handleBadges} />}
         </Box>
       </Box>
 

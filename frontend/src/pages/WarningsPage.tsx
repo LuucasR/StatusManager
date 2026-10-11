@@ -1,4 +1,10 @@
-import { AddRounded, BlockRounded } from "@mui/icons-material";
+import {
+  AddRounded,
+  BlockRounded,
+  CheckRounded,
+  CloseRounded,
+  HourglassTopRounded,
+} from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -39,6 +45,8 @@ import {
   grantWarning,
   listEmployees,
   revokeWarning,
+  reviewWarning,
+  warningStatus,
   type TeamWarnings,
   type Warning,
   type WarningEmployee,
@@ -76,13 +84,20 @@ export default function WarningsPage() {
 }
 
 function StatusChip({ warning }: { warning: Warning }) {
+  const status = warningStatus(warning);
+  if (status === "PENDING") {
+    return <Chip size="small" color="warning" label={t("warnings.pending")} />;
+  }
+  if (status === "REJECTED") {
+    return <Chip size="small" variant="outlined" label={t("warnings.rejected")} />;
+  }
   return warning.revokedAt ? (
     <Chip size="small" variant="outlined" label={t("warnings.revoked")} />
   ) : (
     <Chip
       size="small"
       label={t("warnings.active")}
-      sx={{ bgcolor: "#b23c4a", color: "#fff", fontWeight: 700 }}
+      sx={{ bgcolor: "var(--danger)", color: "#fff", fontWeight: 700 }}
     />
   );
 }
@@ -106,6 +121,19 @@ function Details({ warning }: { warning: Warning }) {
       {warning.source === "MANUAL" && warning.createdByName && (
         <Typography variant="caption" color="text.secondary" component="div">
           {tf("warnings.grantedBy", { name: warning.createdByName })}
+        </Typography>
+      )}
+      {warning.source === "AUTO_LATE" && warning.reviewedByName && (
+        <Typography variant="caption" color="text.secondary" component="div">
+          {tf(
+            warningStatus(warning) === "REJECTED" ? "warnings.rejectedBy" : "warnings.grantedBy",
+            { name: warning.reviewedByName }
+          )}
+        </Typography>
+      )}
+      {warning.adminComment && (
+        <Typography variant="body2" component="div" sx={{ mt: 0.5, fontStyle: "italic" }}>
+          {tf("warnings.commentLine", { comment: warning.adminComment })}
         </Typography>
       )}
       {warning.revokedAt && (
@@ -217,6 +245,10 @@ function AdminWarnings() {
   const [notice, setNotice] = useState("");
   const [granting, setGranting] = useState(false);
   const [revoking, setRevoking] = useState<Warning | null>(null);
+  const [reviewing, setReviewing] = useState<{
+    warning: Warning;
+    decision: "approve" | "reject";
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -239,8 +271,19 @@ function AdminWarnings() {
   useSocketEvent("warnings:changed", () => void load());
   useOnReconnect(() => void load());
 
+  // Waiting for a decision: shown on their own above the history.
+  const pending = useMemo(
+    () => data?.rows.filter((row) => warningStatus(row) === "PENDING") ?? [],
+    [data]
+  );
+
   const rows = useMemo(
-    () => data?.rows.filter((row) => showRevoked || !row.revokedAt) ?? [],
+    () =>
+      data?.rows.filter((row) => {
+        const status = warningStatus(row);
+        if (status === "PENDING") return false;
+        return showRevoked || (!row.revokedAt && status === "ACTIVE");
+      }) ?? [],
     [data, showRevoked]
   );
 
@@ -248,7 +291,7 @@ function AdminWarnings() {
   const perEmployee = useMemo(() => {
     const counts = new Map<number, { employee: WarningEmployee; count: number }>();
     for (const row of data?.rows ?? []) {
-      if (row.revokedAt) continue;
+      if (row.revokedAt || warningStatus(row) !== "ACTIVE") continue;
       const current = counts.get(row.employee.id) ?? { employee: row.employee, count: 0 };
       current.count += 1;
       counts.set(row.employee.id, current);
@@ -260,6 +303,15 @@ function AdminWarnings() {
     await grantWarning(employeeId, reason);
     setGranting(false);
     setNotice(t("warnings.granted"));
+    await load();
+  }
+
+  async function review(comment: string) {
+    if (!reviewing) return;
+    const { warning, decision } = reviewing;
+    await reviewWarning(warning.id, decision, comment);
+    setReviewing(null);
+    setNotice(t(decision === "approve" ? "warnings.granted" : "warnings.rejectedNotice"));
     await load();
   }
 
@@ -292,6 +344,59 @@ function AdminWarnings() {
           </Button>
         }
       />
+
+      {pending.length > 0 && (
+        <Paper className="status-card approval-panel" elevation={0} sx={{ p: 3, mt: 3 }}>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", mb: 0.5 }}>
+            <HourglassTopRounded sx={{ color: "var(--warning)" }} />
+            <Typography variant="h6" sx={{ fontWeight: 750, flex: 1 }}>
+              {t("warnings.pendingTitle")}
+            </Typography>
+            <Chip size="small" color="warning" label={pending.length} />
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t("warnings.pendingHint")}
+          </Typography>
+          <Stack spacing={1}>
+            {pending.map((row) => (
+              <Box key={row.id} className="approval-row">
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    {row.employee.name} · #{row.employee.employeeNumber}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {halfLabel(row)} ·{" "}
+                    {tf("warnings.lateUsed", {
+                      used: row.lateMinutes ?? 0,
+                      tolerance: row.tolerance ?? 0,
+                    })}
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    startIcon={<CheckRounded />}
+                    onClick={() => setReviewing({ warning: row, decision: "approve" })}
+                  >
+                    {t("warnings.approve")}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<CloseRounded />}
+                    onClick={() => setReviewing({ warning: row, decision: "reject" })}
+                  >
+                    {t("warnings.reject")}
+                  </Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
       {perEmployee.length > 0 && (
         <Paper className="status-card" elevation={0} sx={{ p: 3, mt: 3 }}>
@@ -386,7 +491,7 @@ function AdminWarnings() {
                       <StatusChip warning={row} />
                     </TableCell>
                     <TableCell align="right">
-                      {!row.revokedAt && (
+                      {!row.revokedAt && warningStatus(row) === "ACTIVE" && (
                         <Button
                           size="small"
                           color="inherit"
@@ -420,6 +525,32 @@ function AdminWarnings() {
         label={t("warnings.revokeReason")}
         onClose={() => setRevoking(null)}
         onSubmit={revoke}
+      />
+      <ReasonDialog
+        open={reviewing !== null}
+        title={
+          reviewing?.decision === "approve"
+            ? t("warnings.approveTitle")
+            : t("warnings.rejectTitle")
+        }
+        description={
+          reviewing
+            ? tf("warnings.reviewDescription", {
+                name: (reviewing.warning as Warning & { employee: WarningEmployee }).employee.name,
+                half: halfLabel(reviewing.warning) ?? "",
+                used: reviewing.warning.lateMinutes ?? 0,
+                tolerance: reviewing.warning.tolerance ?? 0,
+              })
+            : undefined
+        }
+        label={t("warnings.commentOptional")}
+        optional
+        confirmLabel={
+          reviewing?.decision === "approve" ? t("warnings.approve") : t("warnings.reject")
+        }
+        confirmColor={reviewing?.decision === "approve" ? "error" : "primary"}
+        onClose={() => setReviewing(null)}
+        onSubmit={review}
       />
     </Container>
   );
@@ -504,6 +635,11 @@ function ReasonDialog(props: {
   open: boolean;
   title: string;
   label: string;
+  description?: string;
+  /** The text can be left empty (a comment rather than a required reason). */
+  optional?: boolean;
+  confirmLabel?: string;
+  confirmColor?: "error" | "primary";
   onClose: () => void;
   onSubmit: (reason: string) => Promise<void>;
 }) {
@@ -535,6 +671,9 @@ function ReasonDialog(props: {
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {props.description && (
+            <Typography color="text.secondary">{props.description}</Typography>
+          )}
           <TextField
             label={props.label}
             value={reason}
@@ -549,11 +688,11 @@ function ReasonDialog(props: {
         <Button onClick={props.onClose}>{t("warnings.cancel")}</Button>
         <Button
           variant="contained"
-          color="error"
+          color={props.confirmColor ?? "error"}
           onClick={() => void submit()}
-          disabled={saving || !reason.trim()}
+          disabled={saving || (!props.optional && !reason.trim())}
         >
-          {t("warnings.confirm")}
+          {props.confirmLabel ?? t("warnings.confirm")}
         </Button>
       </DialogActions>
     </Dialog>

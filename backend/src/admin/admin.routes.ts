@@ -628,6 +628,26 @@ const workdaySettingsSchema = z
     endTime: z
       .string()
       .refine(isValidTimeOfDay, "End time must be HH:MM in 24-hour format"),
+    // Per-weekday hours keyed "0".."6". A weekday left out uses the global
+    // start and end. Each day has to start before it ends: the scheduler
+    // fires the start and close jobs in that order within one local day.
+    weekdaySchedule: z
+      .record(
+        z.string().regex(/^[0-6]$/, "Weekday keys go from 0 to 6"),
+        z
+          .object({
+            start: z
+              .string()
+              .refine(isValidTimeOfDay, "Start time must be HH:MM in 24-hour format"),
+            end: z
+              .string()
+              .refine(isValidTimeOfDay, "End time must be HH:MM in 24-hour format"),
+          })
+          .refine(
+            (hours) => parseTimeOfDay(hours.start)! < parseTimeOfDay(hours.end)!,
+            "Each day has to start before it ends"
+          )
+      ),
     timezone: z
       .string()
       .refine(isValidTimeZone, "That timezone is not recognised"),

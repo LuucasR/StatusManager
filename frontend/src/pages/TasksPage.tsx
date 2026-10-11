@@ -19,13 +19,16 @@ import TaskBoard from "../components/tasks/TaskBoard";
 import TaskDetailDialog from "../components/tasks/TaskDetailDialog";
 import TaskFormDialog from "../components/tasks/TaskFormDialog";
 import TaskReportDialog from "../components/tasks/TaskReportDialog";
+import PendingApprovals from "../components/tasks/PendingApprovals";
 import {
+  approveTask,
   createTask,
   deleteTask,
   getTask,
   listTasks,
   moveTask,
   pinTask,
+  rejectTask,
   reorderChecklist,
   reorderTasks,
   setChecklistItem,
@@ -36,6 +39,7 @@ import {
 import {
   canMoveTask,
   daysUntilArchive,
+  isApprovedTask,
   type Task,
   type TaskChecklistItem,
   type TaskColor,
@@ -43,19 +47,21 @@ import {
   type TaskState,
 } from "../components/tasks/types";
 import type { AppOutletContext } from "../layouts/AppLayout";
-import { canManageTasks, isStaff } from "../components/roles";
+import { canManageTasks, isAdminRole, isStaff } from "../components/roles";
 import { t, tf } from "../i18n";
 
 export default function TasksPage() {
   const { me } = useOutletContext<AppOutletContext>();
   // Board management: admin, supervisor or task manager.
   const canManage = canManageTasks(me?.role);
+  const isAdmin = isAdminRole(me?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<TaskParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -318,8 +324,29 @@ export default function TasksPage() {
 
   async function handleSubmit(payload: TaskPayload, taskId?: number) {
     if (taskId) await updateTask(taskId, payload);
-    else await createTask(payload);
+    else {
+      const created = await createTask(payload);
+      if (!isApprovedTask(created)) setNotice(t("approval.sentNotice"));
+    }
     await load();
+  }
+
+  async function handleApprove(task: Task) {
+    try {
+      await approveTask(task.id);
+      await load();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  async function handleReject(task: Task, reason: string) {
+    try {
+      await rejectTask(task.id, reason);
+      await load();
+    } catch (err) {
+      handleError(err);
+    }
   }
 
   async function handleDelete(task: Task) {
@@ -344,14 +371,18 @@ export default function TasksPage() {
 
   // Pinning and ticking a checklist item are the same rule: whoever may drag the
   // task across the board decides both.
-  const canMoveDetail = Boolean(detail && canMoveTask(detail, me?.id, me?.role));
+  // A task waiting for approval is read-only for everybody.
+  const detailApproved = Boolean(detail && isApprovedTask(detail));
+  const canMoveDetail = Boolean(
+    detail && detailApproved && canMoveTask(detail, me?.id, me?.role)
+  );
   // Reading and writing the thread follow the CHAT rule, not the board's: a task
   // manager who is not a participant administers the card but not its
   // conversation. Mirrors canCommentOnTask and chat.access.ts in the backend.
   const isParticipant = Boolean(
     detail?.participants.some((participant) => participant.id === me?.id)
   );
-  const canReadChat = Boolean(detail) && (isStaff(me?.role) || isParticipant);
+  const canReadChat = detailApproved && (isStaff(me?.role) || isParticipant);
   const canComment = canReadChat;
 
   return (
@@ -359,6 +390,11 @@ export default function TasksPage() {
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
           {error}
+        </Alert>
+      )}
+      {notice && (
+        <Alert severity="info" sx={{ mb: 3 }} onClose={() => setNotice("")}>
+          {notice}
         </Alert>
       )}
 
@@ -383,7 +419,8 @@ export default function TasksPage() {
             {t("tasksPage.pdfReport")}
           </Button>
 
-          {canManage && (
+          {/* Anyone can propose a task; only an admin's skips the approval. */}
+          {me && (
             <Button
               variant="contained"
               size="large"
@@ -404,8 +441,18 @@ export default function TasksPage() {
           <CircularProgress />
         </Stack>
       ) : (
+        <>
+          <PendingApprovals
+            tasks={tasks.filter((task) => !isApprovedTask(task))}
+            isAdmin={isAdmin}
+            meId={me?.id}
+            onOpen={(task) => void openDetailById(task.id)}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onWithdraw={handleDelete}
+          />
         <TaskBoard
-          tasks={tasks}
+          tasks={tasks.filter(isApprovedTask)}
           meId={me?.id}
           role={me?.role}
           onOpen={(task) => void openDetailById(task.id)}
@@ -419,12 +466,14 @@ export default function TasksPage() {
           }}
           onDelete={handleDelete}
         />
+        </>
       )}
 
       <TaskFormDialog
         open={formOpen}
         task={editing}
         employees={employees}
+        needsApproval={!isAdmin}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
       />
@@ -437,7 +486,7 @@ export default function TasksPage() {
         canComment={canComment}
         canPin={canMoveDetail}
         canCheck={canMoveDetail}
-        canReorder={canManage}
+        canReorder={canManage && detailApproved}
         me={me ? { id: me.id, name: me.name } : null}
         onClose={() => {
           setDetailId(null);

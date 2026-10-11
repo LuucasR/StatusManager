@@ -4,21 +4,32 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import { TOKENS, buildTheme, type ThemeMode } from "./theme";
+import {
+  DEFAULT_PALETTE,
+  TOKENS,
+  buildTheme,
+  isPaletteId,
+  type PaletteId,
+  type ThemeMode,
+} from "./theme";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { isNative } from "../native/platform";
 
 const STORAGE_KEY = "theme-mode";
+const PALETTE_KEY = "theme-palette";
 
 type ThemeModeContextValue = {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   toggle: () => void;
+  /** The colour palette, chosen per device like the mode. */
+  palette: PaletteId;
+  setPalette: (palette: PaletteId) => void;
 };
 
 const ThemeModeContext = createContext<ThemeModeContextValue | null>(null);
@@ -49,8 +60,28 @@ function initialMode(): ThemeMode {
   return "light";
 }
 
+function initialPalette(): PaletteId {
+  try {
+    const stored = localStorage.getItem(PALETTE_KEY);
+    if (isPaletteId(stored)) return stored;
+  } catch {
+    // Blocked storage: the default palette.
+  }
+  return DEFAULT_PALETTE;
+}
+
 export default function ThemeModeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(initialMode);
+  const [palette, setPaletteState] = useState<PaletteId>(initialPalette);
+
+  const setPalette = useCallback((next: PaletteId) => {
+    setPaletteState(next);
+    try {
+      localStorage.setItem(PALETTE_KEY, next);
+    } catch {
+      // Same as the mode: not remembering it must not block choosing it.
+    }
+  }, []);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
@@ -62,10 +93,13 @@ export default function ThemeModeProvider({ children }: { children: ReactNode })
   }, []);
 
   // Publishes the tokens to :root so index.css can style everything MUI does
-  // not reach (the task board, the chat window, the auth shell).
-  useEffect(() => {
+  // not reach (the task board, the chat window, the auth shell). A layout
+  // effect, so a stored palette is on :root before the first paint instead of
+  // flashing the default one.
+  useLayoutEffect(() => {
     const root = document.documentElement;
-    for (const [name, value] of Object.entries(TOKENS[mode])) {
+    const tokens = TOKENS[palette][mode];
+    for (const [name, value] of Object.entries(tokens)) {
       root.style.setProperty(name, value);
     }
     // Lets the browser paint native widgets (scrollbars, date pickers, form
@@ -78,15 +112,21 @@ export default function ThemeModeProvider({ children }: { children: ReactNode })
     // light icons", which is the opposite of how it reads.
     if (isNative()) {
       void StatusBar.setStyle({ style: mode === "dark" ? Style.Dark : Style.Light });
-      void StatusBar.setBackgroundColor({ color: TOKENS[mode]["--surface"] });
+      void StatusBar.setBackgroundColor({ color: tokens["--surface"] });
     }
-  }, [mode]);
+  }, [mode, palette]);
 
-  const theme = useMemo(() => buildTheme(mode), [mode]);
+  const theme = useMemo(() => buildTheme(mode, palette), [mode, palette]);
 
   const value = useMemo(
-    () => ({ mode, setMode, toggle: () => setMode(mode === "dark" ? "light" : "dark") }),
-    [mode, setMode]
+    () => ({
+      mode,
+      setMode,
+      toggle: () => setMode(mode === "dark" ? "light" : "dark"),
+      palette,
+      setPalette,
+    }),
+    [mode, setMode, palette, setPalette]
   );
 
   return (

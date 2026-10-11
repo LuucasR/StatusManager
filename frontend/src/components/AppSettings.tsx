@@ -3,6 +3,7 @@ import {
   DarkModeRounded,
   DnsRounded,
   LightModeRounded,
+  PaletteRounded,
   TranslateRounded,
   VolumeOffRounded,
   VolumeUpRounded,
@@ -25,6 +26,7 @@ import { useState } from "react";
 import { LANGUAGES, LANGUAGE_NAMES, t, tf } from "../i18n";
 import { useI18n } from "../i18n/I18nProvider";
 import { useThemeMode } from "../theme/ThemeModeProvider";
+import { PALETTE_IDS, paletteSwatch } from "../theme/theme";
 import ServerAddressForm from "./ServerAddressForm";
 import { getApiUrl, isRuntimeConfigurable, switchServer } from "../serverConfig";
 import { isSoundOn, playChime, requestNotificationPermission, setSoundOn } from "../alerts/attention";
@@ -38,8 +40,9 @@ import { isSoundOn, playChime, requestNotificationPermission, setSoundOn } from 
  */
 export default function AppSettings({ floating = false }: { floating?: boolean }) {
   const { language, setLanguage } = useI18n();
-  const { mode, toggle } = useThemeMode();
+  const { mode, toggle, palette, setPalette } = useThemeMode();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const [paletteAnchor, setPaletteAnchor] = useState<null | HTMLElement>(null);
   const [serverOpen, setServerOpen] = useState(false);
   const [sound, setSound] = useState(isSoundOn);
 
@@ -80,6 +83,18 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
           aria-haspopup="menu"
         >
           <TranslateRounded />
+        </IconButton>
+      </Tooltip>
+
+      {/* Next to the language, as the other per-device appearance choice. */}
+      <Tooltip title={t("settings.palette")}>
+        <IconButton
+          color="inherit"
+          onClick={(event) => setPaletteAnchor(event.currentTarget)}
+          aria-label={t("settings.palette")}
+          aria-haspopup="menu"
+        >
+          <PaletteRounded />
         </IconButton>
       </Tooltip>
 
@@ -124,6 +139,41 @@ export default function AppSettings({ floating = false }: { floating?: boolean }
           <ServerAddressForm onAccepted={switchServer} initialValue={getApiUrl()} />
         </DialogContent>
       </Dialog>
+
+      <Menu
+        anchorEl={paletteAnchor}
+        open={Boolean(paletteAnchor)}
+        onClose={() => setPaletteAnchor(null)}
+      >
+        <Typography variant="overline" color="text.secondary" sx={{ px: 2, display: "block" }}>
+          {t("settings.palette")}
+        </Typography>
+        {PALETTE_IDS.map((id) => {
+          const swatch = paletteSwatch(id, mode);
+          return (
+            <MenuItem
+              key={id}
+              selected={id === palette}
+              onClick={() => {
+                setPalette(id);
+                setPaletteAnchor(null);
+              }}
+              sx={{ gap: 1.5, minWidth: 220 }}
+            >
+              <Box
+                aria-hidden
+                className="palette-swatch"
+                sx={{
+                  background: `linear-gradient(135deg, ${swatch.accent} 0 50%, ${swatch.partner} 50% 100%)`,
+                  outlineColor: swatch.ground,
+                }}
+              />
+              <ListItemText>{t(`settings.palette.${id}` as "settings.palette.indigo")}</ListItemText>
+              {id === palette && <CheckRounded fontSize="small" sx={{ color: "primary.main" }} />}
+            </MenuItem>
+          );
+        })}
+      </Menu>
 
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
         {LANGUAGES.map((value) => (

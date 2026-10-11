@@ -11,8 +11,6 @@ import {
   Stack,
   Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,8 +20,10 @@ import type { AppOutletContext } from "../layouts/AppLayout";
 import { t } from "../i18n";
 import { LOCALE } from "../locale";
 import DayExceptionDialog from "../components/workday/DayExceptionDialog";
+import WeeklySchedule from "../components/workday/WeeklySchedule";
 import {
   getSettings,
+  hoursFor,
   listExceptions,
   monthGrid,
   saveSettings,
@@ -156,50 +156,10 @@ export default function WorkdayPage() {
             {t("workday.enabledHelp")}
           </Typography>
 
-          <Box>
-            <Typography variant="overline" color="text.secondary">
-              {t("workday.weekdays")}
-            </Typography>
-            <ToggleButtonGroup
-              value={settings.workingWeekdays}
-              disabled={!canEdit}
-              onChange={(_, value: number[]) => {
-                // The backend refuses an empty week; stopping it here avoids a
-                // pointless round-trip and a red banner for a slip of the mouse.
-                if (value.length === 0) return;
-                void persist({ workingWeekdays: value });
-              }}
-              size="small"
-              sx={{ mt: 1, flexWrap: "wrap" }}
-            >
-              {WEEKDAYS.map((day) => (
-                <ToggleButton key={day} value={day} sx={{ px: 2 }}>
-                  {t(`weekday.${day}` as "weekday.0")}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <TextField
-              label={t("workday.startTime")}
-              type="time"
-              disabled={!canEdit}
-              value={settings.startTime}
-              onChange={(e) => setSettings({ ...settings, startTime: e.target.value })}
-              onBlur={(e) => void persist({ startTime: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label={t("workday.endTime")}
-              type="time"
-              disabled={!canEdit}
-              value={settings.endTime}
-              onChange={(e) => setSettings({ ...settings, endTime: e.target.value })}
-              onBlur={(e) => void persist({ endTime: e.target.value })}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-          </Stack>
+          {/* One row per weekday with its own hours: a 6-hour Tuesday and an
+              8-hour Monday are both just a row. Replaces the single start and
+              end the whole week used to share. */}
+          <WeeklySchedule settings={settings} canEdit={canEdit} saving={saving} onSave={persist} />
 
           {/* The activity check's timing is the admin's alone: the server does
               not even send these three values to anyone else. */}
@@ -318,6 +278,9 @@ export default function WorkdayPage() {
             const entry = byDate.get(cell.key) ?? null;
             const patternWorking = settings.workingWeekdays.includes(cell.date.getDay());
             const working = entry ? entry.working : patternWorking;
+            const pattern = hoursFor(settings, cell.date.getDay());
+            const start = entry?.startTime ?? pattern.start;
+            const end = entry?.endTime ?? pattern.end;
 
             return (
               <Box
@@ -339,9 +302,9 @@ export default function WorkdayPage() {
               >
                 <span className="cal-day">{cell.date.getDate()}</span>
                 {entry?.label && <span className="cal-label">{entry.label}</span>}
-                {entry?.startTime && entry?.endTime && (
+                {working && cell.inMonth && (
                   <span className="cal-hours">
-                    {entry.startTime}–{entry.endTime}
+                    {start}–{end}
                   </span>
                 )}
               </Box>
@@ -359,8 +322,8 @@ export default function WorkdayPage() {
       <DayExceptionDialog
         date={openDay}
         current={openDay ? byDate.get(openDay) ?? null : null}
-        defaultStart={settings.startTime}
-        defaultEnd={settings.endTime}
+        defaultStart={openDay ? hoursFor(settings, new Date(`${openDay}T12:00:00`).getDay()).start : settings.startTime}
+        defaultEnd={openDay ? hoursFor(settings, new Date(`${openDay}T12:00:00`).getDay()).end : settings.endTime}
         onClose={() => setOpenDay(null)}
         onChanged={() => void loadExceptions()}
       />

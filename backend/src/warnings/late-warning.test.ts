@@ -5,9 +5,12 @@ import { decideLateWarning, lateWarningReason } from "./late-warning";
 
 const tolerances = { lateToleranceFirstHalfMinutes: 25, lateToleranceSecondHalfMinutes: 25 };
 
-const active = { revokedAt: null, revokedBySystem: false };
-const revokedBySystem = { revokedAt: new Date(), revokedBySystem: true };
-const revokedByAdmin = { revokedAt: new Date(), revokedBySystem: false };
+const base = { status: "ACTIVE" as const, reviewedLateMinutes: null };
+const active = { ...base, revokedAt: null, revokedBySystem: false };
+const revokedBySystem = { ...base, revokedAt: new Date(), revokedBySystem: true };
+const revokedByAdmin = { ...base, revokedAt: new Date(), revokedBySystem: false };
+const pending = { ...active, status: "PENDING" as const };
+const rejected = { ...active, status: "REJECTED" as const, reviewedLateMinutes: 40 };
 
 describe("decideLateWarning", () => {
   it("creates one the first time the half goes over", () => {
@@ -37,6 +40,25 @@ describe("decideLateWarning", () => {
 
   it("leaves an already revoked one alone while the half stays within", () => {
     assert.equal(decideLateWarning(false, revokedBySystem), "none");
+  });
+});
+
+describe("admin review", () => {
+  it("only refreshes a pending one while it stays over", () => {
+    assert.equal(decideLateWarning(true, pending, 50), "updatePending");
+  });
+
+  it("drops a pending one when a correction brings the half back", () => {
+    assert.equal(decideLateWarning(false, pending, 10), "dropPending");
+  });
+
+  it("leaves a rejected one alone while the half does not get worse", () => {
+    assert.equal(decideLateWarning(true, rejected, 40), "none");
+    assert.equal(decideLateWarning(false, rejected, 10), "none");
+  });
+
+  it("asks again when the half gets worse after a rejection", () => {
+    assert.equal(decideLateWarning(true, rejected, 41), "reask");
   });
 });
 

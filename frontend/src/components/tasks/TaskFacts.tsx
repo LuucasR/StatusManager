@@ -1,5 +1,4 @@
 import { Avatar, Box, Chip, Stack, Typography } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import { formatDuration, formatMsDuration, formatRange, useTaskWorkedMs } from "./datetime";
 import { STATE_META, participantColor, type TaskParticipant, type TaskState } from "./types";
 import { t, tf } from "../../i18n";
@@ -57,7 +56,7 @@ export default function TaskFacts({ task, showState = false, asOfNote }: Props) 
                 bgcolor: meta.soft,
                 color: meta.ink,
                 fontWeight: 700,
-                border: `1px solid ${alpha(meta.accent, 0.35)}`,
+                border: `1px solid color-mix(in srgb, ${meta.accent} 35%, transparent)`,
                 "& .MuiChip-icon": { color: meta.accent, fontSize: 16 },
               }}
             />

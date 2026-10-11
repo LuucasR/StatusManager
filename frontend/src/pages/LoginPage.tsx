@@ -21,7 +21,7 @@ export default function LoginPage() {
       localStorage.setItem("token", data.token);
       // Temporary password from an admin-approved reset: the token is only good
       // for /auth/change-password until it is replaced.
-      window.location.assign(data.mustChangePassword ? "/change-password" : "/dashboard");
+      window.location.assign(data.mustChangePassword ? "/change-password" : "/announcements");
     } catch (err) { setError((err as Error).message); } finally { setLoading(false); }
   }
 

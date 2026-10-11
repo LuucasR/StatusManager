@@ -43,7 +43,7 @@ export default function ChangePasswordPage() {
         body: JSON.stringify({ currentPassword, newPassword }),
       });
       localStorage.setItem("token", result.token);
-      window.location.assign("/dashboard");
+      window.location.assign("/announcements");
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

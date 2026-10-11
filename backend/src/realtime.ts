@@ -117,6 +117,11 @@ export function emitPatchNotesChanged(payload: { weekStart: string }) {
   io?.emit("patchnotes:changed", payload);
 }
 
+/** Announcements are for everyone, so a broadcast; read counts ride on it too. */
+export function emitAnnouncementsChanged(payload: { id: number }) {
+  io?.emit("announcements:changed", payload);
+}
+
 export function emitDownloadsChanged() {
   io?.emit("downloads:changed", {});
 }

@@ -1,4 +1,4 @@
-import { Router, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth } from "../auth/auth.middleware";
@@ -35,6 +35,10 @@ const WARNING_SELECT = {
   revokedByName: true,
   revokeReason: true,
   revokedBySystem: true,
+  status: true,
+  adminComment: true,
+  reviewedByName: true,
+  reviewedAt: true,
 } as const;
 
 function validationError(res: Response, error: z.ZodError) {
@@ -54,7 +58,8 @@ async function nameOf(employeeId: number) {
 
 router.get("/me", async (req, res) => {
   const rows = await prisma.warning.findMany({
-    where: { employeeId: req.auth!.employeeId },
+    // Pending and rejected ones are the admins' business until granted.
+    where: { employeeId: req.auth!.employeeId, status: "ACTIVE" },
     select: WARNING_SELECT,
     orderBy: { createdAt: "desc" },
   });
@@ -87,13 +92,14 @@ router.get("/", async (req, res) => {
 const grantSchema = z.object({
   employeeId: z.number().int(),
   reason: z.string().trim().min(1, "The reason is required").max(500),
+  comment: z.string().trim().max(500).optional(),
 });
 
 router.post("/", async (req, res) => {
   const parsed = grantSchema.safeParse(req.body);
   if (!parsed.success) return validationError(res, parsed.error);
 
-  const { employeeId, reason } = parsed.data;
+  const { employeeId, reason, comment } = parsed.data;
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
     select: { id: true, active: true },
@@ -108,6 +114,7 @@ router.post("/", async (req, res) => {
       employeeId,
       source: "MANUAL",
       reason,
+      adminComment: comment || null,
       createdById: actorId,
       createdByName: await nameOf(actorId),
     },
@@ -141,10 +148,15 @@ router.post("/:id/revoke", async (req, res) => {
 
   const existing = await prisma.warning.findUnique({
     where: { id },
-    select: { employeeId: true, revokedAt: true },
+    select: { employeeId: true, revokedAt: true, status: true },
   });
   if (!existing) {
     return res.status(404).json({ code: "WARNING_NOT_FOUND", message: "Warning not found" });
+  }
+  if (existing.status !== "ACTIVE") {
+    return res
+      .status(409)
+      .json({ code: "WARNING_NOT_ACTIVE", message: "Only a granted warning can be revoked" });
   }
   if (existing.revokedAt) {
     return res
@@ -178,5 +190,72 @@ router.post("/:id/revoke", async (req, res) => {
 
   res.json(warning);
 });
+
+const reviewSchema = z.object({
+  comment: z.string().trim().max(500).optional(),
+});
+
+/**
+ * An admin's decision on a pending automatic warning. Granting is what makes it
+ * count and what tells the employee; rejecting keeps it out of their record,
+ * and remembers how late the half was so it is only asked about again if it
+ * gets worse.
+ */
+const reviewWarning = (approve: boolean) => async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(404).json({ code: "WARNING_NOT_FOUND", message: "Warning not found" });
+  }
+
+  const parsed = reviewSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return validationError(res, parsed.error);
+
+  const existing = await prisma.warning.findUnique({
+    where: { id },
+    select: { employeeId: true, status: true, reason: true, lateMinutes: true },
+  });
+  if (!existing) {
+    return res.status(404).json({ code: "WARNING_NOT_FOUND", message: "Warning not found" });
+  }
+  if (existing.status !== "PENDING") {
+    return res
+      .status(409)
+      .json({ code: "WARNING_ALREADY_REVIEWED", message: "This warning was already decided" });
+  }
+
+  const actorId = req.auth!.employeeId;
+  const actorName = await nameOf(actorId);
+  const comment = parsed.data.comment || null;
+
+  const warning = await prisma.warning.update({
+    where: { id },
+    data: {
+      status: approve ? "ACTIVE" : "REJECTED",
+      adminComment: comment,
+      reviewedById: actorId,
+      reviewedByName: actorName,
+      reviewedAt: new Date(),
+      reviewedLateMinutes: existing.lateMinutes,
+      ...(approve ? { createdById: actorId, createdByName: actorName } : {}),
+    },
+    select: WARNING_SELECT,
+  });
+
+  if (approve) {
+    await notify({
+      recipientIds: [existing.employeeId],
+      actorId,
+      type: "LATE_WARNING",
+      title: "Late-arrival warning",
+      body: `You received a warning: ${existing.reason}.${comment ? ` Comment: ${comment.slice(0, 200)}` : ""}`,
+    });
+  }
+  await emitWarningsChanged(existing.employeeId);
+
+  res.json(warning);
+};
+
+router.post("/:id/approve", reviewWarning(true));
+router.post("/:id/reject", reviewWarning(false));
 
 export default router;
