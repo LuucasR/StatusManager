@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ROLE_META, ROLE_ORDER, type Role } from "../roles";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 type Target = { id: number; employeeNumber: number; name: string; role?: string };
 
@@ -45,7 +45,7 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
         method: "PATCH",
         body: JSON.stringify({ role }),
       });
-      onChanged(`${employee.name} ahora es ${ROLE_META[role].label}.`);
+      onChanged(tf("role.changed", { name: employee.name, role: ROLE_META[role].label }));
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -67,8 +67,8 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
           </Typography>
 
           <FormControl fullWidth>
-            <InputLabel>Rol</InputLabel>
-            <Select value={role} label="Rol" onChange={(e) => setRole(e.target.value as Role)}>
+            <InputLabel>{t("common.role")}</InputLabel>
+            <Select value={role} label={t("common.role")} onChange={(e) => setRole(e.target.value as Role)}>
               {ROLE_ORDER.map((value) => (
                 <MenuItem key={value} value={value}>
                   {ROLE_META[value].label}
@@ -88,7 +88,7 @@ export default function ChangeRoleDialog({ employee, onClose, onChanged }: Props
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button
           variant="contained"
           onClick={() => void submit()}

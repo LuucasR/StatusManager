@@ -41,13 +41,16 @@ export async function register(name: string, email: string, password: string) {
  * unhashed, so it sat in the database and in every backup and was shown to the
  * admin on screen. Nothing reversible is stored now: the actual password is
  * minted at approval time by `approvePasswordReset`.
+ *
+ * Returns the employee the request was filed for, or null when the address has
+ * no active account.
  */
 export async function requestPasswordReset(email: string) {
   const employee = await prisma.employee.findUnique({
     where: { email: email.toLowerCase() },
   });
 
-  if (!employee?.active) return false;
+  if (!employee?.active) return null;
 
   await prisma.$transaction([
     prisma.passwordChangeRequest.updateMany({
@@ -59,7 +62,7 @@ export async function requestPasswordReset(email: string) {
     }),
   ]);
 
-  return true;
+  return employee;
 }
 
 /**

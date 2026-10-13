@@ -13,6 +13,7 @@ import { t, tf } from "../../i18n";
 import { LOCALE } from "../../locale";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
 import { getTeamWarnings, warningStatus } from "../warnings/warningsApi";
+import { pendingAccountRequests } from "../admin/accountsApi";
 import {
   listAnnouncements,
   markAnnouncementRead,
@@ -35,6 +36,7 @@ export default function ShellWatchers({
 }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [pendingWarnings, setPendingWarnings] = useState(0);
+  const [pendingAccounts, setPendingAccounts] = useState(0);
   const [acknowledging, setAcknowledging] = useState(false);
 
   const loadAnnouncements = useCallback(async () => {
@@ -55,25 +57,39 @@ export default function ShellWatchers({
     }
   }, [isAdmin]);
 
+  const loadAccounts = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setPendingAccounts(await pendingAccountRequests());
+    } catch {
+      // Same as above.
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     void loadAnnouncements();
   }, [loadAnnouncements]);
+  useEffect(() => {
+    void loadAccounts();
+  }, [loadAccounts]);
   useEffect(() => {
     void loadWarnings();
   }, [loadWarnings]);
 
   useSocketEvent("announcements:changed", () => void loadAnnouncements());
   useSocketEvent("warnings:changed", () => void loadWarnings());
+  useSocketEvent("accounts:changed", () => void loadAccounts());
   useOnReconnect(() => {
     void loadAnnouncements();
     void loadWarnings();
+    void loadAccounts();
   });
 
   const unread = announcements.filter((item) => !item.readAt).length;
 
   useEffect(() => {
-    onBadges({ "/announcements": unread, "/warnings": pendingWarnings });
-  }, [unread, pendingWarnings, onBadges]);
+    onBadges({ "/announcements": unread, "/warnings": pendingWarnings, "/accounts": pendingAccounts });
+  }, [unread, pendingWarnings, pendingAccounts, onBadges]);
 
   // The oldest unread critical one first: they are acknowledged in order.
   const critical = [...announcements]

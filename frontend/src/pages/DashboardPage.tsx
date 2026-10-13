@@ -1,8 +1,5 @@
 import {
-  AdminPanelSettingsRounded,
-  BadgeRounded,
-  DeleteForeverRounded,
-  PersonAddAlt1Rounded,
+  ManageAccountsRounded,
   UpdateRounded,
   VisibilityRounded,
 } from "@mui/icons-material";
@@ -41,8 +38,6 @@ import PdfPreviewDialog from "../components/pdf/PdfPreviewDialog";
 import { usePdfPreview } from "../components/pdf/usePdfPreview";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 import { isAdminRole, isStaff, roleMeta, type Role } from "../components/roles";
-import NewAccountDialog from "../components/admin/NewAccountDialog";
-import ChangeRoleDialog from "../components/admin/ChangeRoleDialog";
 import PeriodFilter from "../components/PeriodFilter";
 import WorkingTaskSelect, {
   type AssignableTask,
@@ -60,7 +55,7 @@ import {
   type Status,
 } from "../components/activities/statuses";
 import { LOCALE } from "../locale";
-import { useSearchParams } from "react-router-dom";
+import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 
 type Employee = {
@@ -90,20 +85,6 @@ type History = {
 
 type HistoryResponse = { rows: History[]; truncated: boolean };
 
-type PasswordChangeRequest = {
-  id: number;
-  createdAt: string;
-  employee: {
-    id: number;
-    employeeNumber: number;
-    name: string;
-    email: string;
-  };
-};
-
-
-
-
 function elapsed(since: string, now: number) {
   const seconds = Math.max(
     0,
@@ -130,9 +111,6 @@ export default function DashboardPage() {
   const [me, setMe] = useState<Employee | null>(null);
   const [history, setHistory] = useState<History[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [passwordRequests, setPasswordRequests] = useState<
-    PasswordChangeRequest[]
-  >([]);
   const [now, setNow] = useState(Date.now());
 
   const [dialog, setDialog] = useState(false);
@@ -169,9 +147,6 @@ const [reportFrom, setReportFrom] = useState("");
 
 const [reportTo, setReportTo] = useState("");
 const pdf = usePdfPreview();
-const [newAccountOpen, setNewAccountOpen] = useState(false);
-const [roleTarget, setRoleTarget] = useState<Employee | null>(null);
-const [notice, setNotice] = useState("");
 
   // Two levels: staff (admin or supervisor) sees the team and its reports; admin
   // is the only one who touches accounts, roles and other people's statuses.
@@ -201,14 +176,6 @@ const [notice, setNotice] = useState("");
           : "/activities/team"
       )
     );
-
-    if (isAdminRole(current.role)) {
-      setPasswordRequests(
-        await api<PasswordChangeRequest[]>(
-          "/admin/password-change-requests"
-        )
-      );
-    }
   }, [loadHistory]);
 
   const handlePeriodChange = useCallback(
@@ -387,81 +354,6 @@ useOnReconnect(() => load());
     );
   }
 
-  async function approve(id: number) {
-    await api(`/admin/employees/${id}/approve`, {
-      method: "PATCH",
-    });
-
-    await load();
-  }
-
-  async function reject(id: number) {
-    if (!window.confirm(t("dashboard.confirmReject"))) {
-      return;
-    }
-
-    await api(`/admin/employees/${id}`, {
-      method: "DELETE",
-    });
-
-    await load();
-  }
-
-  async function deleteAccount(employee: Employee) {
-    const confirmed = window.confirm(
-      tf("dashboard.confirmDeleteAccount", { name: employee.name })
-    );
-
-    if (!confirmed) return;
-
-    try {
-      await api(`/admin/employees/${employee.id}`, {
-        method: "DELETE",
-      });
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  const [issuedPassword, setIssuedPassword] = useState<
-    { name: string; password: string } | null
-  >(null);
-
-  async function resolvePasswordRequest(
-    request: PasswordChangeRequest,
-    decision: "APPROVED" | "REJECTED"
-  ) {
-    // Two keys rather than interpolating a verb: Spanish and English do not
-    // inflect the sentence the same way around it.
-    const prompt = tf(
-      decision === "APPROVED"
-        ? "dashboard.confirmApprovePassword"
-        : "dashboard.confirmRejectPassword",
-      { name: request.employee.name }
-    );
-    if (!window.confirm(prompt)) {
-      return;
-    }
-
-    try {
-      const result = await api<{ temporaryPassword?: string }>(
-        `/admin/password-change-requests/${request.id}`,
-        { method: "PATCH", body: JSON.stringify({ decision }) }
-      );
-      // Shown once and never persisted anywhere, so it has to be captured here.
-      if (result.temporaryPassword) {
-        setIssuedPassword({
-          name: request.employee.name,
-          password: result.temporaryPassword,
-        });
-      }
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
   return (
   <Box>
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -472,12 +364,6 @@ useOnReconnect(() => load());
           onClose={() => setError("")}
         >
           {error}
-        </Alert>
-      )}
-
-      {notice && (
-        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setNotice("")}>
-          {notice}
         </Alert>
       )}
 
@@ -546,82 +432,6 @@ useOnReconnect(() => load());
         </Paper>
       </Box>
 
-      {admin && (
-        <>
-          <Box className="section-title">
-            <Box>
-              <Typography className="eyebrow">{t("dashboard.securityEyebrow")}</Typography>
-              <Typography variant="h4">
-                {t("dashboard.passwordRequests")}
-              </Typography>
-            </Box>
-            <Chip
-              color={passwordRequests.length ? "warning" : "default"}
-              label={tf("dashboard.pendingCount", { count: passwordRequests.length })}
-            />
-          </Box>
-
-          {passwordRequests.length === 0 ? (
-            <Paper className="table-card" elevation={0} sx={{ p: 3 }}>
-              <Typography color="text.secondary">
-                {t("dashboard.noPendingRequests")}
-              </Typography>
-            </Paper>
-          ) : (
-            <Paper className="table-card" elevation={0}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>{t("common.employee")}</TableCell>
-                    <TableCell>{t("common.email")}</TableCell>
-                    <TableCell>{t("dashboard.date")}</TableCell>
-                    <TableCell align="right">{t("dashboard.actions")}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {passwordRequests.map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell>
-                        #{request.employee.employeeNumber} ·{" "}
-                        {request.employee.name}
-                      </TableCell>
-                      <TableCell>{request.employee.email}</TableCell>
-                      <TableCell>
-                        {new Date(request.createdAt).toLocaleString(LOCALE)}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ justifyContent: "flex-end" }}
-                        >
-                          <Button
-                            color="error"
-                            onClick={() =>
-                              resolvePasswordRequest(request, "REJECTED")
-                            }
-                          >
-                            {t("dashboard.reject")}
-                          </Button>
-                          <Button
-                            variant="contained"
-                            onClick={() =>
-                              resolvePasswordRequest(request, "APPROVED")
-                            }
-                          >
-                            {t("dashboard.accept")}
-                          </Button>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Paper>
-          )}
-        </>
-      )}
-
       <>
           <Box className="section-title">
             <Box>
@@ -649,18 +459,19 @@ useOnReconnect(() => load());
               )}
               {admin && (
                 <Button
-                  variant="contained"
-                  startIcon={<PersonAddAlt1Rounded />}
-                  onClick={() => setNewAccountOpen(true)}
+                  component={RouterLink}
+                  to="/accounts"
+                  variant="outlined"
+                  startIcon={<ManageAccountsRounded />}
                 >
-                  {t("account.newTitle")}
+                  {t("dashboard.manageAccounts")}
                 </Button>
               )}
             </Stack>
           </Box>
 
           <Box className="employee-grid">
-            {employees.map((employee) => (
+            {employees.filter((employee) => employee.active !== false).map((employee) => (
               <Paper
                 key={employee.id}
                 className="employee-card emp-note"
@@ -704,23 +515,14 @@ useOnReconnect(() => load());
                     </Stack>
                   </Box>
 
-                  {employee.active ? (
-                    <Chip
-                      size="small"
-                      color={colors[employee.currentStatus]}
-                      label={labels[employee.currentStatus]}
-                    />
-                  ) : (
-                    <Chip
-                      size="small"
-                      color="warning"
-                      label={t("common.pending")}
-                    />
-                  )}
+                  <Chip
+                    size="small"
+                    color={colors[employee.currentStatus]}
+                    label={labels[employee.currentStatus]}
+                  />
                 </Stack>
 
-{employee.active ? (
-  <>
+<>
     <Typography
       variant="body2"
       color="text.secondary"
@@ -766,53 +568,9 @@ useOnReconnect(() => load());
 >
   {t("dashboard.changeStatus")}
 </Button>
-        {employee.id !== me?.id && (
-          <>
-            <Button
-              sx={{ mt: 1 }}
-              fullWidth
-              variant="outlined"
-              startIcon={<BadgeRounded />}
-              onClick={() => setRoleTarget(employee)}
-            >
-              {t("dashboard.changeRole")}
-            </Button>
-            <Button
-              sx={{ mt: 1 }}
-              fullWidth
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteForeverRounded />}
-              onClick={() => deleteAccount(employee)}
-            >
-              {t("dashboard.deleteAccount")}
-            </Button>
-          </>
-        )}
       </>
     )}
   </>
-): (
-                  <Stack spacing={1} sx={{ mt: 3 }}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      startIcon={<AdminPanelSettingsRounded />}
-                      onClick={() => approve(employee.id)}
-                    >
-                      {t("dashboard.approveSignUp")}
-                    </Button>
-
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      color="error"
-                      onClick={() => reject(employee.id)}
-                    >
-                      {t("dashboard.reject")}
-                    </Button>
-                  </Stack>
-                )}
               </Paper>
             ))}
           </Box>
@@ -1177,58 +935,6 @@ useOnReconnect(() => load());
   onDownload={pdf.download}
 />
 
-{/* One-time reveal: the temporary password is not stored anywhere, so if this
-    is closed without copying it, it has to be regenerated. */}
-<Dialog
-  open={Boolean(issuedPassword)}
-  onClose={() => setIssuedPassword(null)}
-  maxWidth="xs"
-  fullWidth
->
-  <DialogTitle>{t("dashboard.temporaryPassword")}</DialogTitle>
-  <DialogContent>
-    <Typography color="text.secondary" sx={{ mb: 2 }}>
-      {tf("dashboard.temporaryPasswordNote", { name: issuedPassword?.name ?? "" })}
-    </Typography>
-    <Typography
-      component="code"
-      sx={{
-        display: "block",
-        p: 2,
-        borderRadius: 1,
-        bgcolor: "var(--surface-2)",
-        fontSize: 20,
-        letterSpacing: ".08em",
-        textAlign: "center",
-      }}
-    >
-      {issuedPassword?.password}
-    </Typography>
-  </DialogContent>
-  <DialogActions>
-    <Button variant="contained" onClick={() => setIssuedPassword(null)}>
-      {t("dashboard.copied")}
-    </Button>
-  </DialogActions>
-</Dialog>
-
-<NewAccountDialog
-  open={newAccountOpen}
-  onClose={() => setNewAccountOpen(false)}
-  onCreated={(message) => {
-    setNotice(message);
-    void load();
-  }}
-/>
-
-<ChangeRoleDialog
-  employee={roleTarget}
-  onClose={() => setRoleTarget(null)}
-  onChanged={(message) => {
-    setNotice(message);
-    void load();
-  }}
-/>
   </Box>
 );
 }

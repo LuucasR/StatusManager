@@ -4,6 +4,7 @@ import {
   FactCheckRounded,
   HighlightOffRounded,
   HourglassTopRounded,
+  KeyRounded,
   GavelRounded,
   TaskAltRounded,
   PersonAddAlt1Rounded,
@@ -27,7 +28,9 @@ export type NotificationType =
   | "TASK_APPROVED"
   | "TASK_REJECTED"
   | "LATE_WARNING_REVIEW"
-  | "ANNOUNCEMENT";
+  | "ANNOUNCEMENT"
+  | "ACCOUNT_REQUEST"
+  | "PASSWORD_RESET_REQUEST";
 
 export type AppNotification = {
   id: number;
@@ -60,7 +63,15 @@ export const NOTIFICATION_META: Record<
   TASK_REJECTED: { Icon: HighlightOffRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
   LATE_WARNING_REVIEW: { Icon: GavelRounded, accent: "#b7791f", soft: softOf("#b7791f") },
   ANNOUNCEMENT: { Icon: CampaignRounded, accent: "var(--accent-base)", soft: softOf("var(--accent-base)") },
+  ACCOUNT_REQUEST: { Icon: PersonAddAlt1Rounded, accent: "#b7791f", soft: softOf("#b7791f") },
+  PASSWORD_RESET_REQUEST: { Icon: KeyRounded, accent: "#b7791f", soft: softOf("#b7791f") },
 };
+
+/** Types that open the Accounts page. */
+export const ACCOUNT_NOTIFICATIONS: ReadonlySet<string> = new Set([
+  "ACCOUNT_REQUEST",
+  "PASSWORD_RESET_REQUEST",
+]);
 
 /** Types that open the Warnings page instead of a task. */
 export const WARNING_NOTIFICATIONS: ReadonlySet<string> = new Set([

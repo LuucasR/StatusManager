@@ -13,7 +13,7 @@ import {
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatClock, relativeDay } from "../tasks/datetime";
-import { WARNING_NOTIFICATIONS, notificationMeta, type AppNotification } from "./types";
+import { ACCOUNT_NOTIFICATIONS, WARNING_NOTIFICATIONS, notificationMeta, type AppNotification } from "./types";
 import { useNotifications } from "./useNotifications";
 import { t, tf } from "../../i18n";
 
@@ -28,6 +28,7 @@ export default function NotificationBell() {
     if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
     else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
     else if (notification.type === "ANNOUNCEMENT") navigate("/announcements");
+    else if (ACCOUNT_NOTIFICATIONS.has(notification.type)) navigate("/accounts");
   }
 
   let lastDay = "";

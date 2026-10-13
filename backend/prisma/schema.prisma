@@ -78,6 +78,10 @@ enum NotificationType {
   LATE_WARNING_REVIEW
   /// A new announcement was published for the team.
   ANNOUNCEMENT
+  /// Sent to admins: someone signed up and is waiting for approval.
+  ACCOUNT_REQUEST
+  /// Sent to admins: someone forgot their password and asked for a reset.
+  PASSWORD_RESET_REQUEST
 }
 
 /// How much an announcement matters. CRITICAL ones have to be read by the
@@ -144,6 +148,10 @@ model Employee {
   currentStatus          ActivityStatus          @default(OFFLINE)
   statusSince            DateTime                @default(now())
   active                 Boolean                 @default(true)
+  /// Set when an admin deactivates the account. `active=false` alone means a
+  /// sign-up still waiting for approval; with this set, it is a former member
+  /// whose history is kept and who can be reactivated.
+  deactivatedAt          DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   activities             ActivityHistory[]

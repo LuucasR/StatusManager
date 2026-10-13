@@ -3,7 +3,14 @@ import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth, requireStaff } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
-import { cancelConfirmation, emitStatusChanged, sendConfirmationRequest } from "../realtime";
+import {
+  cancelConfirmation,
+  disconnectEmployee,
+  emitAccountsChanged,
+  emitStatusChanged,
+  sendConfirmationRequest,
+} from "../realtime";
+import { accountStatus } from "./accounts";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { approvePasswordReset } from "../auth/auth.service";
@@ -59,6 +66,8 @@ router.get("/employees", requireStaff, async (_req, res) => {
       currentStatus: true,
       statusSince: true,
       active: true,
+      deactivatedAt: true,
+      createdAt: true,
 
       activities: {
         where: {
@@ -88,6 +97,9 @@ router.get("/employees", requireStaff, async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: employee.active,
+        accountStatus: accountStatus(employee),
+        deactivatedAt: employee.deactivatedAt,
+        createdAt: employee.createdAt,
         // Same as GET /activities/team: the task now has its own line on the
         // card, so folding it into `detail` would print it twice.
         detail: open?.detail ?? "",
@@ -144,6 +156,7 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
       where: { id },
       data: { status: "REJECTED", resolvedAt: new Date() },
     });
+    emitAccountsChanged();
     return res.json({ code: "REQUEST_REJECTED", message: "Request rejected" });
   }
 
@@ -159,6 +172,7 @@ router.patch("/password-change-requests/:id", requireAdmin, async (req, res) => 
     where: { id },
     data: { status: "APPROVED", resolvedAt: new Date() },
   });
+  emitAccountsChanged();
 
   res.json({
     temporaryPassword,
@@ -243,6 +257,7 @@ router.post("/employees", requireAdmin, async (req, res) => {
       });
     });
 
+    emitAccountsChanged();
     res.status(201).json(employee);
   } catch {
     // Race with another simultaneous sign-up on the same email or number.
@@ -294,35 +309,129 @@ router.patch("/employees/:id/role", requireAdmin, async (req, res) => {
     select: { id: true, employeeNumber: true, name: true, email: true, role: true, active: true },
   });
 
+  emitAccountsChanged();
   res.json(updated);
 });
 
-router.patch("/employees/:id/approve", requireAdmin, async (req, res) => {
+/** Loads an account for the lifecycle routes below, or answers 400/404. */
+async function findAccount(req: { params: { id?: string } }, res: import("express").Response) {
   const id = Number(req.params.id);
-
   if (!Number.isInteger(id)) {
-    return res.status(400).json({
-      code: "INVALID_EMPLOYEE", message: "Invalid employee",
-    });
+    res.status(400).json({ code: "INVALID_EMPLOYEE", message: "Invalid employee" });
+    return null;
+  }
+  const employee = await prisma.employee.findUnique({
+    where: { id },
+    select: { id: true, role: true, active: true, deactivatedAt: true },
+  });
+  if (!employee) {
+    res.status(404).json({ code: "EMPLOYEE_NOT_FOUND", message: "Employee not found" });
+    return null;
+  }
+  return employee;
+}
+
+router.patch("/employees/:id/approve", requireAdmin, async (req, res) => {
+  const account = await findAccount(req, res);
+  if (!account) return;
+
+  if (accountStatus(account) !== "PENDING") {
+    return res.status(409).json({ code: "NOT_PENDING", message: "That account is not waiting for approval" });
   }
 
   const employee = await prisma.employee.update({
-    where: {
-      id,
-    },
-    data: {
-      active: true,
-    },
-    select: {
-      id: true,
-      employeeNumber: true,
-      name: true,
-      email: true,
-      active: true,
-    },
+    where: { id: account.id },
+    data: { active: true },
+    select: { id: true, employeeNumber: true, name: true, email: true, active: true },
   });
 
+  emitAccountsChanged();
   res.json(employee);
+});
+
+/**
+ * Turns down a sign-up. The account never logged in and owns nothing, so it is
+ * deleted rather than kept around as a deactivated member.
+ */
+router.post("/employees/:id/reject", requireAdmin, async (req, res) => {
+  const account = await findAccount(req, res);
+  if (!account) return;
+
+  if (accountStatus(account) !== "PENDING") {
+    return res.status(409).json({ code: "NOT_PENDING", message: "That account is not waiting for approval" });
+  }
+
+  await prisma.employee.delete({ where: { id: account.id } });
+
+  emitAccountsChanged();
+  res.json({ success: true });
+});
+
+/**
+ * The reversible "baja": the person can no longer sign in, but their history,
+ * tasks and warnings stay, and an admin can bring the account back.
+ */
+router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
+  const account = await findAccount(req, res);
+  if (!account) return;
+
+  if (account.id === req.auth!.employeeId) {
+    return res.status(400).json({ code: "SELF_DEACTIVATE", message: "You cannot deactivate your own account" });
+  }
+  if (accountStatus(account) !== "ACTIVE") {
+    return res.status(409).json({ code: "NOT_ACTIVE", message: "That account is not active" });
+  }
+
+  // Same reason as the role change and the delete.
+  if (account.role === Role.ADMIN) {
+    const admins = await prisma.employee.count({ where: { role: Role.ADMIN, active: true } });
+    if (admins <= 1) {
+      return res
+        .status(400)
+        .json({ code: "LAST_ADMIN_DEACTIVATE", message: "You cannot deactivate the last active administrator" });
+    }
+  }
+
+  const now = new Date();
+  const employee = await prisma.$transaction(async (tx) => {
+    // Whatever they were doing ends now, or it would keep counting time.
+    await tx.activityHistory.updateMany({
+      where: { employeeId: account.id, endedAt: null },
+      data: { endedAt: now },
+    });
+    await tx.passwordChangeRequest.updateMany({
+      where: { employeeId: account.id, status: "PENDING" },
+      data: { status: "REJECTED", resolvedAt: now },
+    });
+    return tx.employee.update({
+      where: { id: account.id },
+      data: { active: false, deactivatedAt: now, currentStatus: "OFFLINE", statusSince: now },
+      select: { id: true, employeeNumber: true, name: true, currentStatus: true, statusSince: true },
+    });
+  });
+
+  cancelConfirmation(account.id);
+  disconnectEmployee(account.id);
+  emitStatusChanged(employee);
+  emitAccountsChanged();
+  res.json({ success: true });
+});
+
+router.post("/employees/:id/reactivate", requireAdmin, async (req, res) => {
+  const account = await findAccount(req, res);
+  if (!account) return;
+
+  if (accountStatus(account) !== "DEACTIVATED") {
+    return res.status(409).json({ code: "NOT_DEACTIVATED", message: "That account is not deactivated" });
+  }
+
+  await prisma.employee.update({
+    where: { id: account.id },
+    data: { active: true, deactivatedAt: null },
+  });
+
+  emitAccountsChanged();
+  res.json({ success: true });
 });
 
 router.post("/employees/:id/request-confirmation", requireStaff, async (req, res) => {
@@ -511,6 +620,9 @@ router.delete("/employees/:id", requireAdmin, async (req, res) => {
       where: { id },
     });
   });
+
+  disconnectEmployee(id);
+  emitAccountsChanged();
 
   res.json({
     success: true,

@@ -127,6 +127,23 @@ export function emitDownloadsChanged() {
 }
 
 /**
+ * Pending sign-ups, reset requests or the account list changed. No payload, so
+ * a broadcast leaks nothing; only the admins' Accounts tab listens.
+ */
+export function emitAccountsChanged() {
+  io?.emit("accounts:changed", {});
+}
+
+/**
+ * Drops every open socket of an account that was just deactivated. HTTP is
+ * already locked out by requireAuth re-reading `active`, but the socket
+ * middleware only checks at connect time.
+ */
+export function disconnectEmployee(employeeId: number) {
+  io?.in(employeeRoom(employeeId)).disconnectSockets(true);
+}
+
+/**
  * Emits only to the given employees, across all their open tabs. It emits to
  * per-employee rooms rather than per-conversation rooms so that join/leave does
  * not have to be kept in sync with every participant added and removed:

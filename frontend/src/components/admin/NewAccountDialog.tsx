@@ -119,7 +119,7 @@ export default function NewAccountDialog({ open, onClose, onCreated }: Props) {
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant="contained" onClick={() => void submit()} disabled={saving}>
           {saving ? t("account.creating") : t("account.create")}
         </Button>

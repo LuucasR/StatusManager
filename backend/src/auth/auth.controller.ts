@@ -9,6 +9,7 @@ import {
 import { generateToken } from "./auth.token";
 import { toEmployeeDto } from "./auth.dto";
 import { logger } from "../logger";
+import { notifyAccountRequest, notifyPasswordResetRequest } from "../admin/accounts";
 
 const loginSchema = z.object({
   employeeNumber: z.coerce.number().int().positive(),
@@ -62,8 +63,9 @@ export async function registerController(req: Request, res: Response) {
   if (!parsed.success) {
     return res.status(400).json({ code: "INVALID_INPUT", message: "Check the details you entered" });
   }
+  let employee;
   try {
-    const employee = await register(
+    employee = await register(
       parsed.data.name,
       parsed.data.email,
       parsed.data.password
@@ -73,8 +75,14 @@ export async function registerController(req: Request, res: Response) {
       code: "REGISTRATION_PENDING", message: "Request pending approval",
     });
   } catch {
-    res.status(409).json({ code: "EMAIL_TAKEN", message: "That email is already registered" });
+    return res.status(409).json({ code: "EMAIL_TAKEN", message: "That email is already registered" });
   }
+
+  // After the response: a failed notification must not turn a stored sign-up
+  // into an error, and the request shows up in the Accounts tab regardless.
+  notifyAccountRequest(employee).catch((error) =>
+    logger.error({ err: error }, "could not notify admins of a sign-up")
+  );
 }
 
 export async function forgotPasswordController(req: Request, res: Response) {
@@ -84,8 +92,14 @@ export async function forgotPasswordController(req: Request, res: Response) {
   }
 
   try {
-    const created = await requestPasswordReset(parsed.data.email);
-    if (!created) {
+    const requester = await requestPasswordReset(parsed.data.email);
+    if (requester) {
+      // Not awaited: the extra round trips would make a real address answer
+      // measurably slower than an unknown one.
+      notifyPasswordResetRequest(requester).catch((error) =>
+        logger.error({ err: error }, "could not notify admins of a password reset request")
+      );
+    } else {
       // Not an error: this is the enumeration-proof path for an address that
       // has no active account. Logged so a confused user can be traced.
       logger.info("password reset requested for an unknown or inactive email");

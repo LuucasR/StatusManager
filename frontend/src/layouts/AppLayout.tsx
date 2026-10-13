@@ -9,6 +9,7 @@ import {
   HowToRegRounded,
   InsightsRounded,
   LogoutRounded,
+  ManageAccountsRounded,
   MenuRounded,
   ViewKanbanRounded,
 } from "@mui/icons-material";
@@ -73,7 +74,14 @@ const links = [
   { to: "/patch-notes", key: "nav.patchNotes", Icon: DescriptionRounded },
   // Everyone downloads; admins get the edit controls on the page.
   { to: "/downloads", key: "nav.downloads", Icon: DownloadRounded },
-] as const satisfies readonly { to: string; key: string; Icon: SvgIconComponent }[];
+  // Admins only: sign-ups, password resets and every account's lifecycle.
+  { to: "/accounts", key: "nav.accounts", Icon: ManageAccountsRounded, adminOnly: true },
+] as const satisfies readonly {
+  to: string;
+  key: string;
+  Icon: SvgIconComponent;
+  adminOnly?: boolean;
+}[];
 
 /** Width of the sidebar from md up. */
 const SIDEBAR_WIDTH = 232;
@@ -86,15 +94,17 @@ function NavList({
   pathname,
   onLogout,
   badges,
+  isAdmin,
 }: {
   pathname: string;
   onLogout: () => void;
+  isAdmin: boolean;
   /** Counter per link path: unread announcements, warnings awaiting a decision. */
   badges: NavBadges;
 }) {
   return (
     <List sx={{ px: 1.5, py: 1.5 }}>
-      {links.map(({ to, key, Icon }) => {
+      {links.filter((link) => isAdmin || !("adminOnly" in link)).map(({ to, key, Icon }) => {
         const active = pathname.startsWith(to);
         return (
           <ListItemButton
@@ -237,7 +247,7 @@ export default function AppLayout() {
           <Divider />
 
           <Box onClick={() => setNavOpen(false)}>
-            <NavList pathname={pathname} onLogout={logout} badges={badges} />
+            <NavList pathname={pathname} onLogout={logout} badges={badges} isAdmin={isAdminRole(me?.role)} />
           </Box>
         </Box>
       </Drawer>
@@ -260,7 +270,7 @@ export default function AppLayout() {
             borderColor: "divider",
           }}
         >
-          <NavList pathname={pathname} onLogout={logout} badges={badges} />
+          <NavList pathname={pathname} onLogout={logout} badges={badges} isAdmin={isAdminRole(me?.role)} />
         </Box>
 
         <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
