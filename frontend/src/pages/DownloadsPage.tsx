@@ -1,15 +1,11 @@
-import { AddRounded, DeleteRounded, DownloadRounded, EditRounded } from "@mui/icons-material";
+import { AddRounded } from "@mui/icons-material";
 import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Container,
-  IconButton,
   Paper,
-  Stack,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
@@ -18,6 +14,7 @@ import { isAdminRole } from "../components/roles";
 import type { AppOutletContext } from "../layouts/AppLayout";
 import { t } from "../i18n";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
+import UtilityCard from "../components/downloads/UtilityCard";
 import UtilityDialog from "../components/downloads/UtilityDialog";
 import {
   createUtility,
@@ -130,62 +127,23 @@ export default function DownloadsPage() {
             display: "grid",
             gap: 2,
             mt: 3,
-            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
+            // minmax(0, 1fr): a plain 1fr grows to fit a long unbroken word, which
+            // made one column wider than the others.
+            gridTemplateColumns: {
+              xs: "minmax(0, 1fr)",
+              sm: "repeat(2, minmax(0, 1fr))",
+              md: "repeat(3, minmax(0, 1fr))",
+            },
           }}
         >
           {utilities.map((utility) => (
-            <Paper
+            <UtilityCard
               key={utility.id}
-              className="status-card"
-              elevation={0}
-              sx={{ p: 3, display: "flex", flexDirection: "column", gap: 1.5 }}
-            >
-              <Stack direction="row" sx={{ alignItems: "flex-start", gap: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, flex: 1, wordBreak: "break-word" }}>
-                  {utility.name}
-                </Typography>
-                {admin && (
-                  <Stack direction="row">
-                    <Tooltip title={t("common.edit")}>
-                      <IconButton size="small" onClick={() => openEdit(utility)}>
-                        <EditRounded fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t("common.delete")}>
-                      <IconButton size="small" onClick={() => void remove(utility)}>
-                        <DeleteRounded fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                )}
-              </Stack>
-
-              {(utility.version || utility.platform || utility.sizeLabel) && (
-                <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }}>
-                  {utility.version && <Chip size="small" label={utility.version} />}
-                  {utility.platform && <Chip size="small" variant="outlined" label={utility.platform} />}
-                  {utility.sizeLabel && <Chip size="small" variant="outlined" label={utility.sizeLabel} />}
-                </Stack>
-              )}
-
-              {utility.description && (
-                <Typography color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
-                  {utility.description}
-                </Typography>
-              )}
-
-              <Button
-                variant="contained"
-                startIcon={<DownloadRounded />}
-                component="a"
-                href={utility.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ mt: "auto", alignSelf: "flex-start" }}
-              >
-                {t("downloads.download")}
-              </Button>
-            </Paper>
+              utility={utility}
+              admin={admin}
+              onEdit={openEdit}
+              onDelete={(item) => void remove(item)}
+            />
           ))}
         </Box>
       )}
