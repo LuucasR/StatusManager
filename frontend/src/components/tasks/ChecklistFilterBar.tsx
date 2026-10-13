@@ -1,11 +1,13 @@
 import { FilterAltOffRounded, SearchRounded } from "@mui/icons-material";
 import {
   Button,
+  Checkbox,
   Chip,
   FormControl,
   FormControlLabel,
   InputAdornment,
   InputLabel,
+  ListItemText,
   MenuItem,
   Select,
   Stack,
@@ -17,10 +19,11 @@ import {
   EMPTY_CHECKLIST_FILTERS,
   hasChecklistFilters,
   type ChecklistFilters,
-  type ChecklistMemberFilter,
 } from "./checklistFilter";
 import type { TaskParticipant } from "./types";
 import { t, tf } from "../../i18n";
+
+const NOBODY = "none";
 
 type Props = {
   value: ChecklistFilters;
@@ -34,6 +37,8 @@ type Props = {
 /** Search and filters above a task's checklist, applied on the client. */
 export default function ChecklistFilterBar({ value, onChange, members, shown, total }: Props) {
   const set = (patch: Partial<ChecklistFilters>) => onChange({ ...value, ...patch });
+  // The Select works on strings; "nobody" rides along as a sentinel key.
+  const selected = value.unassigned ? [NOBODY] : value.members.map(String);
   const statuses = [
     { key: "all", label: t("common.all") },
     { key: "open", label: t("checklistFilter.open") },
@@ -59,23 +64,42 @@ export default function ChecklistFilterBar({ value, onChange, members, shown, to
             },
           }}
         />
-        <FormControl size="small" sx={{ minWidth: { sm: 220 } }}>
+        <FormControl size="small" sx={{ minWidth: { sm: 240 }, maxWidth: { sm: 320 } }}>
           <InputLabel>{t("checklistFilter.member")}</InputLabel>
-          <Select
-            value={String(value.member)}
+          <Select<string[]>
+            multiple
+            value={selected}
             label={t("checklistFilter.member")}
             onChange={(event) => {
               const raw = event.target.value;
-              const member: ChecklistMemberFilter =
-                raw === "all" || raw === "none" ? raw : Number(raw);
-              set({ member, onlyMember: typeof member === "number" && value.onlyMember });
+              const next = typeof raw === "string" ? raw.split(",") : raw;
+              // "Nobody" and people exclude each other: whichever was picked last wins.
+              if (next.includes(NOBODY) && !value.unassigned) {
+                return set({ members: [], unassigned: true, onlyMembers: false });
+              }
+              const ids = next.filter((key) => key !== NOBODY).map(Number);
+              set({
+                members: ids,
+                unassigned: false,
+                onlyMembers: ids.length > 0 && value.onlyMembers,
+              });
             }}
+            renderValue={(keys) =>
+              keys.includes(NOBODY)
+                ? t("checklistFilter.nobody")
+                : keys
+                    .map((key) => members.find((member) => String(member.id) === key)?.name ?? key)
+                    .join(", ")
+            }
           >
-            <MenuItem value="all">{t("common.all")}</MenuItem>
-            <MenuItem value="none">{t("checklistFilter.nobody")}</MenuItem>
+            <MenuItem value={NOBODY}>
+              <Checkbox size="small" checked={value.unassigned} />
+              <ListItemText primary={t("checklistFilter.nobody")} />
+            </MenuItem>
             {members.map((member) => (
               <MenuItem key={member.id} value={String(member.id)}>
-                {member.name}
+                <Checkbox size="small" checked={value.members.includes(member.id)} />
+                <ListItemText primary={member.name} />
               </MenuItem>
             ))}
           </Select>
@@ -104,12 +128,18 @@ export default function ChecklistFilterBar({ value, onChange, members, shown, to
           control={
             <Switch
               size="small"
-              checked={value.onlyMember}
-              disabled={typeof value.member !== "number"}
-              onChange={(event) => set({ onlyMember: event.target.checked })}
+              checked={value.onlyMembers}
+              disabled={value.members.length === 0}
+              onChange={(event) => set({ onlyMembers: event.target.checked })}
             />
           }
-          label={<Typography variant="body2">{t("checklistFilter.onlyMember")}</Typography>}
+          label={
+            <Typography variant="body2">
+              {value.members.length > 1
+                ? t("checklistFilter.onlyMembers")
+                : t("checklistFilter.onlyMember")}
+            </Typography>
+          }
         />
 
         <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
