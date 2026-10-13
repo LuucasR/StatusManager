@@ -229,6 +229,10 @@ model Task {
   startsAt                DateTime
   endsAt                  DateTime
   pinned                  Boolean   @default(false)
+  /// When the task leaves the board. Null = the default, 14 days after endsAt
+  /// (task-state.ts). Set by an ADMIN in the task form, or by restoring the task
+  /// from the archive, which gives it another 14 days. Pinning still wins.
+  archiveAt               DateTime?
   /// Stamped when the end-of-day job moves a task out of IN_PROGRESS, cleared
   /// when the next working morning puts it back.
   ///

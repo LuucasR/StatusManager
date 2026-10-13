@@ -28,6 +28,8 @@ type Props = {
   onSubmit: (payload: TaskPayload, taskId?: number) => Promise<void>;
   /** A new task from a non-admin waits for an admin before reaching the board. */
   needsApproval?: boolean;
+  /** Admins only: when the task leaves the board. */
+  canSetArchiveDate?: boolean;
 };
 
 /**
@@ -65,11 +67,14 @@ export default function TaskFormDialog({
   onClose,
   onSubmit,
   needsApproval = false,
+  canSetArchiveDate = false,
 }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
+  // "" = the default, 14 days after the end.
+  const [archiveAt, setArchiveAt] = useState("");
   const [participants, setParticipants] = useState<TaskParticipant[]>([]);
   const [checklist, setChecklist] = useState<ChecklistDraft[]>([]);
   const [autoComplete, setAutoComplete] = useState(false);
@@ -111,6 +116,7 @@ export default function TaskFormDialog({
       setDescription(task.description);
       setStartsAt(toLocalInputValue(task.startsAt));
       setEndsAt(toLocalInputValue(task.endsAt));
+      setArchiveAt(task.archiveAt ? toLocalInputValue(task.archiveAt) : "");
       // Rebuilt against `employees` so isOptionEqualToValue sees the same object
       // references as the Autocomplete's options.
       setParticipants(
@@ -125,6 +131,7 @@ export default function TaskFormDialog({
       setDescription("");
       setStartsAt(range.startsAt);
       setEndsAt(range.endsAt);
+      setArchiveAt("");
       setParticipants([]);
       setChecklist([]);
       setAutoComplete(false);
@@ -140,6 +147,9 @@ export default function TaskFormDialog({
     // Mirrors the backend validation, so the form does not depend on the round-trip.
     if (new Date(endsAt) <= new Date(startsAt)) {
       return setError(t("error.INVALID_DATE_ORDER"));
+    }
+    if (canSetArchiveDate && archiveAt && new Date(archiveAt) <= new Date(endsAt)) {
+      return setError(t("error.INVALID_ARCHIVE_DATE"));
     }
     if (participants.length === 0) return setError(t("taskForm.participantsRequired"));
 
@@ -162,6 +172,10 @@ export default function TaskFormDialog({
           // A switch with no items would promise something that cannot happen:
           // an empty list never completes. See applyChecklistAutoComplete.
           autoCompleteOnChecklist: autoComplete && items.length > 0,
+          // Left out for everyone else: the backend refuses it from a non-admin.
+          ...(canSetArchiveDate
+            ? { archiveAt: archiveAt ? fromLocalInputValue(archiveAt) : null }
+            : {}),
         },
         task?.id
       );
@@ -239,6 +253,17 @@ export default function TaskFormDialog({
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startsAt } }}
             />
           </Stack>
+
+          {canSetArchiveDate && (
+            <TextField
+              label={t("taskForm.archiveAt")}
+              type="datetime-local"
+              value={archiveAt}
+              onChange={(e) => setArchiveAt(e.target.value)}
+              helperText={t("taskForm.archiveAtHint")}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: endsAt } }}
+            />
+          )}
         </Stack>
       </DialogContent>
 

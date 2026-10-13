@@ -10,6 +10,7 @@ import type { AuthPayload } from "../auth/auth.token";
 import { emitTaskChanged } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
 import {
+  archivedTasksQuerySchema,
   changeTaskColorSchema,
   changeTaskPinSchema,
   changeTaskStateSchema,
@@ -17,10 +18,16 @@ import {
   createTaskSchema,
   reorderChecklistSchema,
   reorderTasksSchema,
+  restoreTaskSchema,
   setChecklistItemSchema,
   updateTaskSchema,
 } from "./task-validation";
-import { TASK_STATE_META, taskArchiveCutoff, visibleTasksWhere } from "./task-state";
+import {
+  TASK_STATE_META,
+  archivedTasksWhere,
+  restoredArchiveAt,
+  visibleTasksWhere,
+} from "./task-state";
 import { applyChecklistAutoComplete, diffChecklist } from "./task-checklist";
 import { syncTaskProgress } from "./task-timing";
 import {
@@ -102,6 +109,15 @@ const INVALID_ASSIGNEE = {
 const TASK_NOT_APPROVED = {
   code: "TASK_NOT_APPROVED",
   message: "This task is waiting for an admin's approval",
+};
+
+/**
+ * When a task leaves the board is an admin's call, like its colour flag: the
+ * people working it would otherwise be able to keep it on the board forever.
+ */
+const ARCHIVE_DATE_NOT_ALLOWED = {
+  code: "ARCHIVE_DATE_NOT_ALLOWED",
+  message: "Only an admin can set the archive date",
 };
 
 /** Who sees tasks that are not approved: admins, and the creator their own. */
@@ -284,8 +300,49 @@ router.get("/report.pdf", async (req, res) => {
     subtitle,
     periodLabel,
     rows: tasks.map(toTaskDto),
-    archiveCutoff: taskArchiveCutoff(),
   });
+});
+
+/**
+ * The admin's archive: approved tasks that fell off the board, with the filters
+ * of the archive dialog. Each filter is its own entry of `AND: [...]` because
+ * archivedTasksWhere and the text search both contribute an `OR`.
+ *
+ * IMPORTANT: registered BEFORE "/:id", same reason as /report.pdf.
+ */
+router.get("/archived", requireAdmin, async (req, res) => {
+  const parsed = archivedTasksQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
+  }
+  const { q, state, participantId, from, to } = parsed.data;
+
+  const filters: Prisma.TaskWhereInput[] = [{ approval: "APPROVED" }, archivedTasksWhere()];
+  if (q) {
+    // "#123" or "123" also matches by id, which is how the report names tasks.
+    const id = parseId(q.replace(/^#/, ""));
+    filters.push({
+      OR: [
+        { title: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+        ...(id ? [{ id }] : []),
+      ],
+    });
+  }
+  if (state) filters.push({ state });
+  if (participantId) filters.push({ participants: { some: { employeeId: participantId } } });
+  // Local midnight to local end of day, like the custom period of /report.pdf.
+  if (from) filters.push({ endsAt: { gte: new Date(`${from}T00:00:00`) } });
+  if (to) filters.push({ endsAt: { lte: new Date(`${to}T23:59:59.999`) } });
+
+  const tasks = await prisma.task.findMany({
+    where: { AND: filters },
+    include: TASK_INCLUDE,
+    orderBy: [{ endsAt: "desc" }, { id: "desc" }],
+    take: 500,
+  });
+
+  res.json(tasks.map(toTaskDto));
 });
 
 // No archive filter on purpose: this is the recovery path. The report gives you
@@ -341,6 +398,7 @@ router.post("/", async (req, res) => {
   }
 
   const needsApproval = !isAdmin(req.auth!.role);
+  if (parsed.data.archiveAt && needsApproval) return res.status(403).json(ARCHIVE_DATE_NOT_ALLOWED);
 
   // A transaction because the conversation needs the task id for its key.
   const task = await prisma.$transaction(async (tx) => {
@@ -354,6 +412,7 @@ router.post("/", async (req, res) => {
         createdById: req.auth!.employeeId,
         approval: needsApproval ? "PENDING" : "APPROVED",
         autoCompleteOnChecklist: parsed.data.autoCompleteOnChecklist,
+        archiveAt: parsed.data.archiveAt ?? null,
         participants: {
           create: participantIds.map((employeeId) => ({ employeeId })),
         },
@@ -540,6 +599,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       state: true,
       startsAt: true,
       endsAt: true,
+      archiveAt: true,
       // The previous set, so additions and removals can be computed instead of
       // blindly replacing.
       participants: { select: { employeeId: true } },
@@ -562,6 +622,24 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       .status(400)
       .json({ code: "INVALID_DATE_ORDER", message: "The end date must be after the start date" });
   }
+
+  if (parsed.data.archiveAt !== undefined && !isAdmin(req.auth!.role)) {
+    return res.status(403).json(ARCHIVE_DATE_NOT_ALLOWED);
+  }
+  if (parsed.data.archiveAt && parsed.data.archiveAt <= endsAt) {
+    return res
+      .status(400)
+      .json({ code: "INVALID_ARCHIVE_DATE", message: "The archive date must be after the end date" });
+  }
+  // Moving the end past a date that was not touched in this request (typically
+  // the one a restore set) would archive the task before it is over: it goes
+  // back to the default, 14 days after the new end, instead.
+  const archiveAt =
+    parsed.data.archiveAt !== undefined
+      ? parsed.data.archiveAt
+      : current.archiveAt && current.archiveAt <= endsAt
+        ? null
+        : undefined;
 
   if (
     parsed.data.participantIds &&
@@ -619,6 +697,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
         startsAt: parsed.data.startsAt,
         endsAt: parsed.data.endsAt,
         autoCompleteOnChecklist: parsed.data.autoCompleteOnChecklist,
+        archiveAt,
         // A new column: the old manual position meant nothing there.
         ...(stateChanged ? { boardPosition: null } : {}),
       },
@@ -806,6 +885,63 @@ router.patch("/:id/state", async (req, res) => {
     type: "TASK_STATE",
     title: task.title,
     body: `"${task.title}" moved to ${TASK_STATE_META[task.state].label}`,
+    taskId: id,
+  });
+
+  res.json(toTaskDto(task));
+});
+
+/**
+ * Brings an archived task back to the board, in the column the admin picked,
+ * for another 14 days. Moves it the way PATCH /:id/state does, so the clock
+ * and the task chat follow the new state.
+ */
+router.post("/:id/restore", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const parsed = restoreTaskSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ code: "INVALID_STATE", message: "Invalid state" });
+  }
+
+  const exists = await prisma.task.findUnique({
+    where: { id },
+    select: { id: true, state: true, approval: true },
+  });
+  if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (exists.approval !== "APPROVED") return res.status(409).json(TASK_NOT_APPROVED);
+
+  const archived = await prisma.task.count({ where: { id, ...archivedTasksWhere() } });
+  if (!archived) {
+    return res
+      .status(409)
+      .json({ code: "TASK_NOT_ARCHIVED", message: "This task is already on the board" });
+  }
+
+  const { state } = parsed.data;
+  const task = await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id },
+      data: {
+        state,
+        archiveAt: restoredArchiveAt(),
+        // Its old manual position is long stale: bottom of the column.
+        boardPosition: null,
+      },
+    });
+    await syncTaskProgress(tx, id, exists.state, state);
+    await syncTaskConversationState(tx, id, state);
+    return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
+  });
+
+  emitTaskChanged({ type: "restored", taskId: id, state: task.state });
+  await notify({
+    recipientIds: task.participants.map((link) => link.employee.id),
+    actorId: req.auth!.employeeId,
+    type: "TASK_STATE",
+    title: task.title,
+    body: `"${task.title}" is back on the board in ${TASK_STATE_META[task.state].label}`,
     taskId: id,
   });
 

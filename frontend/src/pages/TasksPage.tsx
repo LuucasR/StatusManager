@@ -1,4 +1,4 @@
-import { AddRounded, PictureAsPdfRounded } from "@mui/icons-material";
+import { AddRounded, Inventory2Rounded, PictureAsPdfRounded } from "@mui/icons-material";
 import {
   Alert,
   Box,
@@ -20,6 +20,7 @@ import TaskDetailDialog from "../components/tasks/TaskDetailDialog";
 import TaskFormDialog from "../components/tasks/TaskFormDialog";
 import TaskReportDialog from "../components/tasks/TaskReportDialog";
 import PendingApprovals from "../components/tasks/PendingApprovals";
+import ArchivedTasksDialog from "../components/tasks/ArchivedTasksDialog";
 import {
   approveTask,
   createTask,
@@ -71,6 +72,7 @@ export default function TasksPage() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [reportOpen, setReportOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const pdf = usePdfPreview();
 
   // The socket handler is registered once; it needs to read the current id.
@@ -419,6 +421,17 @@ export default function TasksPage() {
             {t("tasksPage.pdfReport")}
           </Button>
 
+          {isAdmin && (
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<Inventory2Rounded />}
+              onClick={() => setArchiveOpen(true)}
+            >
+              {t("archive.open")}
+            </Button>
+          )}
+
           {/* Anyone can propose a task; only an admin's skips the approval. */}
           {me && (
             <Button
@@ -474,9 +487,21 @@ export default function TasksPage() {
         task={editing}
         employees={employees}
         needsApproval={!isAdmin}
+        canSetArchiveDate={isAdmin}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
       />
+
+      {/* Before the detail dialog, so a task opened from the archive stacks on top. */}
+      {isAdmin && (
+        <ArchivedTasksDialog
+          open={archiveOpen}
+          employees={employees}
+          onClose={() => setArchiveOpen(false)}
+          onOpenTask={(task) => void openDetailById(task.id)}
+          onChanged={() => void load()}
+        />
+      )}
 
       <TaskDetailDialog
         open={detailId !== null}

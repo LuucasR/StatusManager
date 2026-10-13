@@ -53,6 +53,8 @@ export const createTaskSchema = z
     participantIds,
     checklist: checklist.optional().default([]),
     autoCompleteOnChecklist: z.boolean().optional().default(false),
+    // ADMIN only, enforced in the route. null/absent = 14 days after endsAt.
+    archiveAt: dateInput.nullable().optional(),
   })
   .superRefine((value, context) => {
     if (value.endsAt <= value.startsAt) {
@@ -60,6 +62,13 @@ export const createTaskSchema = z
         code: "custom",
         path: ["endsAt"],
         message: "The end date must be after the start date",
+      });
+    }
+    if (value.archiveAt && value.archiveAt <= value.endsAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["archiveAt"],
+        message: "The archive date must be after the end date",
       });
     }
   });
@@ -79,6 +88,8 @@ export const updateTaskSchema = z
     participantIds: participantIds.optional(),
     checklist: checklist.optional(),
     autoCompleteOnChecklist: z.boolean().optional(),
+    // ADMIN only, enforced in the route. null goes back to the default.
+    archiveAt: dateInput.nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "There are no changes to apply",
@@ -86,6 +97,21 @@ export const updateTaskSchema = z
 
 export const changeTaskStateSchema = z.object({
   state: z.nativeEnum(TaskState),
+});
+
+/** Bringing an archived task back: the column it lands in. */
+export const restoreTaskSchema = z.object({
+  state: z.nativeEnum(TaskState),
+});
+
+/** Filters of the admin's archive (GET /tasks/archived), all optional. */
+export const archivedTasksQuerySchema = z.object({
+  q: z.string().trim().max(120).optional(),
+  state: z.nativeEnum(TaskState).optional(),
+  participantId: z.coerce.number().int().positive().optional(),
+  // yyyy-mm-dd, on endsAt, both ends inclusive.
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 /**

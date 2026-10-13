@@ -116,7 +116,8 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
     // Always computed, even when pinned: the frontend needs it to tell
     // "pinned and current" from "pinned and already past the cutoff", and it
     // keeps the 14-day constant living in one place.
-    archivesAt: taskArchivesAt(task.endsAt),
+    archiveAt: task.archiveAt,
+    archivesAt: taskArchivesAt(task),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     createdBy: task.createdBy,

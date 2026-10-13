@@ -17,6 +17,8 @@ export type ReportTask = {
   startsAt: Date;
   endsAt: Date;
   pinned: boolean;
+  /** Effective archive instant (explicit archiveAt or endsAt + 14 days). */
+  archivesAt: Date;
   createdBy: { name: string } | null;
   participants: { employeeNumber: number; name: string }[];
   checklist: { done: boolean }[];
@@ -31,11 +33,6 @@ type TaskReportOptions = {
   subtitle: string;
   periodLabel: string;
   rows: ReportTask[];
-  /**
-   * Archive cutoff, computed by the router. Passed in as a parameter so this
-   * module does not depend on the business rules in tasks/.
-   */
-  archiveCutoff: Date;
   generatedAt?: Date;
 };
 
@@ -51,7 +48,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
   const generatedAt = options.generatedAt ?? new Date();
   const { width: pageWidth, margin, contentWidth } = PAGE;
 
-  const isArchived = (row: ReportTask) => !row.pinned && row.endsAt < options.archiveCutoff;
+  const isArchived = (row: ReportTask) => !row.pinned && row.archivesAt < generatedAt;
 
   const doneCount = options.rows.filter((row) => row.state === "DONE").length;
   const archivedCount = options.rows.filter(isArchived).length;
@@ -90,7 +87,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
 
   chrome.drawSectionTitle(
     "Task detail",
-    "DEADLINE is the planned window; REAL TIME is the time actually spent In progress. Grey rows are archived (14+ days past their end); the violet bar marks pinned tasks."
+    "DEADLINE is the planned window; REAL TIME is the time actually spent In progress. Grey rows are archived (off the board); the violet bar marks pinned tasks."
   );
   drawTableHeader();
 

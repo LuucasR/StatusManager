@@ -15,9 +15,18 @@ export function taskArchiveCutoff(now: Date = new Date()) {
   return new Date(now.getTime() - TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
 }
 
-/** Exact instant this task will be archived, if nobody pins it. */
-export function taskArchivesAt(endsAt: Date) {
-  return new Date(endsAt.getTime() + TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
+/**
+ * Exact instant this task will be archived, if nobody pins it: the explicit
+ * `archiveAt` (an admin's date, or a restore from the archive) or else 14 days
+ * after its end.
+ */
+export function taskArchivesAt(task: { endsAt: Date; archiveAt: Date | null }) {
+  return task.archiveAt ?? new Date(task.endsAt.getTime() + TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
+}
+
+/** `archiveAt` a task restored from the archive gets: another 14 days on the board. */
+export function restoredArchiveAt(now: Date = new Date()) {
+  return new Date(now.getTime() + TASK_ARCHIVE_AFTER_DAYS * DAY_MS);
 }
 
 /**
@@ -27,14 +36,30 @@ export function taskArchivesAt(endsAt: Date) {
  *
  * A 14x24h sliding window, not normalised to midnight, so that the backend
  * predicate and the frontend's "archived in N days" chip are exactly the same:
- * visible <=> endsAt >= now - 14d <=> archivesAt >= now.
+ * visible <=> taskArchivesAt(task) >= now. Kept to a single `OR` so callers can
+ * spread it next to flat keys.
  *
  * CAREFUL: do not use in GET /tasks/report.pdf. The report includes archived
- * tasks on purpose; it is the only place they can be seen.
+ * tasks on purpose.
  */
 export function visibleTasksWhere(now: Date = new Date()) {
   return {
-    OR: [{ endsAt: { gte: taskArchiveCutoff(now) } }, { pinned: true }],
+    OR: [
+      { archiveAt: null, endsAt: { gte: taskArchiveCutoff(now) } },
+      { archiveAt: { gte: now } },
+      { pinned: true },
+    ],
+  } satisfies Prisma.TaskWhereInput;
+}
+
+/** Exact complement of visibleTasksWhere: what the admin's archive lists. */
+export function archivedTasksWhere(now: Date = new Date()) {
+  return {
+    pinned: false,
+    OR: [
+      { archiveAt: null, endsAt: { lt: taskArchiveCutoff(now) } },
+      { archiveAt: { lt: now } },
+    ],
   } satisfies Prisma.TaskWhereInput;
 }
 

@@ -14,6 +14,8 @@ export type TaskPayload = {
    */
   checklist: { id?: number; text: string; assigneeIds: number[] }[];
   autoCompleteOnChecklist: boolean;
+  /** Admin only, left out otherwise. null = 14 days after the end. */
+  archiveAt?: string | null;
 };
 
 export const listTasks = () => api<Task[]>("/tasks");
@@ -80,3 +82,27 @@ export const addComment = (id: number, body: string) =>
     method: "POST",
     body: JSON.stringify({ body }),
   });
+
+/** Filters of the admin's archive. Empty values are left out of the query. */
+export type ArchiveFilters = {
+  q?: string;
+  state?: TaskState;
+  participantId?: number;
+  /** yyyy-mm-dd, on the end date, both inclusive. */
+  from?: string;
+  to?: string;
+};
+
+/** Admin only: approved tasks that have left the board. */
+export const listArchivedTasks = (filters: ArchiveFilters = {}) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const query = params.toString();
+  return api<Task[]>(`/tasks/archived${query ? `?${query}` : ""}`);
+};
+
+/** Admin only: back to the board in `state`, for another 14 days. */
+export const restoreTask = (id: number, state: TaskState) =>
+  api<Task>(`/tasks/${id}/restore`, { method: "POST", body: JSON.stringify({ state }) });

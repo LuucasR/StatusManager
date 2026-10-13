@@ -73,7 +73,9 @@ export type Task = {
   reviewedAt?: string | null;
   /** Set while the task is one the end-of-day job paused, cleared when resumed. */
   autoPausedAt: string | null;
-  /** endsAt + 14 days. The backend owns the constant. */
+  /** Archive date an admin set, or the one a restore gave it. null = the default. */
+  archiveAt?: string | null;
+  /** When it leaves the board: archiveAt, or endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
   /**
    * Real time the task spent In progress, CLOSED stretches only. startsAt/endsAt
