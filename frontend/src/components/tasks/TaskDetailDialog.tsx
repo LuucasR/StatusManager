@@ -21,7 +21,7 @@ import {
   PushPinOutlined,
   PushPinRounded,
 } from "@mui/icons-material";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Alert,
   Avatar,
@@ -46,6 +46,8 @@ import { alpha } from "@mui/material/styles";
 import MessageComposer from "../chat/MessageComposer";
 import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
+import ChecklistFilterBar from "./ChecklistFilterBar";
+import { EMPTY_CHECKLIST_FILTERS, filterChecklist, hasChecklistFilters } from "./checklistFilter";
 import TaskFacts from "./TaskFacts";
 import { formatCommentDate } from "./datetime";
 import {
@@ -159,6 +161,12 @@ export default function TaskDetailDialog({
   // no read permission: mounting it anyway would be a guaranteed 403.
   const thread = useConversation(canReadChat ? (task?.conversationId ?? null) : null);
 
+  // Starts clean for every task opened; survives the reloads of the same one
+  // (ticking an item, a socket refresh).
+  const [filters, setFilters] = useState(EMPTY_CHECKLIST_FILTERS);
+  const taskId = task?.id;
+  useEffect(() => setFilters(EMPTY_CHECKLIST_FILTERS), [taskId]);
+
   const blockedReason = !task
     ? null
     : task.chatClosed
@@ -265,6 +273,18 @@ export default function TaskDetailDialog({
               {task.checklist.length > 0 &&
                 (() => {
                   const { done, total } = checklistProgress(task);
+                  const visible = filterChecklist(task.checklist, filters);
+                  const filtering = hasChecklistFilters(filters);
+                  // Dragging inside a partial list cannot say where the item goes
+                  // among the hidden ones, so reordering waits for a full list.
+                  const reorderable = canReorder && !filtering;
+                  const members = [
+                    ...new Map(
+                      task.checklist
+                        .flatMap((item) => item.assignees)
+                        .map((assignee) => [assignee.id, assignee])
+                    ).values(),
+                  ].sort((a, b) => a.name.localeCompare(b.name));
                   return (
                     <Box>
                       <Typography variant="overline" color="text.secondary">
@@ -276,6 +296,20 @@ export default function TaskDetailDialog({
                         value={(done / total) * 100}
                         sx={{ height: 6, borderRadius: 3, my: 1 }}
                       />
+
+                      <ChecklistFilterBar
+                        value={filters}
+                        onChange={setFilters}
+                        members={members}
+                        shown={visible.length}
+                        total={total}
+                      />
+
+                      {visible.length === 0 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                          {t("checklistFilter.empty")}
+                        </Typography>
+                      )}
 
                       <DndContext
                         sensors={sensors}
@@ -290,12 +324,12 @@ export default function TaskDetailDialog({
                         }}
                       >
                         <SortableContext
-                          items={task.checklist.map((item) => item.id)}
+                          items={visible.map((item) => item.id)}
                           strategy={verticalListSortingStrategy}
                         >
                           <Stack>
-                            {task.checklist.map((item) => (
-                              <SortableChecklistRow key={item.id} id={item.id} enabled={canReorder}>
+                            {visible.map((item) => (
+                              <SortableChecklistRow key={item.id} id={item.id} enabled={reorderable}>
                                 <FormControlLabel
                                   control={
                                     <Checkbox
