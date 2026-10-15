@@ -118,12 +118,19 @@ export default function TaskFormDialog({
       setEndsAt(toLocalInputValue(task.endsAt));
       setArchiveAt(task.archiveAt ? toLocalInputValue(task.archiveAt) : "");
       // Rebuilt against `employees` so isOptionEqualToValue sees the same object
-      // references as the Autocomplete's options.
-      setParticipants(
-        task.participants
-          .map((participant) => employees.find((e) => e.id === participant.id) ?? participant)
+      // references as the Autocomplete's options. Somebody missing from it has
+      // been deactivated: they are dropped, or saving would be refused.
+      const kept = employees.length
+        ? task.participants.flatMap((participant) => employees.filter((e) => e.id === participant.id))
+        : task.participants;
+      const keptIds = new Set(kept.map((participant) => participant.id));
+      setParticipants(kept);
+      setChecklist(
+        toDrafts(task.checklist).map((draft) => ({
+          ...draft,
+          assigneeIds: draft.assigneeIds.filter((id) => keptIds.has(id)),
+        }))
       );
-      setChecklist(toDrafts(task.checklist));
       setAutoComplete(task.autoCompleteOnChecklist);
     } else {
       const range = defaultRange();

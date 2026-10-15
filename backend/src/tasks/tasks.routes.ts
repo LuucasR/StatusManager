@@ -30,6 +30,7 @@ import {
 } from "./task-state";
 import { applyChecklistAutoComplete, diffChecklist } from "./task-checklist";
 import { syncTaskProgress } from "./task-timing";
+import { recordTaskEvents, taskEditEvents, type TaskEventInput } from "./task-history";
 import {
   ensureTaskConversation,
   postMessage,
@@ -430,6 +431,18 @@ router.post("/", async (req, res) => {
       },
       select: { id: true, title: true, state: true },
     });
+    await recordTaskEvents(tx, created.id, req.auth!.employeeId, [
+      { type: "CREATED" },
+      ...participantIds.map((targetId): TaskEventInput => ({ type: "PARTICIPANT_ADDED", targetId })),
+      ...parsed.data.checklist.flatMap((item): TaskEventInput[] => [
+        { type: "ITEM_CREATED", itemText: item.text },
+        ...item.assigneeIds.map((targetId): TaskEventInput => ({
+          type: "ITEM_ASSIGNED",
+          itemText: item.text,
+          targetId,
+        })),
+      ]),
+    ]);
     if (!needsApproval) {
       // Created straight into IN_PROGRESS: the clock starts now.
       await syncTaskProgress(tx, created.id, null, created.state);
@@ -505,6 +518,7 @@ router.post("/:id/approve", requireAdmin, async (req, res) => {
         rejectReason: null,
       },
     });
+    await recordTaskEvents(tx, id, req.auth!.employeeId, [{ type: "APPROVED" }]);
     await syncTaskProgress(tx, id, null, current.state);
     await ensureTaskConversation(tx, current, participantIds);
     return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
@@ -554,15 +568,19 @@ router.post("/:id/reject", requireAdmin, async (req, res) => {
   }
 
   const reason = parsed.data.reason || null;
-  const task = await prisma.task.update({
-    where: { id },
-    data: {
-      approval: "REJECTED",
-      reviewedById: req.auth!.employeeId,
-      reviewedAt: new Date(),
-      rejectReason: reason,
-    },
-    include: TASK_INCLUDE,
+  const task = await prisma.$transaction(async (tx) => {
+    const updated = await tx.task.update({
+      where: { id },
+      data: {
+        approval: "REJECTED",
+        reviewedById: req.auth!.employeeId,
+        reviewedAt: new Date(),
+        rejectReason: reason,
+      },
+      include: TASK_INCLUDE,
+    });
+    await recordTaskEvents(tx, id, req.auth!.employeeId, [{ type: "REJECTED", detail: reason }]);
+    return updated;
   });
 
   emitTaskChanged({ type: "updated", taskId: id });
@@ -596,6 +614,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     where: { id },
     select: {
       title: true,
+      description: true,
       state: true,
       startsAt: true,
       endsAt: true,
@@ -687,7 +706,16 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     return res.status(400).json(CHECKLIST_ITEM_NOT_FOUND);
   }
 
+  const history = taskEditEvents({
+    current,
+    next: parsed.data,
+    added,
+    removed,
+    checklistDiff,
+  });
+
   const { task, autoCompleted } = await prisma.$transaction(async (tx) => {
+    await recordTaskEvents(tx, id, req.auth!.employeeId, history);
     await tx.task.update({
       where: { id },
       data: {
@@ -794,6 +822,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       !parsed.data.state && (nextChecklist || parsed.data.autoCompleteOnChecklist !== undefined)
         ? await applyChecklistAutoComplete(tx, id)
         : false;
+    if (autoCompleted) await recordTaskEvents(tx, id, null, [{ type: "AUTO_COMPLETED" }]);
 
     // Re-read AFTER all of it: the DTO would otherwise return the stale state.
     return {
@@ -870,6 +899,11 @@ router.patch("/:id/state", async (req, res) => {
         ...(parsed.data.state !== exists.state ? { boardPosition: null } : {}),
       },
     });
+    if (parsed.data.state !== exists.state) {
+      await recordTaskEvents(tx, id, req.auth!.employeeId, [
+        { type: "STATE_CHANGED", detail: parsed.data.state },
+      ]);
+    }
     // Real time taken: counted only while the task sits in IN_PROGRESS.
     await syncTaskProgress(tx, id, exists.state, parsed.data.state);
     // The task chat closes on DONE and reopens when moved back.
@@ -930,6 +964,7 @@ router.post("/:id/restore", requireAdmin, async (req, res) => {
         boardPosition: null,
       },
     });
+    await recordTaskEvents(tx, id, req.auth!.employeeId, [{ type: "RESTORED", detail: state }]);
     await syncTaskProgress(tx, id, exists.state, state);
     await syncTaskConversationState(tx, id, state);
     return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
@@ -964,7 +999,7 @@ router.patch("/:id/pin", async (req, res) => {
 
   const exists = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, pinned: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
@@ -976,10 +1011,17 @@ router.patch("/:id/pin", async (req, res) => {
       .json({ code: "PIN_NOT_ALLOWED", message: "Only participants can pin this task" });
   }
 
-  const task = await prisma.task.update({
-    where: { id },
-    data: { pinned: parsed.data.pinned },
-    include: TASK_INCLUDE,
+  const task = await prisma.$transaction(async (tx) => {
+    if (parsed.data.pinned !== exists.pinned) {
+      await recordTaskEvents(tx, id, req.auth!.employeeId, [
+        { type: parsed.data.pinned ? "PINNED" : "UNPINNED" },
+      ]);
+    }
+    return tx.task.update({
+      where: { id },
+      data: { pinned: parsed.data.pinned },
+      include: TASK_INCLUDE,
+    });
   });
 
   emitTaskChanged({ type: "pinned", taskId: id, pinned: task.pinned });
@@ -1002,14 +1044,21 @@ router.patch("/:id/color", requireAdmin, async (req, res) => {
 
   const exists = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, color: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
 
-  const task = await prisma.task.update({
-    where: { id },
-    data: { color: parsed.data.color },
-    include: TASK_INCLUDE,
+  const task = await prisma.$transaction(async (tx) => {
+    if (parsed.data.color !== exists.color) {
+      await recordTaskEvents(tx, id, req.auth!.employeeId, [
+        { type: "COLOR_CHANGED", detail: parsed.data.color },
+      ]);
+    }
+    return tx.task.update({
+      where: { id },
+      data: { color: parsed.data.color },
+      include: TASK_INCLUDE,
+    });
   });
 
   emitTaskChanged({ type: "updated", taskId: id });
@@ -1085,7 +1134,7 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
   // is the only place the permission was checked.
   const item = await prisma.taskChecklistItem.findUnique({
     where: { id: itemId },
-    select: { id: true, taskId: true },
+    select: { id: true, taskId: true, text: true, done: true },
   });
   if (!item || item.taskId !== id) {
     return res.status(404).json(CHECKLIST_ITEM_NOT_FOUND);
@@ -1116,8 +1165,14 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
         ? { done: true, doneAt: new Date(), doneById: actor.id, doneByName: actor.name }
         : { done: false, doneAt: null, doneById: null, doneByName: null },
     });
+    if (parsed.data.done !== item.done) {
+      await recordTaskEvents(tx, id, actor.id, [
+        { type: parsed.data.done ? "ITEM_DONE" : "ITEM_UNDONE", itemText: item.text },
+      ]);
+    }
 
     const autoCompleted = await applyChecklistAutoComplete(tx, id);
+    if (autoCompleted) await recordTaskEvents(tx, id, null, [{ type: "AUTO_COMPLETED" }]);
 
     // Re-read AFTER the rule has run, or the DTO would answer with the state and
     // the chatClosed the task had a moment ago.

@@ -164,6 +164,9 @@ model Employee {
   checklistAssigneeLinks   TaskChecklistAssignee[]
   checklistCompletions     TaskChecklistItem[]     @relation("ChecklistCompleter")
 
+  taskEventsDone     TaskEvent[] @relation("TaskEventActor")
+  taskEventsReceived TaskEvent[] @relation("TaskEventTarget")
+
   conversations ConversationMember[]
   messages      Message[]
   notifications Notification[]
@@ -277,6 +280,7 @@ model Task {
   patchEntries  PatchEntry[]
 
   progressSegments TaskProgressSegment[]
+  events           TaskEvent[]
 
   @@index([state, startsAt])
   @@index([startsAt])
@@ -297,6 +301,36 @@ model TaskProgressSegment {
   endedAt   DateTime?
 
   @@index([taskId])
+}
+
+/// One line of a task's history: who created it, who joined, who was put in
+/// charge of an item, who ticked it... Append-only, written by the routes in
+/// the same transaction as the change it describes.
+///
+/// Names are snapshots, like Message.authorName: the history is a record of the
+/// past and has to stay readable once an account is deleted (the ids SetNull).
+/// `type` is TEXT validated in code (TASK_EVENT_TYPES), like Task.color, so a
+/// new kind of event is not a migration.
+model TaskEvent {
+  id         Int       @id @default(autoincrement())
+  taskId     Int
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  type       String
+  /// Who did it. Null = the system (auto-complete) or unknown (backfilled rows).
+  actorId    Int?
+  actor      Employee? @relation("TaskEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName  String?
+  /// The person it happened to: who was added, who was put in charge.
+  targetId   Int?
+  target     Employee? @relation("TaskEventTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  targetName String?
+  /// Snapshot of the item's text, for the item events.
+  itemText   String?
+  /// Free detail per type: the new state, the old item text, the edited fields.
+  detail     String?
+  createdAt  DateTime  @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 model TaskParticipant {

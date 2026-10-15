@@ -8,8 +8,11 @@ import {
   disconnectEmployee,
   emitAccountsChanged,
   emitStatusChanged,
+  emitTaskChanged,
   sendConfirmationRequest,
 } from "../realtime";
+import { syncTaskConversationMembers } from "../chat/chat.service";
+import { recordTaskEvents } from "../tasks/task-history";
 import { accountStatus } from "./accounts";
 import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
@@ -368,8 +371,10 @@ router.post("/employees/:id/reject", requireAdmin, async (req, res) => {
 });
 
 /**
- * The reversible "baja": the person can no longer sign in, but their history,
- * tasks and warnings stay, and an admin can bring the account back.
+ * The reversible "baja": the person can no longer sign in, but their history
+ * and warnings stay, and an admin can bring the account back. They do leave
+ * their tasks, the items they were in charge of and the tasks' chats: being
+ * reactivated does not put them back, they have to be assigned again.
  */
 router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
   const account = await findAccount(req, res);
@@ -393,6 +398,7 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
   }
 
   const now = new Date();
+  let leftTaskIds: number[] = [];
   const employee = await prisma.$transaction(async (tx) => {
     // Whatever they were doing ends now, or it would keep counting time.
     await tx.activityHistory.updateMany({
@@ -403,6 +409,21 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
       where: { employeeId: account.id, status: "PENDING" },
       data: { status: "REJECTED", resolvedAt: now },
     });
+    // Out of every task, same as being removed by hand in PATCH /tasks/:id.
+    const links = await tx.taskParticipant.findMany({
+      where: { employeeId: account.id },
+      select: { taskId: true },
+    });
+    await tx.taskChecklistAssignee.deleteMany({ where: { employeeId: account.id } });
+    await tx.taskParticipant.deleteMany({ where: { employeeId: account.id } });
+    for (const { taskId } of links) {
+      await syncTaskConversationMembers(tx, taskId, [], [account.id]);
+      await recordTaskEvents(tx, taskId, req.auth!.employeeId, [
+        { type: "PARTICIPANT_REMOVED", targetId: account.id, detail: "DEACTIVATED" },
+      ]);
+    }
+    leftTaskIds = links.map((link) => link.taskId);
+
     return tx.employee.update({
       where: { id: account.id },
       data: { active: false, deactivatedAt: now, currentStatus: "OFFLINE", statusSince: now },
@@ -414,6 +435,7 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
   disconnectEmployee(account.id);
   emitStatusChanged(employee);
   emitAccountsChanged();
+  for (const taskId of leftTaskIds) emitTaskChanged({ type: "updated", taskId });
   res.json({ success: true });
 });
 

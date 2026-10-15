@@ -99,6 +99,25 @@ export type Task = {
   commentsCount: number;
   /** Only present in the detail response (GET /tasks/:id). */
   comments?: TaskComment[];
+  /** Detail only, newest first: everything that happened to the task. */
+  history?: TaskEvent[];
+};
+
+/**
+ * One line of a task's history. Names are snapshots, so a deleted account still
+ * reads; actorName null is the system (or a backfilled line with no author).
+ * `type` mirrors TASK_EVENT_TYPES in the backend's task-history.ts.
+ */
+export type TaskEvent = {
+  id: number;
+  type: string;
+  actorId: number | null;
+  actorName: string | null;
+  targetId: number | null;
+  targetName: string | null;
+  itemText: string | null;
+  detail: string | null;
+  createdAt: string;
 };
 
 export const STATE_ORDER: TaskState[] = ["PENDING", "IN_PROGRESS", "DONE"];

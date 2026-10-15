@@ -64,6 +64,23 @@ export const TASK_DETAIL_INCLUDE = {
       },
     },
   },
+  // Newest first; capped like the thread, a task with more than this many lines
+  // has its oldest ones cut rather than a dialog that never ends.
+  events: {
+    take: 300,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      type: true,
+      actorId: true,
+      actorName: true,
+      targetId: true,
+      targetName: true,
+      itemText: true,
+      detail: true,
+      createdAt: true,
+    },
+  },
 } satisfies Prisma.TaskInclude;
 
 type TaskWithInclude = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
@@ -140,5 +157,7 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
             },
           }))
         : undefined,
+    // Detail only: the history box of the task dialog.
+    history: "events" in task ? task.events : undefined,
   };
 }

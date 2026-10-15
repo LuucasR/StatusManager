@@ -49,6 +49,7 @@ import { useConversation } from "../chat/useConversation";
 import ChecklistFilterBar from "./ChecklistFilterBar";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist, hasChecklistFilters } from "./checklistFilter";
 import TaskFacts from "./TaskFacts";
+import TaskHistory from "./TaskHistory";
 import { formatCommentDate } from "./datetime";
 import {
   STATE_META,
@@ -408,6 +409,8 @@ export default function TaskDetailDialog({
                     </Box>
                   );
                 })()}
+
+              <TaskHistory task={task} />
 
               <Divider />
 

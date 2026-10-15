@@ -69,17 +69,20 @@ export default function TasksPage() {
   const [filters, setFilters] = useState(EMPTY_TASK_FILTERS);
   const visibleTasks = useMemo(() => filterTasks(tasks, filters), [tasks, filters]);
   const filtering = hasTaskFilters(filters);
-  // Everybody taking part in some task, the options of the people filter.
-  const taskMembers = useMemo(
-    () =>
-      [
-        ...new Map(
-          tasks.flatMap((task) => task.participants).map((person) => [person.id, person])
-        ).values(),
-      ].sort((a, b) => a.name.localeCompare(b.name)),
-    [tasks]
-  );
   const [employees, setEmployees] = useState<TaskParticipant[]>([]);
+  // Everybody taking part in some task, the options of the people filter.
+  // Only active accounts (the team list): a deactivated one is never offered.
+  const taskMembers = useMemo(() => {
+    const active = new Set(employees.map((employee) => employee.id));
+    return [
+      ...new Map(
+        tasks
+          .flatMap((task) => task.participants)
+          .filter((person) => active.has(person.id))
+          .map((person) => [person.id, person])
+      ).values(),
+    ].sort((a, b) => a.name.localeCompare(b.name));
+  }, [tasks, employees]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
