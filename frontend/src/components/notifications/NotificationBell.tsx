@@ -26,6 +26,7 @@ export default function NotificationBell() {
     setAnchor(null);
     if (!notification.readAt) void markRead(notification.id);
     if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
+    else if (notification.mapId) navigate(`/maps/${notification.mapId}`);
     else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
     else if (notification.type === "ANNOUNCEMENT") navigate("/announcements");
     else if (ACCOUNT_NOTIFICATIONS.has(notification.type)) navigate("/accounts");

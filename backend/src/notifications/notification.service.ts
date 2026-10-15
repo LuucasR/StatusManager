@@ -8,6 +8,7 @@ export const NOTIFICATION_SELECT = {
   title: true,
   body: true,
   taskId: true,
+  mapId: true,
   readAt: true,
   createdAt: true,
 } as const;
@@ -20,6 +21,8 @@ type NotifyInput = {
   title: string;
   body: string;
   taskId?: number;
+  /** The map a MAP_* notification opens. */
+  mapId?: number;
 };
 
 async function unreadCountFor(employeeId: number) {
@@ -35,6 +38,7 @@ async function emitNew(row: { employeeId: number } & Record<string, unknown>) {
       title: row.title,
       body: row.body,
       taskId: row.taskId,
+      mapId: row.mapId,
       readAt: row.readAt,
       createdAt: row.createdAt,
     },
@@ -61,6 +65,7 @@ export async function notify(input: NotifyInput) {
           title: input.title,
           body: input.body,
           taskId: input.taskId,
+          mapId: input.mapId,
         },
         select: { ...NOTIFICATION_SELECT, employeeId: true },
       })

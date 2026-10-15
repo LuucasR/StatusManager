@@ -48,6 +48,7 @@ export function useNotifications() {
         tag: `notification-${notification.id}`,
         onClick: () => {
           if (notification.taskId) navigate(`/tasks?task=${notification.taskId}`);
+          else if (notification.mapId) navigate(`/maps/${notification.mapId}`);
           else if (WARNING_NOTIFICATIONS.has(notification.type)) navigate("/warnings");
           else if (notification.type === "ANNOUNCEMENT") navigate("/announcements");
         },

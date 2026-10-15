@@ -1,7 +1,6 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import { STATE_META } from "../tasks/types";
-import type { MapRegion, Rect } from "./mapsApi";
+import { regionColor, type MapRegion, type Rect } from "./mapsApi";
 
 /** The state accents include a CSS variable, which MUI's alpha() cannot parse. */
 const tint = (color: string, percent: number) =>
@@ -119,7 +118,7 @@ export default function MapCanvas({ imageUrl, regions, selectedId, onSelect, dra
         }}
       >
         {regions.map((region) => {
-          const accent = STATE_META[region.state].accent;
+          const accent = regionColor(region);
           const selected = region.id === selectedId;
           return (
             <Box

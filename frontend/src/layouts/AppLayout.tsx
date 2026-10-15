@@ -5,8 +5,6 @@ import {
   DashboardRounded,
   DownloadRounded,
   FolderRounded,
-  GavelRounded,
-  HowToRegRounded,
   InsightsRounded,
   LogoutRounded,
   ManageAccountsRounded,
@@ -63,13 +61,10 @@ const links = [
   // First, and where the app opens: news and notices for the whole team.
   { to: "/announcements", key: "nav.announcements", Icon: CampaignRounded },
   { to: "/dashboard", key: "nav.dashboard", Icon: DashboardRounded },
-  // No role filter: the summary is always the authenticated employee's own.
-  { to: "/summary", key: "nav.summary", Icon: InsightsRounded },
+  // Attendance, warnings and the personal summary, as tabs. No role filter: an
+  // admin gets the team in each, anyone else their own.
+  { to: "/performance", key: "nav.performance", Icon: InsightsRounded },
   { to: "/workday", key: "nav.workday", Icon: CalendarMonthRounded },
-  // No role filter either: an admin gets the team there, anyone else their own.
-  { to: "/attendance", key: "nav.attendance", Icon: HowToRegRounded },
-  // Same split: an admin sees and grants the team's, anyone else their own.
-  { to: "/warnings", key: "nav.warnings", Icon: GavelRounded },
   // Everyone downloads; admins get the edit controls on the page.
   { to: "/downloads", key: "nav.downloads", Icon: DownloadRounded },
   // Admins only: sign-ups, password resets and every account's lifecycle.

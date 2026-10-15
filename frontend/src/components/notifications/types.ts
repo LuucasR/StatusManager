@@ -30,7 +30,10 @@ export type NotificationType =
   | "LATE_WARNING_REVIEW"
   | "ANNOUNCEMENT"
   | "ACCOUNT_REQUEST"
-  | "PASSWORD_RESET_REQUEST";
+  | "PASSWORD_RESET_REQUEST"
+  | "MAP_APPROVAL_REQUEST"
+  | "MAP_APPROVED"
+  | "MAP_REJECTED";
 
 export type AppNotification = {
   id: number;
@@ -38,6 +41,8 @@ export type AppNotification = {
   title: string;
   body: string;
   taskId: number | null;
+  /** The map a MAP_* notification opens. Absent from servers that predate it. */
+  mapId?: number | null;
   readAt: string | null;
   createdAt: string;
 };
@@ -65,6 +70,9 @@ export const NOTIFICATION_META: Record<
   ANNOUNCEMENT: { Icon: CampaignRounded, accent: "var(--accent-base)", soft: softOf("var(--accent-base)") },
   ACCOUNT_REQUEST: { Icon: PersonAddAlt1Rounded, accent: "#b7791f", soft: softOf("#b7791f") },
   PASSWORD_RESET_REQUEST: { Icon: KeyRounded, accent: "#b7791f", soft: softOf("#b7791f") },
+  MAP_APPROVAL_REQUEST: { Icon: HourglassTopRounded, accent: "#b7791f", soft: softOf("#b7791f") },
+  MAP_APPROVED: { Icon: FactCheckRounded, accent: "#2eae70", soft: softOf("#2eae70") },
+  MAP_REJECTED: { Icon: HighlightOffRounded, accent: "#b23c4a", soft: softOf("#b23c4a") },
 };
 
 /** Types that open the Accounts page. */

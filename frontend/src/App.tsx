@@ -1,13 +1,12 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
-import SummaryPage from "./pages/SummaryPage";
+import PerformancePage from "./pages/PerformancePage";
 import WorkdayPage from "./pages/WorkdayPage";
-import AttendancePage from "./pages/AttendancePage";
 import DownloadsPage from "./pages/DownloadsPage";
 import ProjectPage from "./pages/ProjectPage";
 import ProjectRedirect from "./components/projects/ProjectRedirect";
-import WarningsPage from "./pages/WarningsPage";
+import MapRedirect from "./components/maps/MapRedirect";
 import AccountsPage from "./pages/AccountsPage";
 import AnnouncementsPage from "./pages/AnnouncementsPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -72,26 +71,27 @@ export default function App() {
         {/* Tasks and patch notes are tabs of a project now; the old paths
             (and the bell's /tasks?task=12) find the right one. */}
         <Route path="/tasks" element={<ProjectRedirect tab="tasks" />} />
-        <Route path="/summary" element={<SummaryPage />} />
+        {/* Attendance, warnings and the summary are tabs of "Performance";
+            their old paths (the bell sends people to /warnings) land there. */}
+        <Route path="/performance" element={<PerformancePage />} />
+        <Route path="/performance/:tab" element={<PerformancePage />} />
+        <Route path="/summary" element={<LegacyRedirect to="/performance/summary" />} />
         {/* Admin-only. The route is mounted for everyone and the page itself
             redirects, because the role is not known until AppLayout has
             fetched it - and every endpoint behind it refuses non-admins. */}
         <Route path="/workday" element={<WorkdayPage />} />
-        {/* Everyone: an admin records and sees the whole team, anyone else
-            gets a read-only calendar of their own arrivals. The backend only
-            lets non-admins reach GET /attendance/me. */}
-        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/attendance" element={<LegacyRedirect to="/performance/attendance" />} />
         <Route path="/patch-notes" element={<ProjectRedirect tab="patch-notes" />} />
+        {/* Where the map approval notifications point. */}
+        <Route path="/maps/:mapId" element={<MapRedirect />} />
         {/* Everyone downloads; only admins get the edit controls, and the
             backend guards the writes. */}
         <Route path="/downloads" element={<DownloadsPage />} />
-        {/* One per project an admin created; its tools (Maps) are tabs. Everyone
-            looks; the backend guards the writes. */}
+        {/* One per project an admin created; its tools (tasks, maps, patch
+            notes, GDD) are tabs. The backend guards the writes. */}
         <Route path="/projects/:projectId" element={<ProjectPage />} />
         <Route path="/projects/:projectId/:tab" element={<ProjectPage />} />
-        {/* Everyone: their own warnings; an admin sees the team, grants and
-            revokes. The backend only lets non-admins reach GET /warnings/me. */}
-        <Route path="/warnings" element={<WarningsPage />} />
+        <Route path="/warnings" element={<LegacyRedirect to="/performance/warnings" />} />
         {/* Admin-only, same as /workday: the page redirects anyone else and
             every endpoint behind it refuses non-admins. */}
         <Route path="/accounts" element={<AccountsPage />} />
@@ -104,7 +104,7 @@ export default function App() {
       <Route path="/registro" element={<LegacyRedirect to="/register" />} />
       <Route path="/recuperar-clave" element={<LegacyRedirect to="/forgot-password" />} />
       <Route path="/tareas" element={<LegacyRedirect to="/tasks" />} />
-      <Route path="/resumen" element={<LegacyRedirect to="/summary" />} />
+      <Route path="/resumen" element={<LegacyRedirect to="/performance/summary" />} />
 
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -22,7 +22,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
-import { canManageTasks } from "../roles";
+import { canManageTasks, isAdminRole } from "../roles";
 import type { AppOutletContext } from "../../layouts/AppLayout";
 import { t, tf } from "../../i18n";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
@@ -32,11 +32,13 @@ import RegionDialog, { type LinkableTask } from "./RegionDialog";
 import {
   MAP_IMAGE_ACCEPT,
   MAP_IMAGE_MAX_BYTES,
+  approveMap,
   createRegion,
   deleteMap,
   deleteRegion,
   getMap,
   listMaps,
+  rejectMap,
   renameMap,
   updateRegion,
   uploadMap,
@@ -52,12 +54,13 @@ import { isApprovedTask, type TaskParticipant } from "../tasks/types";
 
 /**
  * A project's Maps tab (on trial): upload a map, drag a rectangle over a sector
- * and say what is being done there. Everyone looks; board managers upload and
- * draw.
+ * and say what is being done there. Everyone uploads and draws; a map uploaded
+ * by anyone but an admin waits for an admin's approval.
  */
 export default function MapsTab({ projectId }: { projectId: number }) {
   const { me } = useOutletContext<AppOutletContext>();
   const manager = canManageTasks(me?.role);
+  const admin = isAdminRole(me?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [maps, setMaps] = useState<SiteMapSummary[] | null>(null);
@@ -73,6 +76,7 @@ export default function MapsTab({ projectId }: { projectId: number }) {
   const [redrawing, setRedrawing] = useState<MapRegion | null>(null);
   const [dialog, setDialog] = useState<{ region: MapRegion | null; rect: Rect | null } | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const mapIdParam = Number(searchParams.get("map")) || null;
   // A ?map= left over from another project (or a deleted map) falls back to
@@ -110,16 +114,15 @@ export default function MapsTab({ projectId }: { projectId: number }) {
     void loadMap();
   }, [loadMap]);
 
-  // Only the managers fill in the form, so only they need its options.
+  // Everyone draws sectors, so everyone needs the form's options.
   useEffect(() => {
-    if (!manager) return;
     void Promise.all([api<TaskParticipant[]>("/activities/team"), listTasks()])
       .then(([team, taskList]) => {
         setEmployees(team.map((e) => ({ id: e.id, employeeNumber: e.employeeNumber, name: e.name })));
         setTasks(taskList.filter(isApprovedTask).map((task) => ({ id: task.id, title: task.title })));
       })
       .catch((err: Error) => setError(err.message));
-  }, [manager]);
+  }, []);
 
   useSocketEvent("maps:changed", () => {
     void loadMaps();
@@ -191,6 +194,21 @@ export default function MapsTab({ projectId }: { projectId: number }) {
     }
   }
 
+  async function review(approve: boolean) {
+    if (!map) return;
+    try {
+      if (approve) await approveMap(map.id);
+      else {
+        const reason = window.prompt(t("maps.rejectPrompt"));
+        if (reason === null) return;
+        await rejectMap(map.id, reason.trim());
+      }
+      await Promise.all([loadMaps(), loadMap()]);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function removeMap() {
     if (!map || !window.confirm(tf("maps.confirmDeleteMap", { title: map.title }))) return;
     try {
@@ -202,6 +220,13 @@ export default function MapsTab({ projectId }: { projectId: number }) {
       setError((err as Error).message);
     }
   }
+
+  const approved = map?.approval === "APPROVED";
+  const own = Boolean(map && me && map.createdBy?.id === me.id);
+  // Mirror the backend: managers rename and delete any map, the uploader
+  // renames theirs and withdraws it while it is not approved.
+  const canRename = Boolean(map) && (manager || own);
+  const canDeleteMap = Boolean(map) && (manager || (own && !approved));
 
   if (!me || !maps) {
     return (
@@ -218,6 +243,11 @@ export default function MapsTab({ projectId }: { projectId: number }) {
           {error}
         </Alert>
       )}
+      {notice && (
+        <Alert severity="info" sx={{ mb: 3 }} onClose={() => setNotice("")}>
+          {notice}
+        </Alert>
+      )}
 
       <Stack
         direction={{ xs: "column", sm: "row" }}
@@ -225,18 +255,16 @@ export default function MapsTab({ projectId }: { projectId: number }) {
         sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}
       >
         <Typography color="text.secondary">
-          {manager ? t("maps.subtitleManager") : t("maps.subtitle")}
+          {admin ? t("maps.subtitleManager") : t("maps.subtitle")}
         </Typography>
-        {manager && (
-          <Button
-            variant="contained"
-            startIcon={<AddPhotoAlternateRounded />}
-            onClick={() => setUploadOpen(true)}
-            sx={{ flexShrink: 0 }}
-          >
-            {t("maps.upload")}
-          </Button>
-        )}
+        <Button
+          variant="contained"
+          startIcon={<AddPhotoAlternateRounded />}
+          onClick={() => setUploadOpen(true)}
+          sx={{ flexShrink: 0 }}
+        >
+          {t("maps.upload")}
+        </Button>
       </Stack>
 
       {maps.length === 0 ? (
@@ -261,32 +289,60 @@ export default function MapsTab({ projectId }: { projectId: number }) {
               {maps.map((item) => (
                 <MenuItem key={item.id} value={item.id}>
                   {item.title} ({item.regionsCount})
+                  {item.approval !== "APPROVED" &&
+                    ` · ${t(item.approval === "PENDING" ? "maps.pending" : "maps.rejected")}`}
                 </MenuItem>
               ))}
             </TextField>
-            {manager && map && (
-              <>
-                <Button
-                  variant={drawing ? "contained" : "outlined"}
-                  startIcon={<CropFreeRounded />}
-                  onClick={() => {
-                    setRedrawing(null);
-                    setDrawing((value) => !value);
-                  }}
-                >
-                  {drawing ? t("maps.stopDrawing") : t("maps.draw")}
-                </Button>
-                <Box sx={{ flex: 1 }} />
-                <Button startIcon={<EditRounded />} onClick={() => void rename()}>
-                  {t("maps.rename")}
-                </Button>
-                <Button color="error" startIcon={<DeleteOutlineRounded />} onClick={() => void removeMap()}>
-                  {t("maps.deleteMap")}
-                </Button>
-              </>
+            {approved && (
+              <Button
+                variant={drawing ? "contained" : "outlined"}
+                startIcon={<CropFreeRounded />}
+                onClick={() => {
+                  setRedrawing(null);
+                  setDrawing((value) => !value);
+                }}
+              >
+                {drawing ? t("maps.stopDrawing") : t("maps.draw")}
+              </Button>
+            )}
+            <Box sx={{ flex: 1 }} />
+            {canRename && (
+              <Button startIcon={<EditRounded />} onClick={() => void rename()}>
+                {t("maps.rename")}
+              </Button>
+            )}
+            {canDeleteMap && (
+              <Button color="error" startIcon={<DeleteOutlineRounded />} onClick={() => void removeMap()}>
+                {t("maps.deleteMap")}
+              </Button>
             )}
           </Stack>
 
+          {map && !approved && (
+            <Alert
+              severity={map.approval === "REJECTED" ? "error" : "warning"}
+              sx={{ mb: 2 }}
+              action={
+                admin && map.approval === "PENDING" ? (
+                  <Stack direction="row" spacing={1}>
+                    <Button color="inherit" size="small" onClick={() => void review(false)}>
+                      {t("maps.reject")}
+                    </Button>
+                    <Button color="inherit" size="small" variant="outlined" onClick={() => void review(true)}>
+                      {t("maps.approve")}
+                    </Button>
+                  </Stack>
+                ) : undefined
+              }
+            >
+              {map.approval === "PENDING"
+                ? tf("maps.pendingNotice", { name: map.createdBy?.name ?? "—" })
+                : map.rejectReason
+                  ? tf("maps.rejectedNoticeReason", { reason: map.rejectReason })
+                  : t("maps.rejectedNotice")}
+            </Alert>
+          )}
           {drawing && (
             <Alert severity="info" sx={{ mb: 2 }}>
               {redrawing ? tf("maps.redrawHint", { title: redrawing.title }) : t("maps.drawHint")}
@@ -321,7 +377,7 @@ export default function MapsTab({ projectId }: { projectId: number }) {
               </Typography>
               {regions.length === 0 && (
                 <Typography variant="body2" color="text.secondary">
-                  {manager ? t("maps.noRegionsManager") : t("maps.noRegions")}
+                  {approved ? t("maps.noRegionsManager") : t("maps.noRegions")}
                 </Typography>
               )}
               {regions.map((region) => (
@@ -329,7 +385,7 @@ export default function MapsTab({ projectId }: { projectId: number }) {
                   <RegionCard
                     region={region}
                     selected={region.id === selectedId}
-                    canEdit={manager}
+                    canEdit={manager || region.createdBy?.id === me.id}
                     onSelect={select}
                     onEdit={(item) => setDialog({ region: item, rect: null })}
                     onDelete={(item) => void removeRegion(item)}
@@ -360,8 +416,9 @@ export default function MapsTab({ projectId }: { projectId: number }) {
         projectId={projectId}
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onUploaded={async (id) => {
+        onUploaded={async (id, pending) => {
           setUploadOpen(false);
+          if (pending) setNotice(t("maps.sentForApproval"));
           await loadMaps();
           pickMap(id);
         }}
@@ -379,7 +436,7 @@ function UploadMapDialog({
   projectId: number;
   open: boolean;
   onClose: () => void;
-  onUploaded: (id: number) => Promise<void>;
+  onUploaded: (id: number, pending: boolean) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -410,8 +467,8 @@ function UploadMapDialog({
     if (!file) return;
     setSaving(true);
     try {
-      const { id } = await uploadMap(projectId, title.trim(), file);
-      await onUploaded(id);
+      const { id, approval } = await uploadMap(projectId, title.trim(), file);
+      await onUploaded(id, approval !== "APPROVED");
     } catch (err) {
       setError((err as Error).message);
       setSaving(false);

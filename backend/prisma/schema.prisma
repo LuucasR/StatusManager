@@ -82,6 +82,12 @@ enum NotificationType {
   ACCOUNT_REQUEST
   /// Sent to admins: someone forgot their password and asked for a reset.
   PASSWORD_RESET_REQUEST
+  /// Sent to admins: a map uploaded by a non-admin is waiting for approval.
+  MAP_APPROVAL_REQUEST
+  /// Sent to the uploader: an admin approved their map.
+  MAP_APPROVED
+  /// Sent to the uploader: an admin rejected their map.
+  MAP_REJECTED
 }
 
 /// How much an announcement matters. CRITICAL ones have to be read by the
@@ -685,11 +691,14 @@ model Notification {
   title      String
   body       String
   taskId     Int?
+  /// The map a MAP_* notification opens.
+  mapId      Int?
   readAt     DateTime?
   createdAt  DateTime         @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  map      SiteMap? @relation(fields: [mapId], references: [id], onDelete: SetNull)
 
   @@index([employeeId, createdAt])
   @@index([employeeId, readAt])
@@ -846,14 +855,21 @@ model SiteMap {
   title       String
   mimeType    String
   data        Bytes
+  /// Like Task.approval: an admin's upload is APPROVED, anyone else's waits
+  /// PENDING for an admin. Only the uploader and the admins see it until then.
+  approval     TaskApproval @default(APPROVED)
+  reviewedAt   DateTime?
+  rejectReason String?
   createdById Int?
   createdBy   Employee? @relation("SiteMapCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  regions MapRegion[]
+  regions       MapRegion[]
+  notifications Notification[]
 
   @@index([projectId])
+  @@index([approval])
 }
 
 /// A rectangle on a map and what is being done there. x/y/w/h are fractions of
@@ -868,8 +884,10 @@ model MapRegion {
   h           Float
   title       String
   description String    @default("")
-  /// Paints the sector, with the same palette as the board's columns.
+  /// The sector's state; paints it too unless it has a color of its own.
   state       TaskState @default(PENDING)
+  /// "#rrggbb" picked by whoever drew it. Null = the state's color.
+  color       String?
   taskId      Int?
   task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
   createdById Int?

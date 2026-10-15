@@ -88,7 +88,7 @@ export default function ShellWatchers({
   const unread = announcements.filter((item) => !item.readAt).length;
 
   useEffect(() => {
-    onBadges({ "/announcements": unread, "/warnings": pendingWarnings, "/accounts": pendingAccounts });
+    onBadges({ "/announcements": unread, "/performance": pendingWarnings, "/accounts": pendingAccounts });
   }, [unread, pendingWarnings, pendingAccounts, onBadges]);
 
   // The oldest unread critical one first: they are acknowledged in order.

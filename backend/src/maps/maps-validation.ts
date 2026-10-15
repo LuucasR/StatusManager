@@ -43,6 +43,11 @@ const regionFields = {
   title: z.string().trim().min(1, "The sector needs a title").max(120),
   description: z.string().trim().max(2000),
   state: z.nativeEnum(TaskState),
+  /** "#rrggbb", or null to paint the sector with its state's color. */
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "The color has to be #rrggbb")
+    .nullable(),
   assigneeIds: z.array(z.number().int().positive()).max(50),
   taskId: z.number().int().positive().nullable(),
 };
@@ -64,6 +69,7 @@ export const createRegionSchema = z
     ...regionFields,
     description: regionFields.description.default(""),
     state: regionFields.state.default("PENDING"),
+    color: regionFields.color.default(null),
     assigneeIds: regionFields.assigneeIds.default([]),
     taskId: regionFields.taskId.default(null),
   })

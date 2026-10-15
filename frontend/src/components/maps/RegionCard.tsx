@@ -2,8 +2,8 @@ import { DeleteOutlineRounded, EditRounded, ViewKanbanRounded } from "@mui/icons
 import { Avatar, Box, Chip, IconButton, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { STATE_META, participantColor } from "../tasks/types";
-import { t } from "../../i18n";
-import type { MapRegion } from "./mapsApi";
+import { t, tf } from "../../i18n";
+import { regionColor, type MapRegion } from "./mapsApi";
 
 type Props = {
   region: MapRegion;
@@ -18,6 +18,7 @@ type Props = {
 export default function RegionCard({ region, selected, canEdit, onSelect, onEdit, onDelete }: Props) {
   const navigate = useNavigate();
   const meta = STATE_META[region.state];
+  const color = regionColor(region);
 
   return (
     <Paper
@@ -27,8 +28,8 @@ export default function RegionCard({ region, selected, canEdit, onSelect, onEdit
       sx={{
         p: 1.5,
         cursor: "pointer",
-        borderLeft: `4px solid ${meta.accent}`,
-        outline: selected ? `2px solid ${meta.accent}` : "none",
+        borderLeft: `4px solid ${color}`,
+        outline: selected ? `2px solid ${color}` : "none",
         outlineOffset: -1,
       }}
     >
@@ -63,6 +64,12 @@ export default function RegionCard({ region, selected, canEdit, onSelect, onEdit
           </Stack>
         )}
       </Stack>
+
+      {region.createdBy && (
+        <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+          {tf("maps.markedBy", { name: region.createdBy.name })}
+        </Typography>
+      )}
 
       {region.description && (
         <Typography
