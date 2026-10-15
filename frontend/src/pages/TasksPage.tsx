@@ -22,6 +22,7 @@ import TaskReportDialog from "../components/tasks/TaskReportDialog";
 import PendingApprovals from "../components/tasks/PendingApprovals";
 import ArchivedTasksDialog from "../components/tasks/ArchivedTasksDialog";
 import TaskFilterBar from "../components/tasks/TaskFilterBar";
+import MemberItemsPanel from "../components/tasks/MemberItemsPanel";
 import {
   EMPTY_TASK_FILTERS,
   filterTasks,
@@ -495,6 +496,7 @@ export default function TasksPage() {
             onReject={handleReject}
             onWithdraw={handleDelete}
           />
+          <Box className={filters.members.length > 0 ? "task-board-layout" : undefined}>
         <TaskBoard
           tasks={visibleTasks.filter(isApprovedTask)}
           status={filters.status}
@@ -512,6 +514,15 @@ export default function TasksPage() {
           }}
           onDelete={handleDelete}
         />
+          {filters.members.length > 0 && (
+            <MemberItemsPanel
+              tasks={visibleTasks}
+              filters={filters}
+              members={taskMembers}
+              onOpen={(task) => void openDetailById(task.id)}
+            />
+          )}
+          </Box>
         </>
       )}
 

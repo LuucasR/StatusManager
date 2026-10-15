@@ -300,6 +300,9 @@ export const en = {
   "taskFilter.count": "{shown} of {total} tasks",
   "taskFilter.clear": "Clear filters",
   "taskFilter.empty": "No tasks match these filters.",
+  "taskFilter.itemsTitle": "Checklist items in charge",
+  "taskFilter.itemsCount": "{count} items",
+  "taskFilter.itemsEmpty": "No checklist items in charge in these tasks.",
   "taskDetail.cannotCheck": "Only participants can tick off this task's items",
   "board.checklistProgress": "{done} of {total} items done",
 
@@ -1180,6 +1183,9 @@ const es: Record<TranslationKey, string> = {
   "taskFilter.count": "{shown} de {total} tareas",
   "taskFilter.clear": "Limpiar filtros",
   "taskFilter.empty": "Ninguna tarea coincide con estos filtros.",
+  "taskFilter.itemsTitle": "Ítems a cargo",
+  "taskFilter.itemsCount": "{count} ítems",
+  "taskFilter.itemsEmpty": "No tiene ítems a cargo en estas tareas.",
   "taskDetail.cannotCheck": "Solo los participantes pueden tildar los ítems de esta tarea",
   "board.checklistProgress": "{done} de {total} ítems listos",
 

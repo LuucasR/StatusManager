@@ -109,6 +109,12 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .task-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; margin-top: 28px; }
 /* One state picked in the filter bar: a single, not over-wide column. */
 .task-board.task-board-single { grid-template-columns: minmax(0, 640px); }
+/* People picked in the filter bar: the board plus their checklist items on the right. */
+.task-board-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+.task-board-layout .task-board.task-board-single { grid-template-columns: minmax(0, 1fr); }
+.member-items-panel.member-items-panel { margin-top: 28px; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: calc(100dvh - 250px); }
+.member-items-body { overflow-y: auto; }
+@media (max-width: 1100px) { .task-board-layout { grid-template-columns: 1fr; } .member-items-panel.member-items-panel { max-height: none; } }
 /* Bounded height + an internal scroller. Without this the column grew with
    its card count and dragged the page down with it. dnd-kit auto-scrolls
    scrollable droppables, so dragging into a scrolled column still works.
