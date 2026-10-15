@@ -34,7 +34,9 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useOutletContext } from "react-router-dom";
-import { isStaff } from "../components/roles";
+import { isAdminRole, isStaff } from "../components/roles";
+import AnnouncementsAdminBox from "../components/announcements/AnnouncementsAdminBox";
+import { fromLocalInputValue, toLocalInputValue } from "../components/tasks/datetime";
 import type { AppOutletContext } from "../layouts/AppLayout";
 import { t, tf } from "../i18n";
 import { LOCALE } from "../locale";
@@ -59,6 +61,9 @@ const formatDateTime = (iso: string) =>
 
 type Filter = "ALL" | "UNREAD" | AnnouncementPriority;
 
+/** What the form edits: a card of the list or a row of the admins' box. */
+type Editable = Pick<Announcement, "id" | "title" | "body" | "priority" | "pinned" | "expiresAt">;
+
 /**
  * The landing tab: news and important notices for the team, most important
  * first. Everyone reads and marks as read; staff publishes and follows up on
@@ -67,11 +72,12 @@ type Filter = "ALL" | "UNREAD" | AnnouncementPriority;
 export default function AnnouncementsPage() {
   const { me } = useOutletContext<AppOutletContext>();
   const canPublish = isStaff(me?.role);
+  const admin = isAdminRole(me?.role);
 
   const [items, setItems] = useState<Announcement[] | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
-  const [editing, setEditing] = useState<Announcement | null>(null);
+  const [editing, setEditing] = useState<Editable | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [readersOf, setReadersOf] = useState<Announcement | null>(null);
 
@@ -211,6 +217,16 @@ export default function AnnouncementsPage() {
         onSubmit={submit}
       />
       <ReadersDialog announcement={readersOf} onClose={() => setReadersOf(null)} />
+
+      {/* Admins only: the whole history, expired ones included, and who saw what. */}
+      {admin && (
+        <AnnouncementsAdminBox
+          onEdit={(item) => {
+            setEditing(item);
+            setFormOpen(true);
+          }}
+        />
+      )}
     </Container>
   );
 }
@@ -280,6 +296,7 @@ function AnnouncementCard({
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {tf("announcements.byline", { name: item.authorName, date: formatDateTime(item.createdAt) })}
+            {item.expiresAt && ` · ${tf("announcements.expiresOn", { date: formatDateTime(item.expiresAt) })}`}
           </Typography>
           <Typography sx={{ mt: 1.5, whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{item.body}</Typography>
 
@@ -348,7 +365,7 @@ function AnnouncementForm({
   onSubmit,
 }: {
   open: boolean;
-  initial: Announcement | null;
+  initial: Editable | null;
   onClose: () => void;
   onSubmit: (payload: AnnouncementPayload) => Promise<void>;
 }) {
@@ -356,6 +373,8 @@ function AnnouncementForm({
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState<AnnouncementPriority>("INFO");
   const [pinned, setPinned] = useState(false);
+  /** "YYYY-MM-DDTHH:mm" local, or "" for an announcement that never expires. */
+  const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -365,6 +384,7 @@ function AnnouncementForm({
     setBody(initial?.body ?? "");
     setPriority(initial?.priority ?? "INFO");
     setPinned(initial?.pinned ?? false);
+    setExpiresAt(initial?.expiresAt ? toLocalInputValue(initial.expiresAt) : "");
     setError("");
   }, [open, initial]);
 
@@ -372,7 +392,13 @@ function AnnouncementForm({
     setSaving(true);
     setError("");
     try {
-      await onSubmit({ title: title.trim(), body: body.trim(), priority, pinned });
+      await onSubmit({
+        title: title.trim(),
+        body: body.trim(),
+        priority,
+        pinned,
+        expiresAt: expiresAt ? fromLocalInputValue(expiresAt) : null,
+      });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -418,6 +444,14 @@ function AnnouncementForm({
             multiline
             minRows={5}
             slotProps={{ htmlInput: { maxLength: 5000 } }}
+          />
+          <TextField
+            type="datetime-local"
+            label={t("announcements.field.expiresAt")}
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            helperText={t("announcements.expiresHelp")}
+            slotProps={{ inputLabel: { shrink: true } }}
           />
           <FormControlLabel
             control={<Switch checked={pinned} onChange={(e) => setPinned(e.target.checked)} />}

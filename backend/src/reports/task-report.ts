@@ -60,7 +60,7 @@ export function renderTaskReport(doc: any, options: TaskReportOptions) {
     title: options.title,
     subtitle: options.subtitle,
     periodLabel: options.periodLabel,
-    footerLabel: "Status Manager - Team tasks",
+    footerLabel: "Heroic Manager - Team tasks",
     continuationTitle: "Task list continued",
     generatedAt,
   });

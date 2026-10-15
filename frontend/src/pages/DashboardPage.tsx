@@ -36,6 +36,7 @@ import { api } from "../api";
 import { getApiUrl } from "../serverConfig";
 import PdfPreviewDialog from "../components/pdf/PdfPreviewDialog";
 import { usePdfPreview } from "../components/pdf/usePdfPreview";
+import ProjectsAdminCard from "../components/projects/ProjectsAdminCard";
 import { useOnReconnect, useSocketEvent } from "../realtime/useSocketEvent";
 import { isAdminRole, isStaff, roleMeta, type Role } from "../components/roles";
 import PeriodFilter from "../components/PeriodFilter";
@@ -575,6 +576,9 @@ useOnReconnect(() => load());
             ))}
           </Box>
         </>
+
+      {/* Admins add the company's projects here; each one becomes a sidebar tab. */}
+      {admin && <ProjectsAdminCard />}
 
       <Box className="section-title">
         <Box>

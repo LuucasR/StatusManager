@@ -10,6 +10,8 @@ export type Announcement = {
   body: string;
   priority: AnnouncementPriority;
   pinned: boolean;
+  /** Leaves the team's list once past; null = never. */
+  expiresAt: string | null;
   authorId: number | null;
   authorName: string;
   createdAt: string;
@@ -27,6 +29,7 @@ export type AnnouncementPayload = {
   body: string;
   priority: AnnouncementPriority;
   pinned: boolean;
+  expiresAt: string | null;
 };
 
 export type AnnouncementReader = {
@@ -48,6 +51,16 @@ export const createAnnouncement = (payload: AnnouncementPayload) =>
 
 export const updateAnnouncement = (id: number, payload: Partial<AnnouncementPayload>) =>
   api<Announcement>(`/announcements/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+
+/** One row of the admins' box: every announcement, expired ones too. */
+export type AdminAnnouncement = Omit<Announcement, "readAt" | "readCount" | "teamCount" | "readByAll"> & {
+  expired: boolean;
+  seen: { employee: AnnouncementReader["employee"]; readAt: string }[];
+  pending: AnnouncementReader["employee"][];
+};
+
+export const listAdminAnnouncements = (q: string) =>
+  api<AdminAnnouncement[]>(`/announcements/admin${q ? `?q=${encodeURIComponent(q)}` : ""}`);
 
 export const deleteAnnouncement = (id: number) =>
   api<{ success: boolean }>(`/announcements/${id}`, { method: "DELETE" });

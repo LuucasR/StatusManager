@@ -9,7 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { t, tf } from "../../i18n";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
@@ -31,6 +31,14 @@ type PendingResponse =
   | { pending: false }
   | { pending: true; secondsLeft: number; reason: Reason };
 
+/**
+ * How often the open check is also asked for over HTTP, on top of the socket.
+ * The socket alone was not enough: a background tab Chrome froze keeps looking
+ * connected to the server, the prompt goes into the void, and the person only
+ * saw it on the page they happened to reload.
+ */
+const POLL_MS = 60_000;
+
 /** Only used against a server that predates the payload on the event. */
 const FALLBACK_SECONDS = 120;
 
@@ -48,7 +56,11 @@ const FALLBACK_SECONDS = 120;
  */
 export default function ActivityConfirmationDialog({ me }: { me: { id: number } | null }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  // Read by syncPending, which must not re-ring for a check already on screen.
+  const openRef = useRef(false);
+  openRef.current = open;
   const [reason, setReason] = useState<Reason>("offHours");
   const [countdown, setCountdown] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -84,8 +96,13 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
     try {
       const pending = await api<PendingResponse>("/activities/pending-confirmation");
       if (pending.pending) {
-        show(pending.secondsLeft, pending.reason);
-        alert(pending.reason);
+        if (openRef.current) {
+          // Already asking: only correct the countdown, no second chime.
+          setCountdown(pending.secondsLeft);
+        } else {
+          show(pending.secondsLeft, pending.reason);
+          alert(pending.reason);
+        }
       }
       // Nothing open any more (answered in another tab, expired while offline):
       // a dialog left up would only lead to a 400 on click.
@@ -95,11 +112,29 @@ export default function ActivityConfirmationDialog({ me }: { me: { id: number } 
     }
   }, [show, alert]);
 
+  // On every page change too: whatever tab the person is on asks the server,
+  // not only the one they loaded first.
   useEffect(() => {
     void syncPending();
-  }, [syncPending]);
+  }, [syncPending, pathname]);
 
   useOnReconnect(() => void syncPending());
+
+  // Coming back to the window, and every minute: the fallback for a prompt the
+  // socket never delivered.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void syncPending();
+    };
+    const timer = setInterval(() => void syncPending(), POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [syncPending]);
 
   useSocketEvent<RequestPayload>("confirmation:request", (payload) => {
     const why = payload?.reason ?? "admin";

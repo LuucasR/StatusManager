@@ -113,7 +113,7 @@ export function emitTaskChanged(payload: unknown) {
  * Patch notes changed for a week. Everyone can read every week, so it is a
  * broadcast like task:changed; the payload carries the `weekStart`.
  */
-export function emitPatchNotesChanged(payload: { weekStart: string }) {
+export function emitPatchNotesChanged(payload: { projectId: number; weekStart: string }) {
   io?.emit("patchnotes:changed", payload);
 }
 
@@ -124,6 +124,21 @@ export function emitAnnouncementsChanged(payload: { id: number }) {
 
 export function emitDownloadsChanged() {
   io?.emit("downloads:changed", {});
+}
+
+/** A project was created, renamed or deleted: the sidebar lists them all. */
+export function emitProjectsChanged() {
+  io?.emit("projects:changed", {});
+}
+
+/** A project's GDD document was created, saved or deleted. */
+export function emitDocsChanged(payload: { projectId: number; docId: number }) {
+  io?.emit("docs:changed", payload);
+}
+
+/** A map or one of its sectors changed. Everyone can see every map. */
+export function emitMapsChanged(payload: { mapId: number }) {
+  io?.emit("maps:changed", payload);
 }
 
 /**

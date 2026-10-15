@@ -156,6 +156,9 @@ async function assertParticipantsExist(ids: number[]) {
 router.get("/", async (req, res) => {
   const state = req.query.state ? String(req.query.state) : undefined;
   const participantId = parseId(req.query.participantId);
+  // The board of one project; without it, every project (the dashboard's and
+  // the maps' task pickers).
+  const projectId = parseId(req.query.projectId);
 
   const tasks = await prisma.task.findMany({
     // CAREFUL: visibleTasksWhere and approvalVisibleWhere each contribute an
@@ -166,6 +169,7 @@ router.get("/", async (req, res) => {
         {
           ...(state && state in TaskState ? { state: state as TaskState } : {}),
           ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
+          ...(projectId ? { projectId } : {}),
         },
         // Tasks awaiting a decision never archive out of sight.
         { OR: [...visibleTasksWhere().OR, { approval: { not: "APPROVED" } }] },
@@ -228,6 +232,7 @@ router.patch("/order", requireTaskManagement, async (req, res) => {
  */
 router.get("/report.pdf", async (req, res) => {
   const participantId = parseId(req.query.participantId);
+  const projectId = parseId(req.query.projectId);
   const stateParam = req.query.state ? String(req.query.state) : undefined;
   const state = stateParam && stateParam in TaskState ? (stateParam as TaskState) : undefined;
 
@@ -243,6 +248,7 @@ router.get("/report.pdf", async (req, res) => {
     approval: "APPROVED",
     ...(state ? { state } : {}),
     ...(participantId ? { participants: { some: { employeeId: participantId } } } : {}),
+    ...(projectId ? { projectId } : {}),
   };
 
   if (period === "last30" || period === "last90") {
@@ -316,9 +322,10 @@ router.get("/archived", requireAdmin, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ code: "INVALID_VALUE", message: "Invalid value" });
   }
-  const { q, state, participantId, from, to } = parsed.data;
+  const { projectId, q, state, participantId, from, to } = parsed.data;
 
   const filters: Prisma.TaskWhereInput[] = [{ approval: "APPROVED" }, archivedTasksWhere()];
+  if (projectId) filters.push({ projectId });
   if (q) {
     // "#123" or "123" also matches by id, which is how the report names tasks.
     const id = parseId(q.replace(/^#/, ""));
@@ -388,6 +395,12 @@ router.post("/", async (req, res) => {
       .json({ code: "INVALID_PARTICIPANT", message: "One of the participants does not exist or is inactive" });
   }
 
+  const project = await prisma.project.findUnique({
+    where: { id: parsed.data.projectId },
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+
   const participantIds = [...new Set(parsed.data.participantIds)];
 
   if (
@@ -405,6 +418,7 @@ router.post("/", async (req, res) => {
   const task = await prisma.$transaction(async (tx) => {
     const created = await tx.task.create({
       data: {
+        projectId: project.id,
         title: parsed.data.title,
         description: parsed.data.description,
         state: parsed.data.state,

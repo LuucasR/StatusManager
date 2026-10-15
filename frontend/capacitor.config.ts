@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.heroicspiritgames.statusmanager',
-  appName: 'Status Manager',
+  appName: 'Heroic Manager',
   webDir: 'dist',
 
   server: {

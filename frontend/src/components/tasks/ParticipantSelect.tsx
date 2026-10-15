@@ -7,9 +7,11 @@ type Props = {
   value: TaskParticipant[];
   onChange: (value: TaskParticipant[]) => void;
   disabled?: boolean;
+  /** Defaults to "Participants". */
+  label?: string;
 };
 
-export default function ParticipantSelect({ options, value, onChange, disabled }: Props) {
+export default function ParticipantSelect({ options, value, onChange, disabled, label }: Props) {
   return (
     <Autocomplete
       multiple
@@ -25,7 +27,7 @@ export default function ParticipantSelect({ options, value, onChange, disabled }
       renderInput={(params) => (
         <TextField
           {...params}
-          label={t("board.participants")}
+          label={label ?? t("board.participants")}
           placeholder={value.length ? "" : t("board.searchEmployee")}
         />
       )}

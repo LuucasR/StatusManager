@@ -1,8 +1,8 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
-import type { AnnouncementPriority } from "@prisma/client";
+import type { AnnouncementPriority, Prisma } from "@prisma/client";
 import prisma from "../prisma/client";
-import { requireAuth, requireStaff } from "../auth/auth.middleware";
+import { requireAdmin, requireAuth, requireStaff } from "../auth/auth.middleware";
 import { notify } from "../notifications/notification.service";
 import { emitAnnouncementsChanged } from "../realtime";
 
@@ -43,6 +43,11 @@ function validationError(res: Response, error: z.ZodError) {
   });
 }
 
+/** Not expired yet: no date, or one still ahead. */
+const liveWhere = (): Prisma.AnnouncementWhereInput => ({
+  OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+});
+
 /** The people an announcement is for: the active team. */
 async function activeTeamIds() {
   const team = await prisma.employee.findMany({ where: { active: true }, select: { id: true } });
@@ -52,7 +57,9 @@ async function activeTeamIds() {
 router.get("/", async (req, res) => {
   const me = req.auth!.employeeId;
   const [rows, teamIds] = await Promise.all([
+    // Expired ones leave the team's list; the admins' box still has them.
     prisma.announcement.findMany({
+      where: liveWhere(),
       orderBy: { createdAt: "desc" },
       take: LIST_TAKE,
       include: { reads: { select: { employeeId: true, readAt: true } } },
@@ -84,6 +91,57 @@ router.get("/", async (req, res) => {
   res.json(announcements);
 });
 
+/**
+ * The admins' box: every announcement ever published, expired ones included,
+ * with who saw it and who has not. `q` searches title, message and author.
+ *
+ * IMPORTANT: registered BEFORE "/:id/..." routes, same reason as /tasks/archived.
+ */
+router.get("/admin", requireAdmin, async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
+
+  const [rows, team] = await Promise.all([
+    prisma.announcement.findMany({
+      where: q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              { body: { contains: q, mode: "insensitive" } },
+              { authorName: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {},
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: { reads: { select: { employeeId: true, readAt: true } } },
+    }),
+    prisma.employee.findMany({
+      where: { active: true },
+      select: { id: true, employeeNumber: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  const now = Date.now();
+  res.json(
+    rows.map(({ reads, ...announcement }) => {
+      const readAt = new Map(reads.map((read) => [read.employeeId, read.readAt]));
+      // Only people still on the team: a deactivated account is neither
+      // "seen" nor "pending" any more.
+      const seen = team
+        .filter((employee) => readAt.has(employee.id))
+        .map((employee) => ({ employee, readAt: readAt.get(employee.id)! }));
+      const pending = team.filter((employee) => !readAt.has(employee.id));
+      return {
+        ...announcement,
+        expired: announcement.expiresAt ? announcement.expiresAt.getTime() <= now : false,
+        seen,
+        pending,
+      };
+    })
+  );
+});
+
 /** Who has read it and who has not. Staff only: it is the author's follow-up list. */
 router.get("/:id/reads", requireStaff, async (req, res) => {
   const id = parseId(req.params.id);
@@ -110,7 +168,7 @@ router.post("/:id/read", async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(404).json(ANNOUNCEMENT_NOT_FOUND);
 
-  const exists = await prisma.announcement.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.announcement.findFirst({ where: { id, ...liveWhere() }, select: { id: true } });
   if (!exists) return res.status(404).json(ANNOUNCEMENT_NOT_FOUND);
 
   const employeeId = req.auth!.employeeId;
@@ -130,6 +188,12 @@ const announcementSchema = z.object({
   body: z.string().trim().min(1, "The message is required").max(5000),
   priority: z.enum(["CRITICAL", "IMPORTANT", "INFO"]),
   pinned: z.boolean().optional(),
+  // Optional; null = it never expires. Has to be in the future when set.
+  expiresAt: z.coerce
+    .date()
+    .refine((date) => date.getTime() > Date.now(), "The expiry date has to be in the future")
+    .nullable()
+    .optional(),
 });
 
 router.post("/", requireStaff, async (req, res) => {

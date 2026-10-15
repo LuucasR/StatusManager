@@ -33,16 +33,14 @@ function localizeError(code: unknown, message: unknown): string {
   return t("error.UNKNOWN");
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiUrl()}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(localStorage.getItem("token") ? { Authorization: `Bearer ${localStorage.getItem("token")}` } : {}),
-      ...init?.headers,
-    },
-  });
+function authHeader(): Record<string, string> {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
+/** Shared by api() and the binary helpers, so they all fail the same way. */
+async function failIfNotOk(response: Response) {
+  if (response.ok) return;
   const data = await response.json().catch(() => ({}));
 
   // Central expired-session interceptor. Each page used to handle this by hand
@@ -59,9 +57,38 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(t("error.PASSWORD_CHANGE_REQUIRED"), data.code);
   }
 
-  if (!response.ok) {
-    throw new ApiError(localizeError(data.code, data.message), data.code);
-  }
+  throw new ApiError(localizeError(data.code, data.message), data.code);
+}
 
-  return data;
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${getApiUrl()}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(),
+      ...init?.headers,
+    },
+  });
+
+  await failIfNotOk(response);
+  return response.json().catch(() => ({}));
+}
+
+/** Sends a file as the raw body, with its own type (no JSON, no FormData). */
+export async function apiUpload<T>(path: string, file: Blob): Promise<T> {
+  const response = await fetch(`${getApiUrl()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type, ...authHeader() },
+    body: file,
+  });
+
+  await failIfNotOk(response);
+  return response.json().catch(() => ({}));
+}
+
+/** A binary response (an image), authenticated: an <img src> cannot send the token. */
+export async function apiBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${getApiUrl()}${path}`, { headers: authHeader() });
+  await failIfNotOk(response);
+  return response.blob();
 }

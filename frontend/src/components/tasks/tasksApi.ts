@@ -2,6 +2,8 @@ import { api } from "../../api";
 import type { Task, TaskColor, TaskComment, TaskState } from "./types";
 
 export type TaskPayload = {
+  /** Create only: the project the task belongs to. */
+  projectId?: number;
   title: string;
   description: string;
   startsAt: string;
@@ -18,7 +20,9 @@ export type TaskPayload = {
   archiveAt?: string | null;
 };
 
-export const listTasks = () => api<Task[]>("/tasks");
+/** One project's board, or every project's tasks (the task pickers) without it. */
+export const listTasks = (projectId?: number) =>
+  api<Task[]>(projectId ? `/tasks?projectId=${projectId}` : "/tasks");
 
 export const getTask = (id: number) => api<Task>(`/tasks/${id}`);
 
@@ -88,6 +92,7 @@ export type ArchiveFilters = {
   q?: string;
   state?: TaskState;
   participantId?: number;
+  projectId?: number;
   /** yyyy-mm-dd, on the end date, both inclusive. */
   from?: string;
   to?: string;

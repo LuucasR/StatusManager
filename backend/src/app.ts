@@ -26,6 +26,9 @@ import patchNotesRoutes from "./patch-notes/patch-notes.routes";
 import downloadsRoutes from "./downloads/downloads.routes";
 import warningsRoutes from "./warnings/warnings.routes";
 import announcementsRoutes from "./announcements/announcements.routes";
+import mapsRoutes from "./maps/maps.routes";
+import projectsRoutes from "./projects/projects.routes";
+import docsRoutes from "./docs/docs.routes";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -71,7 +74,7 @@ app.use(
 // history: with 10 active people it drained in minutes. Same for chat, which
 // spends a request per message, per read receipt and per page.
 app.use(
-  ["/activities", "/admin", "/tasks", "/chat", "/notifications", "/workday", "/attendance", "/patch-notes", "/downloads", "/warnings"],
+  ["/activities", "/admin", "/tasks", "/chat", "/notifications", "/workday", "/attendance", "/patch-notes", "/downloads", "/warnings", "/maps", "/projects", "/docs"],
   rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 900,
@@ -99,6 +102,13 @@ app.use("/downloads", downloadsRoutes);
 app.use("/warnings", warningsRoutes);
 // Everyone reads and marks read; staff publishes, guarded inside.
 app.use("/announcements", announcementsRoutes);
+// Everyone lists the projects (sidebar tabs); admins manage them, inside.
+app.use("/projects", projectsRoutes);
+// A project's GDD tab: everyone reads and writes, deletes are guarded inside.
+app.use("/docs", docsRoutes);
+// A project's Maps tab, on trial. Everyone looks; board managers upload and
+// draw, guarded inside.
+app.use("/maps", mapsRoutes);
 
 /**
  * Touches the database on purpose. The previous version returned a static OK,

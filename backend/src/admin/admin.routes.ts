@@ -8,6 +8,7 @@ import {
   disconnectEmployee,
   emitAccountsChanged,
   emitStatusChanged,
+  emitMapsChanged,
   emitTaskChanged,
   sendConfirmationRequest,
 } from "../realtime";
@@ -399,6 +400,7 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
 
   const now = new Date();
   let leftTaskIds: number[] = [];
+  let leftMapSectors = 0;
   const employee = await prisma.$transaction(async (tx) => {
     // Whatever they were doing ends now, or it would keep counting time.
     await tx.activityHistory.updateMany({
@@ -423,6 +425,8 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
       ]);
     }
     leftTaskIds = links.map((link) => link.taskId);
+    // And off the map sectors they were working.
+    leftMapSectors = (await tx.mapRegionAssignee.deleteMany({ where: { employeeId: account.id } })).count;
 
     return tx.employee.update({
       where: { id: account.id },
@@ -436,6 +440,7 @@ router.post("/employees/:id/deactivate", requireAdmin, async (req, res) => {
   emitStatusChanged(employee);
   emitAccountsChanged();
   for (const taskId of leftTaskIds) emitTaskChanged({ type: "updated", taskId });
+  if (leftMapSectors) emitMapsChanged({ mapId: 0 });
   res.json({ success: true });
 });
 

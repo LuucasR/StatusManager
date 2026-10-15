@@ -84,7 +84,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
     title: options.title,
     subtitle: options.subtitle,
     periodLabel: options.periodLabel,
-    footerLabel: "Status Manager - Activity log",
+    footerLabel: "Heroic Manager - Activity log",
     continuationTitle: "Activity log continued",
     generatedAt,
   });

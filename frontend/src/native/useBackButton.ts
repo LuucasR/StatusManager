@@ -7,7 +7,7 @@ import { isNative } from "./platform";
  * Makes Android's back button navigate instead of quitting.
  *
  * Capacitor's default is to close the app on every press, which reads as a
- * crash: tapping back from the task board drops you out of Status Manager
+ * crash: tapping back from the task board drops you out of Heroic Manager
  * entirely rather than returning to the dashboard.
  *
  * `canGoBack` reflects the WebView's history, which react-router drives, so

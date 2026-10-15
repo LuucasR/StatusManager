@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  Container,
   Stack,
   Typography,
 } from "@mui/material";
@@ -58,7 +57,8 @@ import type { AppOutletContext } from "../layouts/AppLayout";
 import { canManageTasks, isAdminRole, isStaff } from "../components/roles";
 import { t, tf } from "../i18n";
 
-export default function TasksPage() {
+/** A project's task board: the Tasks tab of /projects/:projectId. */
+export default function TasksPage({ projectId }: { projectId: number }) {
   const { me } = useOutletContext<AppOutletContext>();
   // Board management: admin, supervisor or task manager.
   const canManage = canManageTasks(me?.role);
@@ -110,7 +110,7 @@ export default function TasksPage() {
   const load = useCallback(async () => {
     try {
       const [taskList, team] = await Promise.all([
-        listTasks(),
+        listTasks(projectId),
         api<TaskParticipant[]>("/activities/team"),
       ]);
       setTasks(taskList);
@@ -121,7 +121,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [handleError]);
+  }, [handleError, projectId]);
 
   const reloadDetail = useCallback(
     async (id: number) => {
@@ -350,7 +350,7 @@ export default function TasksPage() {
   async function handleSubmit(payload: TaskPayload, taskId?: number) {
     if (taskId) await updateTask(taskId, payload);
     else {
-      const created = await createTask(payload);
+      const created = await createTask({ ...payload, projectId });
       if (!isApprovedTask(created)) setNotice(t("approval.sentNotice"));
     }
     await load();
@@ -386,6 +386,7 @@ export default function TasksPage() {
   }
 
   async function handlePreviewReport(params: URLSearchParams) {
+    params.set("projectId", String(projectId));
     try {
       await pdf.open(`${getApiUrl()}/tasks/report.pdf?${params.toString()}`, t("taskReport.filename"));
       setReportOpen(false);
@@ -411,7 +412,7 @@ export default function TasksPage() {
   const canComment = canReadChat;
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Box>
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
           {error}
@@ -424,15 +425,7 @@ export default function TasksPage() {
       )}
 
       <Box className="page-heading">
-        <Box>
-          <Typography className="eyebrow">{t("tasksPage.eyebrow")}</Typography>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            {t("tasksPage.title")}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {t("tasksPage.subtitle")}
-          </Typography>
-        </Box>
+        <Typography color="text.secondary">{t("tasksPage.subtitle")}</Typography>
 
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
           <Button
@@ -542,6 +535,7 @@ export default function TasksPage() {
       {/* Before the detail dialog, so a task opened from the archive stacks on top. */}
       {isAdmin && (
         <ArchivedTasksDialog
+          projectId={projectId}
           open={archiveOpen}
           employees={employees}
           onClose={() => setArchiveOpen(false)}
@@ -583,6 +577,6 @@ export default function TasksPage() {
         onClose={pdf.close}
         onDownload={pdf.download}
       />
-    </Container>
+    </Box>
   );
 }

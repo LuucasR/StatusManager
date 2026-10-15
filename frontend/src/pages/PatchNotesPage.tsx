@@ -5,7 +5,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Container,
   IconButton,
   MenuItem,
   Paper,
@@ -65,7 +64,8 @@ function formatDay(day: string) {
  * Weekly patch notes. Everyone writes their own section while the week is a
  * draft and reads everybody else's; staff review, close, publish and export.
  */
-export default function PatchNotesPage() {
+/** A project's weekly patch notes: the Patch notes tab of /projects/:projectId. */
+export default function PatchNotesPage({ projectId }: { projectId: number }) {
   const { me } = useOutletContext<AppOutletContext>();
   const staff = isStaff(me?.role);
 
@@ -85,23 +85,23 @@ export default function PatchNotesPage() {
   const pdf = usePdfPreview();
 
   useEffect(() => {
-    listWeeks()
+    listWeeks(projectId)
       .then((data) => {
         setCurrent(data.current);
         setWeeks(data.weeks);
         setWeekStart((selected) => selected ?? data.current);
       })
       .catch((err) => setError((err as Error).message));
-  }, []);
+  }, [projectId]);
 
   const load = useCallback(async () => {
     if (!weekStart || !me) return;
     try {
       const [week, tasks, teamInsights, list] = await Promise.all([
-        getWeek(weekStart),
-        getMyTasks(weekStart),
-        staff ? getInsights(weekStart) : Promise.resolve(null),
-        listWeeks(),
+        getWeek(projectId, weekStart),
+        getMyTasks(projectId, weekStart),
+        staff ? getInsights(projectId, weekStart) : Promise.resolve(null),
+        listWeeks(projectId),
       ]);
       setDetail(week);
       setMyTasks(tasks);
@@ -110,14 +110,14 @@ export default function PatchNotesPage() {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [weekStart, me, staff]);
+  }, [projectId, weekStart, me, staff]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useSocketEvent<{ weekStart: string }>("patchnotes:changed", (payload) => {
-    if (payload.weekStart === weekStart) void load();
+  useSocketEvent<{ projectId: number; weekStart: string }>("patchnotes:changed", (payload) => {
+    if (payload.projectId === projectId && payload.weekStart === weekStart) void load();
   });
   useOnReconnect(() => void load());
 
@@ -168,7 +168,7 @@ export default function PatchNotesPage() {
   async function submitEntry(input: EntryInput) {
     if (!weekStart) return;
     if (editing) await updateEntry(editing.id, input);
-    else await createEntry(weekStart, input);
+    else await createEntry(projectId, weekStart, input);
     setDialogOpen(false);
     await load();
   }
@@ -187,7 +187,7 @@ export default function PatchNotesPage() {
     if (!weekStart) return;
     setError("");
     try {
-      await updateWeek(weekStart, patch);
+      await updateWeek(projectId, weekStart, patch);
       setNotice(t("patchNotes.saved"));
       await load();
     } catch (err) {
@@ -200,7 +200,7 @@ export default function PatchNotesPage() {
     if (next === "PUBLISHED" && !window.confirm(t("patchNotes.confirmPublish"))) return;
     setError("");
     try {
-      await setWeekStatus(weekStart, next);
+      await setWeekStatus(projectId, weekStart, next);
       await load();
     } catch (err) {
       setError((err as Error).message);
@@ -211,7 +211,7 @@ export default function PatchNotesPage() {
     if (!weekStart) return;
     const name = detail?.week.version ?? weekStart;
     try {
-      await pdf.open(reportUrl(weekStart, mode), `patch-notes-${name}${mode === "public" ? "-public" : ""}.pdf`);
+      await pdf.open(reportUrl(projectId, weekStart, mode), `patch-notes-${name}${mode === "public" ? "-public" : ""}.pdf`);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -221,9 +221,9 @@ export default function PatchNotesPage() {
   // employee view at an admin.
   if (!me || !weekStart) {
     return (
-      <Container maxWidth="lg" sx={{ py: 6 }}>
+      <Box sx={{ py: 4 }}>
         {error ? <Alert severity="error">{error}</Alert> : <CircularProgress />}
-      </Container>
+      </Box>
     );
   }
 
@@ -231,7 +231,7 @@ export default function PatchNotesPage() {
     writable && (staff || (entry.authorId === me.id && status === "DRAFT"));
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ maxWidth: 1200 }}>
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError("")}>
           {error}
@@ -243,19 +243,11 @@ export default function PatchNotesPage() {
         </Alert>
       )}
 
-      <Box className="page-heading">
-        <Box>
-          <Typography className="eyebrow">{t("patchNotes.eyebrow")}</Typography>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            {t("patchNotes.title")}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {staff ? t("patchNotes.subtitleStaff") : t("patchNotes.subtitle")}
-          </Typography>
-        </Box>
-      </Box>
+      <Typography color="text.secondary">
+        {staff ? t("patchNotes.subtitleStaff") : t("patchNotes.subtitle")}
+      </Typography>
 
-      <Paper className="status-card" elevation={0} sx={{ p: 2, mt: 3 }}>
+      <Paper className="status-card" elevation={0} sx={{ p: 2, mt: 2 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
           <IconButton onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label={t("patchNotes.previousWeek")}>
             <ChevronLeftRounded />
@@ -386,6 +378,6 @@ export default function PatchNotesPage() {
         onClose={pdf.close}
         onDownload={pdf.download}
       />
-    </Container>
+    </Box>
   );
 }

@@ -53,6 +53,7 @@ export const isApprovedTask = (task: Task) => (task.approval ?? "APPROVED") === 
 
 export type Task = {
   id: number;
+  projectId: number;
   title: string;
   description: string;
   state: TaskState;

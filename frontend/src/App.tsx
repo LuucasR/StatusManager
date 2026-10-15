@@ -1,12 +1,12 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
-import TasksPage from "./pages/TasksPage";
 import SummaryPage from "./pages/SummaryPage";
 import WorkdayPage from "./pages/WorkdayPage";
 import AttendancePage from "./pages/AttendancePage";
-import PatchNotesPage from "./pages/PatchNotesPage";
 import DownloadsPage from "./pages/DownloadsPage";
+import ProjectPage from "./pages/ProjectPage";
+import ProjectRedirect from "./components/projects/ProjectRedirect";
 import WarningsPage from "./pages/WarningsPage";
 import AccountsPage from "./pages/AccountsPage";
 import AnnouncementsPage from "./pages/AnnouncementsPage";
@@ -69,7 +69,9 @@ export default function App() {
         {/* The landing tab: news and notices for everyone; staff publishes. */}
         <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
+        {/* Tasks and patch notes are tabs of a project now; the old paths
+            (and the bell's /tasks?task=12) find the right one. */}
+        <Route path="/tasks" element={<ProjectRedirect tab="tasks" />} />
         <Route path="/summary" element={<SummaryPage />} />
         {/* Admin-only. The route is mounted for everyone and the page itself
             redirects, because the role is not known until AppLayout has
@@ -79,12 +81,14 @@ export default function App() {
             gets a read-only calendar of their own arrivals. The backend only
             lets non-admins reach GET /attendance/me. */}
         <Route path="/attendance" element={<AttendancePage />} />
-        {/* Everyone: each person writes their own section, staff reviews,
-            publishes and exports. The backend guards the staff routes. */}
-        <Route path="/patch-notes" element={<PatchNotesPage />} />
+        <Route path="/patch-notes" element={<ProjectRedirect tab="patch-notes" />} />
         {/* Everyone downloads; only admins get the edit controls, and the
             backend guards the writes. */}
         <Route path="/downloads" element={<DownloadsPage />} />
+        {/* One per project an admin created; its tools (Maps) are tabs. Everyone
+            looks; the backend guards the writes. */}
+        <Route path="/projects/:projectId" element={<ProjectPage />} />
+        <Route path="/projects/:projectId/:tab" element={<ProjectPage />} />
         {/* Everyone: their own warnings; an admin sees the team, grants and
             revokes. The backend only lets non-admins reach GET /warnings/me. */}
         <Route path="/warnings" element={<WarningsPage />} />

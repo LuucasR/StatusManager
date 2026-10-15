@@ -45,6 +45,8 @@ const checklist = z
 
 export const createTaskSchema = z
   .object({
+    // Every task lives in a project; the route checks that it exists.
+    projectId: z.number().int().positive(),
     title: z.string().trim().min(3).max(120),
     description: z.string().trim().min(1).max(2000),
     startsAt: dateInput,
@@ -106,6 +108,7 @@ export const restoreTaskSchema = z.object({
 
 /** Filters of the admin's archive (GET /tasks/archived), all optional. */
 export const archivedTasksQuerySchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
   q: z.string().trim().max(120).optional(),
   state: z.nativeEnum(TaskState).optional(),
   participantId: z.coerce.number().int().positive().optional(),

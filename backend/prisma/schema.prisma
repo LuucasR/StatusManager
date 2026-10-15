@@ -167,6 +167,13 @@ model Employee {
   taskEventsDone     TaskEvent[] @relation("TaskEventActor")
   taskEventsReceived TaskEvent[] @relation("TaskEventTarget")
 
+  projectsCreated    Project[]           @relation("ProjectCreator")
+  docsCreated        ProjectDoc[]        @relation("ProjectDocCreator")
+  docsEdited         ProjectDoc[]        @relation("ProjectDocEditor")
+  mapsUploaded       SiteMap[]           @relation("SiteMapCreator")
+  mapRegionsCreated  MapRegion[]         @relation("MapRegionCreator")
+  mapRegionLinks     MapRegionAssignee[]
+
   conversations ConversationMember[]
   messages      Message[]
   notifications Notification[]
@@ -226,6 +233,9 @@ model ActivityHistory {
 
 model Task {
   id                      Int       @id @default(autoincrement())
+  /// Restrict: a project with tasks cannot be deleted by accident.
+  projectId               Int
+  project                 Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   title                   String
   description             String
   state                   TaskState @default(PENDING)
@@ -281,11 +291,13 @@ model Task {
 
   progressSegments TaskProgressSegment[]
   events           TaskEvent[]
+  mapRegions       MapRegion[]
 
   @@index([state, startsAt])
   @@index([startsAt])
   @@index([pinned, endsAt])
   @@index([approval])
+  @@index([projectId])
 }
 
 /// One stretch of time a task spent in IN_PROGRESS. A row is opened every time
@@ -639,6 +651,8 @@ model Announcement {
   priority   AnnouncementPriority @default(INFO)
   /// Kept at the top of its priority group.
   pinned     Boolean              @default(false)
+  /// Optional. Once past, it leaves the team's list; the admins' box keeps it.
+  expiresAt  DateTime?
   /// SetNull + name snapshot, like Message.authorName.
   authorId   Int?
   authorName String
@@ -708,11 +722,15 @@ enum PatchCategory {
  */
 model PatchWeek {
   id            Int             @id @default(autoincrement())
+  /// Each project keeps its own weeks. Restrict, like Task.
+  projectId     Int
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   /// Monday of the week, "YYYY-MM-DD" in WorkdaySettings.timezone. Text for the
   /// same reason as AttendanceEntry.date: a calendar day, not an instant.
-  weekStart     String          @unique
-  /// "v0.4.2". Set by staff, usually when publishing.
-  version       String?         @unique
+  /// Unique per project.
+  weekStart     String
+  /// "v0.4.2". Set by staff, usually when publishing. Unique per project.
+  version       String?
   title         String?
   /// Staff intro printed at the top of the PDF.
   summary       String          @default("")
@@ -725,6 +743,9 @@ model PatchWeek {
   updatedAt     DateTime        @updatedAt
 
   entries PatchEntry[]
+
+  @@unique([projectId, weekStart])
+  @@unique([projectId, version])
 }
 
 /** One line of somebody's section: what advanced, optionally tied to a task. */
@@ -772,4 +793,103 @@ model Utility {
   position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// A company project (a game, a client job...). Admins create them from the
+/// dashboard; each one gets its own entry in the sidebar, with its tools (tasks,
+/// maps and patch notes) as tabs inside.
+model Project {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  createdById Int?
+  createdBy   Employee? @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  maps        SiteMap[]
+  tasks       Task[]
+  patchWeeks  PatchWeek[]
+  docs        ProjectDoc[]
+}
+
+/// A design document or note of a project (the GDD tab): one page of text,
+/// grouped by a free-text section ("Mechanics", "Narrative", "Art"...).
+/// Restrict on the project, like its tasks. Names are snapshots, like
+/// Message.authorName, so the page still says who wrote it.
+model ProjectDoc {
+  id            Int       @id @default(autoincrement())
+  projectId     Int
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  title         String
+  section       String    @default("")
+  body          String    @default("")
+  createdById   Int?
+  createdBy     Employee? @relation("ProjectDocCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByName String
+  updatedById   Int?
+  updatedBy     Employee? @relation("ProjectDocEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedByName String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId, section])
+}
+
+/// A map image the team marks sectors on (a project's Maps tab, on trial).
+///
+/// The bytes live in Postgres rather than on disk: the backend's disk on Render
+/// is wiped on every deploy. Capped at 8 MB by the upload route.
+model SiteMap {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  mimeType    String
+  data        Bytes
+  createdById Int?
+  createdBy   Employee? @relation("SiteMapCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  regions MapRegion[]
+
+  @@index([projectId])
+}
+
+/// A rectangle on a map and what is being done there. x/y/w/h are fractions of
+/// the image (0..1), so the sector stays put at any display size.
+model MapRegion {
+  id          Int       @id @default(autoincrement())
+  mapId       Int
+  map         SiteMap   @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  x           Float
+  y           Float
+  w           Float
+  h           Float
+  title       String
+  description String    @default("")
+  /// Paints the sector, with the same palette as the board's columns.
+  state       TaskState @default(PENDING)
+  taskId      Int?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdById Int?
+  createdBy   Employee? @relation("MapRegionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assignees MapRegionAssignee[]
+
+  @@index([mapId])
+}
+
+/// Who works a sector. Cascade on the employee, like TaskChecklistAssignee.
+model MapRegionAssignee {
+  regionId   Int
+  employeeId Int
+  addedAt    DateTime  @default(now())
+  region     MapRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([regionId, employeeId])
+  @@index([employeeId])
 }

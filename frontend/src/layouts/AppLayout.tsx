@@ -3,15 +3,14 @@ import {
   CalendarMonthRounded,
   CampaignRounded,
   DashboardRounded,
-  DescriptionRounded,
   DownloadRounded,
+  FolderRounded,
   GavelRounded,
   HowToRegRounded,
   InsightsRounded,
   LogoutRounded,
   ManageAccountsRounded,
   MenuRounded,
-  ViewKanbanRounded,
 } from "@mui/icons-material";
 import type { SvgIconComponent } from "@mui/icons-material";
 import {
@@ -25,6 +24,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   Toolbar,
   Typography,
 } from "@mui/material";
@@ -42,6 +42,7 @@ import ShellWatchers, { type NavBadges } from "../components/announcements/Shell
 import AppSettings from "../components/AppSettings";
 import { t } from "../i18n";
 import { installAttention } from "../alerts/attention";
+import { ProjectsProvider, useProjects } from "../components/projects/ProjectsContext";
 
 export type SessionEmployee = {
   id: number;
@@ -62,7 +63,6 @@ const links = [
   // First, and where the app opens: news and notices for the whole team.
   { to: "/announcements", key: "nav.announcements", Icon: CampaignRounded },
   { to: "/dashboard", key: "nav.dashboard", Icon: DashboardRounded },
-  { to: "/tasks", key: "nav.tasks", Icon: ViewKanbanRounded },
   // No role filter: the summary is always the authenticated employee's own.
   { to: "/summary", key: "nav.summary", Icon: InsightsRounded },
   { to: "/workday", key: "nav.workday", Icon: CalendarMonthRounded },
@@ -70,8 +70,6 @@ const links = [
   { to: "/attendance", key: "nav.attendance", Icon: HowToRegRounded },
   // Same split: an admin sees and grants the team's, anyone else their own.
   { to: "/warnings", key: "nav.warnings", Icon: GavelRounded },
-  // Everyone writes their own section; staff gets the review panel on the page.
-  { to: "/patch-notes", key: "nav.patchNotes", Icon: DescriptionRounded },
   // Everyone downloads; admins get the edit controls on the page.
   { to: "/downloads", key: "nav.downloads", Icon: DownloadRounded },
   // Admins only: sign-ups, password resets and every account's lifecycle.
@@ -82,6 +80,17 @@ const links = [
   Icon: SvgIconComponent;
   adminOnly?: boolean;
 }[];
+
+const NAV_ITEM_SX = {
+  borderRadius: "12px",
+  mb: 0.5,
+  transition: "background-color .15s ease, color .15s ease",
+  "&.Mui-selected, &.Mui-selected:hover": {
+    bgcolor: "var(--accent-soft)",
+    color: "var(--accent)",
+    boxShadow: "inset 3px 0 0 0 var(--accent)",
+  },
+} as const;
 
 /** Width of the sidebar from md up. */
 const SIDEBAR_WIDTH = 232;
@@ -102,6 +111,8 @@ function NavList({
   /** Counter per link path: unread announcements, warnings awaiting a decision. */
   badges: NavBadges;
 }) {
+  const { projects } = useProjects();
+
   return (
     <List sx={{ px: 1.5, py: 1.5 }}>
       {links.filter((link) => isAdmin || !("adminOnly" in link)).map(({ to, key, Icon }) => {
@@ -112,16 +123,7 @@ function NavList({
             component={RouterLink}
             to={to}
             selected={active}
-            sx={{
-              borderRadius: "12px",
-              mb: 0.5,
-              transition: "background-color .15s ease, color .15s ease",
-              "&.Mui-selected, &.Mui-selected:hover": {
-                bgcolor: "var(--accent-soft)",
-                color: "var(--accent)",
-                boxShadow: "inset 3px 0 0 0 var(--accent)",
-              },
-            }}
+            sx={NAV_ITEM_SX}
           >
             <ListItemIcon sx={{ minWidth: 38, color: active ? "var(--accent)" : "inherit" }}>
               <Icon fontSize="small" />
@@ -143,6 +145,42 @@ function NavList({
           </ListItemButton>
         );
       })}
+
+      {/* One entry per project an admin created on the dashboard; its tools
+          (tasks, maps, patch notes, GDD) are tabs inside. */}
+      {projects && projects.length > 0 && (
+        <>
+          <ListSubheader
+            disableSticky
+            sx={{ bgcolor: "transparent", lineHeight: "32px", mt: 1, fontWeight: 700 }}
+          >
+            {t("nav.projects")}
+          </ListSubheader>
+          {projects.map((project) => {
+            const to = `/projects/${project.id}`;
+            const active = pathname === to || pathname.startsWith(`${to}/`);
+            return (
+              <ListItemButton
+                key={project.id}
+                component={RouterLink}
+                to={`${to}/tasks`}
+                selected={active}
+                sx={NAV_ITEM_SX}
+              >
+                <ListItemIcon sx={{ minWidth: 38, color: active ? "var(--accent)" : "inherit" }}>
+                  <FolderRounded fontSize="small" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={project.name}
+                  slotProps={{
+                    primary: { noWrap: true, sx: { fontWeight: active ? 700 : 500 } },
+                  }}
+                />
+              </ListItemButton>
+            );
+          })}
+        </>
+      )}
 
       <Divider sx={{ my: 1 }} />
 
@@ -183,6 +221,7 @@ export default function AppLayout() {
 
   return (
     <SocketProvider>
+    <ProjectsProvider>
     <ChatProvider>
     <Box>
       {/* The inset padding is for the app: the Android WebView draws edge to
@@ -211,7 +250,7 @@ export default function AppLayout() {
           </Box>
 
           <Typography variant="h6" noWrap>
-            Status Manager
+            Heroic Manager
           </Typography>
 
           <Box sx={{ flex: 1 }} />
@@ -238,7 +277,7 @@ export default function AppLayout() {
       >
         <Box sx={{ width: 260, pt: "env(safe-area-inset-top, 0px)" }} role="presentation">
           <Box sx={{ px: 2, py: 2 }}>
-            <Typography variant="h6">Status Manager</Typography>
+            <Typography variant="h6">Heroic Manager</Typography>
             <Typography variant="body2" color="text.secondary">
               {me?.name} · #{me?.employeeNumber}
             </Typography>
@@ -286,6 +325,7 @@ export default function AppLayout() {
       <ActivityConfirmationDialog me={me} />
     </Box>
     </ChatProvider>
+    </ProjectsProvider>
     </SocketProvider>
   );
 }

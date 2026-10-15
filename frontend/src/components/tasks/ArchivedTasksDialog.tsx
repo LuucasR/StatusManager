@@ -34,6 +34,8 @@ import { LOCALE } from "../../locale";
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(LOCALE, { dateStyle: "short" });
 
 type Props = {
+  /** Only this project's archive. */
+  projectId: number;
   open: boolean;
   employees: TaskParticipant[];
   onClose: () => void;
@@ -47,7 +49,14 @@ type Props = {
  * one is brought back to the column the admin picks (for another 14 days), or
  * deleted for good.
  */
-export default function ArchivedTasksDialog({ open, employees, onClose, onOpenTask, onChanged }: Props) {
+export default function ArchivedTasksDialog({
+  projectId,
+  open,
+  employees,
+  onClose,
+  onOpenTask,
+  onChanged,
+}: Props) {
   const [query, setQuery] = useState("");
   // Debounced copy of `query`: one request per pause in typing, not per key.
   const [search, setSearch] = useState("");
@@ -78,6 +87,7 @@ export default function ArchivedTasksDialog({ open, employees, onClose, onOpenTa
     setLoading(true);
     setError("");
     listArchivedTasks({
+      projectId,
       q: search,
       state: state === "all" ? undefined : state,
       participantId: participant === "all" ? undefined : Number(participant),
@@ -96,7 +106,7 @@ export default function ArchivedTasksDialog({ open, employees, onClose, onOpenTa
     return () => {
       stale = true;
     };
-  }, [open, search, state, participant, from, to]);
+  }, [open, projectId, search, state, participant, from, to]);
 
   // A fresh start every time it opens.
   useEffect(() => {

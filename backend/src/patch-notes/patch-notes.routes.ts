@@ -13,7 +13,9 @@ import { renderPatchNotesReport } from "../reports/patch-notes-report";
 import { addDays, currentWeekStart, isWeekStart, weekRange } from "./patch-week";
 
 /**
- * Weekly patch notes.
+ * Weekly patch notes, per project: every week route lives under
+ * /patch-notes/projects/:projectId, and the same Monday is a different week in
+ * each project.
  *
  * Everyone reads every week and writes their own entries while the week is a
  * DRAFT. Staff (admin or supervisor) edit anyone's entries until the week is
@@ -55,6 +57,39 @@ function badWeek(res: Response) {
   return res.status(400).json({ code: "INVALID_WEEK", message: "The week must be a Monday as YYYY-MM-DD" });
 }
 
+function projectNotFound(res: Response) {
+  return res.status(404).json({ code: "PROJECT_NOT_FOUND", message: "Project not found" });
+}
+
+/** The project of the URL, or null after answering 404. */
+async function projectOf(req: Request, res: Response) {
+  const id = Number(req.params.projectId);
+  const project =
+    Number.isInteger(id) && id > 0
+      ? await prisma.project.findUnique({ where: { id }, select: { id: true } })
+      : null;
+  if (!project) {
+    projectNotFound(res);
+    return null;
+  }
+  return project.id;
+}
+
+/** Project and week of the URL, both checked; null after answering. */
+async function weekOf(req: Request, res: Response) {
+  const weekStart = String(req.params.weekStart);
+  if (!isWeekStart(weekStart)) {
+    badWeek(res);
+    return null;
+  }
+  const projectId = await projectOf(req, res);
+  if (!projectId) return null;
+  return { projectId, weekStart };
+}
+
+/** The base of every week route. */
+const P = "/projects/:projectId";
+
 function locked(res: Response) {
   return res.status(409).json({ code: "PATCH_WEEK_LOCKED", message: "This week can no longer be edited" });
 }
@@ -66,16 +101,19 @@ function validationError(res: Response, error: z.ZodError) {
   });
 }
 
+type WeekKey = { projectId: number; weekStart: string };
+const weekWhere = (key: WeekKey) => ({ projectId_weekStart: key });
+
 /** The week as the client sees it: a week nobody wrote into yet reads as an empty DRAFT. */
-async function loadWeek(weekStart: string) {
-  return prisma.patchWeek.findUnique({ where: { weekStart }, select: WEEK_SELECT });
+async function loadWeek(key: WeekKey) {
+  return prisma.patchWeek.findUnique({ where: weekWhere(key), select: WEEK_SELECT });
 }
 
 /** Created on the first write, so browsing empty weeks leaves no rows behind. */
-async function ensureWeek(weekStart: string) {
+async function ensureWeek(key: WeekKey) {
   return prisma.patchWeek.upsert({
-    where: { weekStart },
-    create: { weekStart },
+    where: weekWhere(key),
+    create: key,
     update: {},
     select: { id: true, status: true },
   });
@@ -90,14 +128,18 @@ function canWrite(req: Request, status: PatchWeekStatus) {
   return status === PatchWeekStatus.DRAFT || isStaff(req.auth!.role);
 }
 
-/** WORKING segments of the week with a task, optionally one person's. */
-async function weekTaskTimes(weekStart: string, employeeId?: number) {
+/**
+ * WORKING segments of the week on this project's tasks, optionally one
+ * person's. Time on a task deleted since cannot be told apart by project any
+ * more, so it is left out.
+ */
+async function weekTaskTimes({ projectId, weekStart }: WeekKey, employeeId?: number) {
   const config = await getWorkdayConfig();
   const { from, to } = weekRange(weekStart, config.timezone);
   const rows = await prisma.activityHistory.findMany({
     where: {
       status: "WORKING",
-      OR: [{ taskId: { not: null } }, { taskTitle: { not: null } }],
+      task: { projectId },
       ...(employeeId !== undefined ? { employeeId } : {}),
       ...overlappingWhere(from, to),
     },
@@ -121,11 +163,17 @@ const entrySchema = z.object({
   internal: z.boolean().optional(),
 });
 
-/** Resolves the task to link and snapshots its title. `undefined` = not found. */
-async function linkedTask(taskId: number | null | undefined) {
+/**
+ * Resolves the task to link and snapshots its title. `undefined` = not found,
+ * or a task of another project.
+ */
+async function linkedTask(taskId: number | null | undefined, projectId: number) {
   if (taskId == null) return { taskId: null, taskTitle: null };
-  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, title: true } });
-  return task ? { taskId: task.id, taskTitle: task.title } : undefined;
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, title: true, projectId: true },
+  });
+  return task && task.projectId === projectId ? { taskId: task.id, taskTitle: task.title } : undefined;
 }
 
 /** Same keying as TeamTaskTime.key: by id, or by title once the task is gone. */
@@ -138,9 +186,13 @@ function taskNotFound(res: Response) {
 }
 
 /** Weeks that exist, newest first, plus the current one so the UI can open on it. */
-router.get("/weeks", async (_req, res) => {
+router.get(`${P}/weeks`, async (req, res) => {
+  const projectId = await projectOf(req, res);
+  if (!projectId) return;
+
   const config = await getWorkdayConfig();
   const weeks = await prisma.patchWeek.findMany({
+    where: { projectId },
     select: {
       weekStart: true,
       version: true,
@@ -158,11 +210,12 @@ router.get("/weeks", async (_req, res) => {
   });
 });
 
-router.get("/weeks/:weekStart", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.get(`${P}/weeks/:weekStart`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
+  const { weekStart } = key;
 
-  const week = await loadWeek(weekStart);
+  const week = await loadWeek(key);
   const [rows, times] = week
     ? await Promise.all([
         prisma.patchEntry.findMany({
@@ -170,7 +223,7 @@ router.get("/weeks/:weekStart", async (req, res) => {
           select: ENTRY_SELECT,
           orderBy: [{ authorName: "asc" }, { position: "asc" }, { id: "asc" }],
         }),
-        weekTaskTimes(weekStart),
+        weekTaskTimes(key),
       ])
     : [[], []];
 
@@ -201,25 +254,25 @@ router.get("/weeks/:weekStart", async (req, res) => {
 });
 
 /** The caller's own time per task that week, to suggest what to write about. */
-router.get("/weeks/:weekStart/my-tasks", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.get(`${P}/weeks/:weekStart/my-tasks`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
 
-  const times = await weekTaskTimes(weekStart, req.auth!.employeeId);
+  const times = await weekTaskTimes(key, req.auth!.employeeId);
   res.json(times.map(({ byEmployee: _mine, ...task }) => task));
 });
 
-router.post("/weeks/:weekStart/entries", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.post(`${P}/weeks/:weekStart/entries`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
 
   const parsed = entrySchema.safeParse(req.body);
   if (!parsed.success) return validationError(res, parsed.error);
 
-  const week = await ensureWeek(weekStart);
+  const week = await ensureWeek(key);
   if (!canWrite(req, week.status)) return locked(res);
 
-  const task = await linkedTask(parsed.data.taskId);
+  const task = await linkedTask(parsed.data.taskId, key.projectId);
   if (!task) return taskNotFound(res);
 
   const author = await prisma.employee.findUniqueOrThrow({
@@ -245,7 +298,7 @@ router.post("/weeks/:weekStart/entries", async (req, res) => {
     select: ENTRY_SELECT,
   });
 
-  emitPatchNotesChanged({ weekStart });
+  emitPatchNotesChanged(key);
   res.status(201).json(entry);
 });
 
@@ -259,7 +312,11 @@ async function entryForWrite(req: Request, res: Response) {
 
   const entry = await prisma.patchEntry.findUnique({
     where: { id },
-    select: { id: true, authorId: true, week: { select: { weekStart: true, status: true } } },
+    select: {
+      id: true,
+      authorId: true,
+      week: { select: { projectId: true, weekStart: true, status: true } },
+    },
   });
   if (!entry) {
     res.status(404).json({ code: "PATCH_ENTRY_NOT_FOUND", message: "Patch note entry not found" });
@@ -290,7 +347,7 @@ router.patch("/entries/:id", async (req, res) => {
   if (parsed.data.body !== undefined) data.body = parsed.data.body;
   if (parsed.data.internal !== undefined) data.internal = parsed.data.internal;
   if (parsed.data.taskId !== undefined) {
-    const task = await linkedTask(parsed.data.taskId);
+    const task = await linkedTask(parsed.data.taskId, entry.week.projectId);
     if (!task) return taskNotFound(res);
     Object.assign(data, task);
   }
@@ -301,7 +358,7 @@ router.patch("/entries/:id", async (req, res) => {
     select: ENTRY_SELECT,
   });
 
-  emitPatchNotesChanged({ weekStart: entry.week.weekStart });
+  emitPatchNotesChanged({ projectId: entry.week.projectId, weekStart: entry.week.weekStart });
   res.json(updated);
 });
 
@@ -310,7 +367,7 @@ router.delete("/entries/:id", async (req, res) => {
   if (!entry) return;
 
   await prisma.patchEntry.delete({ where: { id: entry.id } });
-  emitPatchNotesChanged({ weekStart: entry.week.weekStart });
+  emitPatchNotesChanged({ projectId: entry.week.projectId, weekStart: entry.week.weekStart });
   res.json({ success: true });
 });
 
@@ -321,14 +378,14 @@ router.use(requireStaff);
  * Team time per task for the week, and what is missing from the notes: tasks
  * with booked time and no entry, and active people who wrote nothing.
  */
-router.get("/weeks/:weekStart/insights", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.get(`${P}/weeks/:weekStart/insights`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
 
   const [times, week, employees] = await Promise.all([
-    weekTaskTimes(weekStart),
+    weekTaskTimes(key),
     prisma.patchWeek.findUnique({
-      where: { weekStart },
+      where: weekWhere(key),
       select: { entries: { select: { taskId: true, taskTitle: true, authorId: true } } },
     }),
     prisma.employee.findMany({
@@ -364,14 +421,14 @@ const weekSchema = z.object({
     .optional(),
 });
 
-router.patch("/weeks/:weekStart", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.patch(`${P}/weeks/:weekStart`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
 
   const parsed = weekSchema.safeParse(req.body);
   if (!parsed.success) return validationError(res, parsed.error);
 
-  const current = await ensureWeek(weekStart);
+  const current = await ensureWeek(key);
   if (current.status === PatchWeekStatus.PUBLISHED) return locked(res);
 
   const data = {
@@ -381,8 +438,8 @@ router.patch("/weeks/:weekStart", async (req, res) => {
   };
 
   try {
-    const week = await prisma.patchWeek.update({ where: { weekStart }, data, select: WEEK_SELECT });
-    emitPatchNotesChanged({ weekStart });
+    const week = await prisma.patchWeek.update({ where: weekWhere(key), data, select: WEEK_SELECT });
+    emitPatchNotesChanged(key);
     res.json(week);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -399,15 +456,15 @@ const TRANSITIONS: Record<PatchWeekStatus, PatchWeekStatus[]> = {
   PUBLISHED: [PatchWeekStatus.CLOSED],
 };
 
-router.post("/weeks/:weekStart/status", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.post(`${P}/weeks/:weekStart/status`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
 
   const parsed = z.object({ status: z.nativeEnum(PatchWeekStatus) }).safeParse(req.body);
   if (!parsed.success) return validationError(res, parsed.error);
   const next = parsed.data.status;
 
-  const current = await ensureWeek(weekStart);
+  const current = await ensureWeek(key);
   if (!TRANSITIONS[current.status].includes(next)) {
     return res.status(409).json({
       code: "PATCH_INVALID_TRANSITION",
@@ -416,7 +473,7 @@ router.post("/weeks/:weekStart/status", async (req, res) => {
   }
 
   if (next === PatchWeekStatus.PUBLISHED) {
-    const week = await prisma.patchWeek.findUniqueOrThrow({ where: { weekStart }, select: { version: true } });
+    const week = await prisma.patchWeek.findUniqueOrThrow({ where: weekWhere(key), select: { version: true } });
     if (!week.version) {
       return res.status(409).json({
         code: "PATCH_VERSION_REQUIRED",
@@ -427,7 +484,7 @@ router.post("/weeks/:weekStart/status", async (req, res) => {
 
   const now = new Date();
   const week = await prisma.patchWeek.update({
-    where: { weekStart },
+    where: weekWhere(key),
     data: {
       status: next,
       ...(next === PatchWeekStatus.CLOSED && current.status === PatchWeekStatus.DRAFT ? { closedAt: now } : {}),
@@ -439,7 +496,7 @@ router.post("/weeks/:weekStart/status", async (req, res) => {
     select: WEEK_SELECT,
   });
 
-  emitPatchNotesChanged({ weekStart });
+  emitPatchNotesChanged(key);
   res.json(week);
 });
 
@@ -448,20 +505,21 @@ router.post("/weeks/:weekStart/status", async (req, res) => {
  * internal notes; `mode=public` is the player-facing version: task names and total time,
  * without people or internal notes.
  */
-router.get("/weeks/:weekStart/report.pdf", async (req, res) => {
-  const weekStart = String(req.params.weekStart);
-  if (!isWeekStart(weekStart)) return badWeek(res);
+router.get(`${P}/weeks/:weekStart/report.pdf`, async (req, res) => {
+  const key = await weekOf(req, res);
+  if (!key) return;
+  const { weekStart } = key;
   const mode = req.query.mode === "public" ? "public" : "internal";
 
   const [week, times] = await Promise.all([
     prisma.patchWeek.findUnique({
-      where: { weekStart },
+      where: weekWhere(key),
       select: {
         ...WEEK_SELECT,
         entries: { select: ENTRY_SELECT, orderBy: [{ position: "asc" }, { id: "asc" }] },
       },
     }),
-    weekTaskTimes(weekStart),
+    weekTaskTimes(key),
   ]);
 
   const name = week?.version ? `patch-notes-${week.version}` : `patch-notes-${weekStart}`;

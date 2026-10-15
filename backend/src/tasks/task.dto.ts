@@ -90,6 +90,7 @@ type TaskWithDetail = Prisma.TaskGetPayload<{ include: typeof TASK_DETAIL_INCLUD
 export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
   return {
     id: task.id,
+    projectId: task.projectId,
     title: task.title,
     description: task.description,
     state: task.state,

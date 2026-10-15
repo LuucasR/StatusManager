@@ -97,20 +97,23 @@ export type EntryInput = {
   internal: boolean;
 };
 
-export function listWeeks() {
-  return api<{ current: string; weeks: WeekListItem[] }>("/patch-notes/weeks");
+/** Every week route is under its project: each project keeps its own notes. */
+const weeksOf = (projectId: number) => `/patch-notes/projects/${projectId}/weeks`;
+
+export function listWeeks(projectId: number) {
+  return api<{ current: string; weeks: WeekListItem[] }>(weeksOf(projectId));
 }
 
-export function getWeek(weekStart: string) {
-  return api<WeekDetail>(`/patch-notes/weeks/${weekStart}`);
+export function getWeek(projectId: number, weekStart: string) {
+  return api<WeekDetail>(`${weeksOf(projectId)}/${weekStart}`);
 }
 
-export function getMyTasks(weekStart: string) {
-  return api<TaskTime[]>(`/patch-notes/weeks/${weekStart}/my-tasks`);
+export function getMyTasks(projectId: number, weekStart: string) {
+  return api<TaskTime[]>(`${weeksOf(projectId)}/${weekStart}/my-tasks`);
 }
 
-export function createEntry(weekStart: string, input: EntryInput) {
-  return api<PatchEntry>(`/patch-notes/weeks/${weekStart}/entries`, {
+export function createEntry(projectId: number, weekStart: string, input: EntryInput) {
+  return api<PatchEntry>(`${weeksOf(projectId)}/${weekStart}/entries`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -128,32 +131,33 @@ export function deleteEntry(id: number) {
 }
 
 /** Staff only. */
-export function getInsights(weekStart: string) {
-  return api<WeekInsights>(`/patch-notes/weeks/${weekStart}/insights`);
+export function getInsights(projectId: number, weekStart: string) {
+  return api<WeekInsights>(`${weeksOf(projectId)}/${weekStart}/insights`);
 }
 
 /** Staff only. */
 export function updateWeek(
+  projectId: number,
   weekStart: string,
   patch: { title?: string | null; summary?: string; version?: string | null }
 ) {
-  return api<PatchWeek>(`/patch-notes/weeks/${weekStart}`, {
+  return api<PatchWeek>(`${weeksOf(projectId)}/${weekStart}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
 /** Staff only. */
-export function setWeekStatus(weekStart: string, status: PatchWeekStatus) {
-  return api<PatchWeek>(`/patch-notes/weeks/${weekStart}/status`, {
+export function setWeekStatus(projectId: number, weekStart: string, status: PatchWeekStatus) {
+  return api<PatchWeek>(`${weeksOf(projectId)}/${weekStart}/status`, {
     method: "POST",
     body: JSON.stringify({ status }),
   });
 }
 
 /** Staff only. Fed to usePdfPreview, which adds the token. */
-export function reportUrl(weekStart: string, mode: "internal" | "public") {
-  return `${getApiUrl()}/patch-notes/weeks/${weekStart}/report.pdf?mode=${mode}`;
+export function reportUrl(projectId: number, weekStart: string, mode: "internal" | "public") {
+  return `${getApiUrl()}${weeksOf(projectId)}/${weekStart}/report.pdf?mode=${mode}`;
 }
 
 /** `day` plus `days` calendar days, on "YYYY-MM-DD" strings. */

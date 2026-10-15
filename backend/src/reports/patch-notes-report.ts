@@ -90,7 +90,7 @@ export function renderPatchNotesReport(doc: any, options: PatchNotesReportOption
       .filter(Boolean)
       .join(" - "),
     periodLabel: `${formatDay(options.weekStart)} to ${formatDay(options.weekEnd)}`,
-    footerLabel: `Status Manager - ${heading}${internal ? " (internal)" : ""}`,
+    footerLabel: `Heroic Manager - ${heading}${internal ? " (internal)" : ""}`,
     continuationTitle: `${heading} continued`,
     generatedAt,
   });
