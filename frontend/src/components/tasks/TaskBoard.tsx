@@ -40,6 +40,13 @@ type Props = {
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
   onColor: (task: Task, color: TaskColor | null) => void;
+  /** Only this column is drawn; "all" draws the three. */
+  status?: "all" | TaskState;
+  /**
+   * The tasks are a filtered subset: a column's ids are not the whole column,
+   * so a manager's drag only moves between columns and never reorders.
+   */
+  filtering?: boolean;
 };
 
 export default function TaskBoard({
@@ -53,6 +60,8 @@ export default function TaskBoard({
   onEdit,
   onDelete,
   onColor,
+  status = "all",
+  filtering = false,
 }: Props) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const canManage = canManageTasks(role);
@@ -93,8 +102,9 @@ export default function TaskBoard({
     if (!origin || !target || !STATE_ORDER.includes(target)) return;
 
     // Only board managers decide the order everybody sees; a participant's drag
-    // is a move between columns, exactly as before.
-    if (!canManage) {
+    // is a move between columns, exactly as before. So is anybody's while the
+    // board is filtered.
+    if (!canManage || filtering) {
       if (target !== origin) onMove(taskId, target);
       return;
     }
@@ -128,8 +138,8 @@ export default function TaskBoard({
       onDragCancel={() => setActiveTask(null)}
       onDragEnd={handleDragEnd}
     >
-      <Box className="task-board">
-        {STATE_ORDER.map((state) => {
+      <Box className={status === "all" ? "task-board" : "task-board task-board-single"}>
+        {STATE_ORDER.filter((state) => status === "all" || state === status).map((state) => {
           const columnTasks = columns[state];
           return (
             <TaskColumn

@@ -8,7 +8,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { getApiUrl } from "../serverConfig";
@@ -21,6 +21,12 @@ import TaskFormDialog from "../components/tasks/TaskFormDialog";
 import TaskReportDialog from "../components/tasks/TaskReportDialog";
 import PendingApprovals from "../components/tasks/PendingApprovals";
 import ArchivedTasksDialog from "../components/tasks/ArchivedTasksDialog";
+import TaskFilterBar from "../components/tasks/TaskFilterBar";
+import {
+  EMPTY_TASK_FILTERS,
+  filterTasks,
+  hasTaskFilters,
+} from "../components/tasks/taskFilter";
 import {
   approveTask,
   createTask,
@@ -59,6 +65,19 @@ export default function TasksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [filters, setFilters] = useState(EMPTY_TASK_FILTERS);
+  const visibleTasks = useMemo(() => filterTasks(tasks, filters), [tasks, filters]);
+  const filtering = hasTaskFilters(filters);
+  // Everybody taking part in some task, the options of the people filter.
+  const taskMembers = useMemo(
+    () =>
+      [
+        ...new Map(
+          tasks.flatMap((task) => task.participants).map((person) => [person.id, person])
+        ).values(),
+      ].sort((a, b) => a.name.localeCompare(b.name)),
+    [tasks]
+  );
   const [employees, setEmployees] = useState<TaskParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -455,8 +474,20 @@ export default function TasksPage() {
         </Stack>
       ) : (
         <>
+          <TaskFilterBar
+            value={filters}
+            onChange={setFilters}
+            members={taskMembers}
+            shown={visibleTasks.length}
+            total={tasks.length}
+          />
+          {filtering && visibleTasks.length === 0 && (
+            <Typography color="text.secondary" sx={{ mt: 2 }}>
+              {t("taskFilter.empty")}
+            </Typography>
+          )}
           <PendingApprovals
-            tasks={tasks.filter((task) => !isApprovedTask(task))}
+            tasks={visibleTasks.filter((task) => !isApprovedTask(task))}
             isAdmin={isAdmin}
             meId={me?.id}
             onOpen={(task) => void openDetailById(task.id)}
@@ -465,7 +496,9 @@ export default function TasksPage() {
             onWithdraw={handleDelete}
           />
         <TaskBoard
-          tasks={tasks.filter(isApprovedTask)}
+          tasks={visibleTasks.filter(isApprovedTask)}
+          status={filters.status}
+          filtering={filtering}
           meId={me?.id}
           role={me?.role}
           onOpen={(task) => void openDetailById(task.id)}

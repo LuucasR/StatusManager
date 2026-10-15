@@ -29,7 +29,7 @@ export const hasChecklistFilters = (filters: ChecklistFilters) =>
   filters.unassigned;
 
 /** Lower case and without accents, so "gonzalez" finds "González". */
-const fold = (value: string) =>
+export const fold = (value: string) =>
   value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 /** The text matches the item itself or the name of somebody in charge of it. */
