@@ -29,7 +29,8 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { participantColor, type TaskParticipant } from "./types";
+import { PriorityPicker } from "./ChecklistPriority";
+import { participantColor, type ChecklistPriority, type TaskParticipant } from "./types";
 import { t, tf } from "../../i18n";
 
 /**
@@ -47,6 +48,8 @@ export type ChecklistDraft = {
   text: string;
   /** Everybody in charge; [] = nobody. Only ever the task's participants. */
   assigneeIds: number[];
+  /** null = no priority. */
+  priority: ChecklistPriority | null;
 };
 
 type Props = {
@@ -72,7 +75,7 @@ export default function ChecklistEditor({ value, onChange, participants, disable
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const add = () => onChange([...value, { key: nextKey(value), text: "", assigneeIds: [] }]);
+  const add = () => onChange([...value, { key: nextKey(value), text: "", assigneeIds: [], priority: null }]);
 
   const patch = (key: number, changes: Partial<ChecklistDraft>) =>
     onChange(value.map((draft) => (draft.key === key ? { ...draft, ...changes } : draft)));
@@ -200,6 +203,12 @@ function SortableRow({
           event.preventDefault();
           if (isLast && draft.text.trim()) onAdd();
         }}
+      />
+
+      <PriorityPicker
+        value={draft.priority}
+        disabled={disabled}
+        onChange={(priority) => onPatch({ priority })}
       />
 
       <TextField

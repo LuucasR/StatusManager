@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import ChecklistEditor, { type ChecklistDraft } from "./ChecklistEditor";
 import ParticipantSelect from "./ParticipantSelect";
 import { fromLocalInputValue, toLocalInputValue } from "./datetime";
-import type { Task, TaskParticipant } from "./types";
+import type { ChecklistPriority, Task, TaskParticipant } from "./types";
 import type { TaskPayload } from "./tasksApi";
 import { t } from "../../i18n";
 
@@ -37,13 +37,14 @@ type Props = {
  * what tells the backend to keep its tick instead of recreating the row.
  */
 function toDrafts(
-  items: { id: number; text: string; assignees: { id: number }[] }[]
+  items: { id: number; text: string; priority?: ChecklistPriority | null; assignees: { id: number }[] }[]
 ): ChecklistDraft[] {
   return items.map((item) => ({
     key: item.id,
     id: item.id,
     text: item.text,
     assigneeIds: item.assignees.map((assignee) => assignee.id),
+    priority: item.priority ?? null,
   }));
 }
 
@@ -164,7 +165,12 @@ export default function TaskFormDialog({
     // too many. The backend would reject the empty string, so it is dropped here.
     const items = checklist
       .filter((draft) => draft.text.trim())
-      .map((draft) => ({ id: draft.id, text: draft.text.trim(), assigneeIds: draft.assigneeIds }));
+      .map((draft) => ({
+        id: draft.id,
+        text: draft.text.trim(),
+        assigneeIds: draft.assigneeIds,
+        priority: draft.priority,
+      }));
 
     setSaving(true);
     try {

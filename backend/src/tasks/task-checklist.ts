@@ -1,19 +1,32 @@
-import { Prisma } from "@prisma/client";
+import { ChecklistPriority, Prisma } from "@prisma/client";
 import { syncTaskConversationState } from "../chat/chat.service";
 import { syncTaskProgress } from "./task-timing";
 
 type Tx = Prisma.TransactionClient;
 
 /** One item as the client sends it: no id means "new". */
-export type ChecklistInput = { id?: number; text: string; assigneeIds?: number[] };
+export type ChecklistInput = {
+  id?: number;
+  text: string;
+  assigneeIds?: number[];
+  /** null = none; undefined = keep the current one (new items: none). */
+  priority?: ChecklistPriority | null;
+};
 
 export type ChecklistDiff = {
   /** Ids in the payload that this task does not own. Non-empty means refuse. */
   unknownIds: number[];
   /** Existing rows, with their new text, assignees and position. */
-  updates: { id: number; text: string; position: number; assigneeIds: number[] }[];
+  updates: {
+    id: number;
+    text: string;
+    position: number;
+    assigneeIds: number[];
+    /** undefined = not sent, leave the stored one alone. */
+    priority?: ChecklistPriority | null;
+  }[];
   /** Rows to insert, already carrying their position. */
-  creates: { text: string; position: number; assigneeIds: number[] }[];
+  creates: { text: string; position: number; assigneeIds: number[]; priority: ChecklistPriority | null }[];
   /** Every assignee the payload asks for. The route checks them against the
    *  task's participants, which is a rule no database constraint can express. */
   assigneeIds: number[];
@@ -54,10 +67,17 @@ export function diffChecklist(
     const assigneeIds = [...new Set(item.assigneeIds ?? [])];
 
     if (item.id === undefined) {
-      creates.push({ text: item.text, position, assigneeIds });
+      creates.push({ text: item.text, position, assigneeIds, priority: item.priority ?? null });
     } else {
       kept.add(item.id);
-      updates.push({ id: item.id, text: item.text, position, assigneeIds });
+      updates.push({
+        id: item.id,
+        text: item.text,
+        position,
+        assigneeIds,
+        // Only when sent: absent means the client knows nothing about priorities.
+        ...(item.priority !== undefined ? { priority: item.priority } : {}),
+      });
     }
   });
 

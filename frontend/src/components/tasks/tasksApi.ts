@@ -1,5 +1,5 @@
 import { api } from "../../api";
-import type { Task, TaskColor, TaskComment, TaskState } from "./types";
+import type { ChecklistPriority, Task, TaskColor, TaskComment, TaskState } from "./types";
 
 export type TaskPayload = {
   /** Create only: the project the task belongs to. */
@@ -14,7 +14,7 @@ export type TaskPayload = {
    * entry carrying an `id` is one that already exists and keeps its tick; one
    * without is new.
    */
-  checklist: { id?: number; text: string; assigneeIds: number[] }[];
+  checklist: { id?: number; text: string; assigneeIds: number[]; priority: ChecklistPriority | null }[];
   autoCompleteOnChecklist: boolean;
   /** Admin only, left out otherwise. null = 14 days after the end. */
   archiveAt?: string | null;

@@ -437,6 +437,7 @@ router.post("/", async (req, res) => {
           create: parsed.data.checklist.map((item, index) => ({
             text: item.text,
             position: index,
+            priority: item.priority ?? null,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },
@@ -450,6 +451,9 @@ router.post("/", async (req, res) => {
       ...participantIds.map((targetId): TaskEventInput => ({ type: "PARTICIPANT_ADDED", targetId })),
       ...parsed.data.checklist.flatMap((item): TaskEventInput[] => [
         { type: "ITEM_CREATED", itemText: item.text },
+        ...(item.priority
+          ? [{ type: "ITEM_PRIORITY", itemText: item.text, detail: item.priority } as TaskEventInput]
+          : []),
         ...item.assigneeIds.map((targetId): TaskEventInput => ({
           type: "ITEM_ASSIGNED",
           itemText: item.text,
@@ -640,7 +644,13 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       // Same reason as the participants above, and with more at stake: the
       // previous items are what lets `done` survive an edit of the title.
       checklist: {
-        select: { id: true, text: true, position: true, assignees: { select: { employeeId: true } } },
+        select: {
+          id: true,
+          text: true,
+          position: true,
+          priority: true,
+          assignees: { select: { employeeId: true } },
+        },
       },
       approval: true,
     },
@@ -790,7 +800,8 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       for (const item of checklistDiff.updates) {
         await tx.taskChecklistItem.update({
           where: { id: item.id },
-          data: { text: item.text, position: item.position },
+          // priority undefined = the client did not send one: Prisma leaves it.
+          data: { text: item.text, position: item.position, priority: item.priority },
         });
 
         // The assignee set is only touched when it actually changed, so the
@@ -817,6 +828,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
             taskId: id,
             text: item.text,
             position: item.position,
+            priority: item.priority,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },

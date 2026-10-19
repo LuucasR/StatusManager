@@ -36,6 +36,8 @@ export type TaskChecklistItem = {
   text: string;
   done: boolean;
   doneAt: string | null;
+  /** null = none. Optional: a backend older than priorities does not send it. */
+  priority?: ChecklistPriority | null;
   /** Who is in charge; several people or nobody ([]). Always task participants. */
   assignees: TaskParticipant[];
   /**
@@ -140,6 +142,23 @@ export const TASK_COLOR_HEX: Record<TaskColor, string> = {
 };
 
 export const taskColorLabel = (color: TaskColor) => t(`taskColor.${color}` as TranslationKey);
+
+/**
+ * How urgent a checklist item is, most urgent first. Mirrors the
+ * ChecklistPriority enum in the backend's schema.prisma.
+ */
+export const CHECKLIST_PRIORITIES = ["HIGH", "MEDIUM", "LOW"] as const;
+export type ChecklistPriority = (typeof CHECKLIST_PRIORITIES)[number];
+
+/** The theme's semantic tokens, so they hold in every palette and both modes. */
+export const CHECKLIST_PRIORITY_COLOR: Record<ChecklistPriority, string> = {
+  HIGH: "var(--danger)",
+  MEDIUM: "var(--warning)",
+  LOW: "var(--success)",
+};
+
+export const checklistPriorityLabel = (priority: ChecklistPriority) =>
+  t(`checklistPriority.${priority}` as TranslationKey);
 
 /**
  * The board's order: pinned first, then the order somebody dragged the cards

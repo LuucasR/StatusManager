@@ -1,8 +1,10 @@
-import type { TaskChecklistItem } from "./types";
+import type { ChecklistPriority, TaskChecklistItem } from "./types";
 
 export type ChecklistFilters = {
   query: string;
   status: "all" | "open" | "done";
+  /** "none" = items with no priority set. */
+  priority: "all" | "none" | ChecklistPriority;
   /**
    * People in charge: an item has to have EVERY one of them, which is what
    * tells whether an item is shared between them. [] = no filter.
@@ -17,6 +19,7 @@ export type ChecklistFilters = {
 export const EMPTY_CHECKLIST_FILTERS: ChecklistFilters = {
   query: "",
   status: "all",
+  priority: "all",
   members: [],
   unassigned: false,
   onlyMembers: false,
@@ -25,6 +28,7 @@ export const EMPTY_CHECKLIST_FILTERS: ChecklistFilters = {
 export const hasChecklistFilters = (filters: ChecklistFilters) =>
   filters.query.trim() !== "" ||
   filters.status !== "all" ||
+  filters.priority !== "all" ||
   filters.members.length > 0 ||
   filters.unassigned;
 
@@ -38,6 +42,7 @@ export function filterChecklist(items: TaskChecklistItem[], filters: ChecklistFi
   return items.filter((item) => {
     if (filters.status === "open" && item.done) return false;
     if (filters.status === "done" && !item.done) return false;
+    if (filters.priority !== "all" && (item.priority ?? "none") !== filters.priority) return false;
 
     if (filters.unassigned && item.assignees.length > 0) return false;
     if (filters.members.length > 0) {

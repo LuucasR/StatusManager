@@ -1,4 +1,4 @@
-import { TaskState } from "@prisma/client";
+import { ChecklistPriority, TaskState } from "@prisma/client";
 import { z } from "zod";
 
 /**
@@ -29,6 +29,10 @@ const checklist = z
       text: z.string().trim().min(1).max(200),
       // Everybody in charge of the item; [] = nobody.
       assigneeIds: z.array(z.number().int().positive()).max(50).optional(),
+      // null = no priority. Absent = leave it as it is, unlike assigneeIds:
+      // clients built before priorities existed (the Android app ships its
+      // bundle) never send it, and saving from them must not wipe it.
+      priority: z.nativeEnum(ChecklistPriority).nullable().optional(),
       // LEGACY single assignee, still accepted from clients built before an item
       // could have several people (the Android app ships its bundle). Only read
       // when assigneeIds is absent.

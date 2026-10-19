@@ -2,11 +2,14 @@ import { useState } from "react";
 import { Avatar, Box, Button, Chip, Stack, Typography } from "@mui/material";
 import { formatCommentDate } from "./datetime";
 import {
+  CHECKLIST_PRIORITIES,
   STATE_META,
   TASK_COLORS,
+  checklistPriorityLabel,
   participantColor,
   taskColorLabel,
   type Task,
+  type ChecklistPriority,
   type TaskColor,
   type TaskEvent,
   type TaskState,
@@ -46,6 +49,13 @@ function describe(event: TaskEvent) {
       return event.detail && (TASK_COLORS as readonly string[]).includes(event.detail)
         ? tf("taskHistory.COLOR_CHANGED", { actor, color: taskColorLabel(event.detail as TaskColor) })
         : tf("taskHistory.COLOR_CLEARED", { actor });
+    case "ITEM_PRIORITY":
+      return event.detail && (CHECKLIST_PRIORITIES as readonly string[]).includes(event.detail)
+        ? tf("taskHistory.ITEM_PRIORITY", {
+            ...vars,
+            priority: checklistPriorityLabel(event.detail as ChecklistPriority),
+          })
+        : tf("taskHistory.ITEM_PRIORITY.cleared", vars);
     case "PARTICIPANT_REMOVED":
       if (event.detail === "DEACTIVATED") {
         return tf("taskHistory.PARTICIPANT_REMOVED.deactivated", vars);

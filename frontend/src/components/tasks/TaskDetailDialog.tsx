@@ -47,6 +47,7 @@ import MessageComposer from "../chat/MessageComposer";
 import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
 import ChecklistFilterBar from "./ChecklistFilterBar";
+import { PriorityChip } from "./ChecklistPriority";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist, hasChecklistFilters } from "./checklistFilter";
 import TaskFacts from "./TaskFacts";
 import TaskHistory from "./TaskHistory";
@@ -361,6 +362,7 @@ export default function TaskDetailDialog({
                                         sx={{ alignItems: "center", flexWrap: "wrap" }}
                                         useFlexGap
                                       >
+                                        <PriorityChip priority={item.priority} />
                                         {item.assignees.map((assignee) => (
                                           <Chip
                                             key={assignee.id}

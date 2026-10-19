@@ -277,6 +277,11 @@ export const en = {
   "taskForm.checklistNobody": "Nobody",
   "taskForm.checklistRemove": "Remove item",
   "taskForm.checklistReorder": "Drag to reorder",
+  "checklistPriority.HIGH": "High",
+  "checklistPriority.MEDIUM": "Medium",
+  "checklistPriority.LOW": "Low",
+  "checklistPriority.none": "No priority",
+  "checklistPriority.current": "Priority: {priority}",
   "taskForm.autoComplete": "Move the task to Done when every item is ticked",
   "taskForm.autoCompleteHint":
     "Off by default: a checklist is not always the whole of the task. Needs at least one item.",
@@ -462,6 +467,8 @@ export const en = {
   "taskHistory.ITEM_UNASSIGNED": "{actor} took {target} off \"{item}\"",
   "taskHistory.ITEM_DONE": "{actor} ticked off \"{item}\"",
   "taskHistory.ITEM_UNDONE": "{actor} unticked \"{item}\"",
+  "taskHistory.ITEM_PRIORITY": "{actor} set the priority of \"{item}\" to {priority}",
+  "taskHistory.ITEM_PRIORITY.cleared": "{actor} removed the priority of \"{item}\"",
   "taskDetail.privateThread":
     "The conversation is private to the participants. You can manage the task, but to follow the thread you have to add yourself as a participant.",
   "summary.subtitle":
@@ -1303,6 +1310,11 @@ const es: Record<TranslationKey, string> = {
   "taskForm.checklistNobody": "Nadie",
   "taskForm.checklistRemove": "Quitar ítem",
   "taskForm.checklistReorder": "Arrastrar para reordenar",
+  "checklistPriority.HIGH": "Alta",
+  "checklistPriority.MEDIUM": "Media",
+  "checklistPriority.LOW": "Baja",
+  "checklistPriority.none": "Sin prioridad",
+  "checklistPriority.current": "Prioridad: {priority}",
   "taskForm.autoComplete": "Pasar la tarea a Hecho cuando se tilden todos los ítems",
   "taskForm.autoCompleteHint":
     "Apagado por defecto: una lista no siempre es toda la tarea. Necesita al menos un ítem.",
@@ -1482,6 +1494,8 @@ const es: Record<TranslationKey, string> = {
   "taskHistory.ITEM_UNASSIGNED": "{actor} sacó a {target} de \"{item}\"",
   "taskHistory.ITEM_DONE": "{actor} tildó \"{item}\"",
   "taskHistory.ITEM_UNDONE": "{actor} destildó \"{item}\"",
+  "taskHistory.ITEM_PRIORITY": "{actor} marcó \"{item}\" con prioridad {priority}",
+  "taskHistory.ITEM_PRIORITY.cleared": "{actor} le quitó la prioridad a \"{item}\"",
   "taskDetail.privateThread":
     "La conversación es privada de los participantes. Podés gestionar la tarea, pero para seguir el hilo tenés que agregarte como integrante.",
   "summary.subtitle":

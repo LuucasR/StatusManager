@@ -89,4 +89,30 @@ describe("taskEditEvents", () => {
     });
     assert.deepEqual(events, [{ type: "PARTICIPANT_REMOVED", targetId: 10 }]);
   });
+
+  it("tells a priority change, and stays quiet when the client did not send one", () => {
+    const withPriority = {
+      ...current,
+      checklist: [
+        { ...current.checklist[0]!, priority: "LOW" },
+        { ...current.checklist[1]!, priority: "HIGH" },
+      ],
+    };
+    const events = taskEditEvents({
+      current: withPriority,
+      next: {},
+      added: [],
+      removed: [],
+      checklistDiff: diffChecklist(withPriority.checklist, [
+        { id: 1, text: "clean the menu", assigneeIds: [10], priority: null },
+        { id: 2, text: "clean the assets", assigneeIds: [11] },
+        { text: "clean the npcs", priority: "MEDIUM" },
+      ]),
+    });
+    assert.deepEqual(events, [
+      { type: "ITEM_CREATED", itemText: "clean the npcs" },
+      { type: "ITEM_PRIORITY", itemText: "clean the npcs", detail: "MEDIUM" },
+      { type: "ITEM_PRIORITY", itemText: "clean the menu", detail: null },
+    ]);
+  });
 });

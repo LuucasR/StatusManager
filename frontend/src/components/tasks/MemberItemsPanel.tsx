@@ -1,8 +1,15 @@
-import { CheckCircleRounded, RadioButtonUncheckedRounded } from "@mui/icons-material";
+import { CheckCircleRounded, FlagRounded, RadioButtonUncheckedRounded } from "@mui/icons-material";
 import { Box, ButtonBase, Paper, Stack, Typography } from "@mui/material";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist } from "./checklistFilter";
 import type { TaskFilters } from "./taskFilter";
-import { STATE_META, compareBoardOrder, type Task, type TaskParticipant } from "./types";
+import {
+  CHECKLIST_PRIORITY_COLOR,
+  STATE_META,
+  checklistPriorityLabel,
+  compareBoardOrder,
+  type Task,
+  type TaskParticipant,
+} from "./types";
 import { t, tf } from "../../i18n";
 
 type Props = {
@@ -84,6 +91,13 @@ export default function MemberItemsPanel({ tasks, filters, members, onOpen }: Pr
                     >
                       {item.text}
                     </Typography>
+                    {item.priority && (
+                      <FlagRounded
+                        fontSize="small"
+                        titleAccess={checklistPriorityLabel(item.priority)}
+                        sx={{ color: CHECKLIST_PRIORITY_COLOR[item.priority], mt: "1px", ml: "auto", flex: "none" }}
+                      />
+                    )}
                   </Stack>
                 ))}
               </Stack>

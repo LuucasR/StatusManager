@@ -1,4 +1,4 @@
-import { FilterAltOffRounded, SearchRounded } from "@mui/icons-material";
+import { FilterAltOffRounded, FlagRounded, SearchRounded } from "@mui/icons-material";
 import {
   Button,
   Checkbox,
@@ -20,7 +20,12 @@ import {
   hasChecklistFilters,
   type ChecklistFilters,
 } from "./checklistFilter";
-import type { TaskParticipant } from "./types";
+import {
+  CHECKLIST_PRIORITIES,
+  CHECKLIST_PRIORITY_COLOR,
+  checklistPriorityLabel,
+  type TaskParticipant,
+} from "./types";
 import { t, tf } from "../../i18n";
 
 const NOBODY = "none";
@@ -44,6 +49,14 @@ export default function ChecklistFilterBar({ value, onChange, members, shown, to
     { key: "open", label: t("checklistFilter.open") },
     { key: "done", label: t("checklistFilter.done") },
   ] as const;
+  const priorities = [
+    ...CHECKLIST_PRIORITIES.map((key) => ({
+      key,
+      label: checklistPriorityLabel(key),
+      color: CHECKLIST_PRIORITY_COLOR[key] as string | undefined,
+    })),
+    { key: "none" as const, label: t("checklistPriority.none"), color: undefined },
+  ];
 
   return (
     <Stack spacing={1.5} sx={{ mb: 1.5 }}>
@@ -120,6 +133,21 @@ export default function ChecklistFilterBar({ value, onChange, members, shown, to
             color={value.status === status.key ? "primary" : "default"}
             variant={value.status === status.key ? "filled" : "outlined"}
             onClick={() => set({ status: status.key })}
+          />
+        ))}
+
+        {/* Clicking the picked priority again goes back to all of them. */}
+        {priorities.map((priority) => (
+          <Chip
+            key={priority.key}
+            size="small"
+            icon={
+              priority.color ? <FlagRounded sx={{ color: `${priority.color} !important` }} /> : undefined
+            }
+            label={priority.label}
+            color={value.priority === priority.key ? "primary" : "default"}
+            variant={value.priority === priority.key ? "filled" : "outlined"}
+            onClick={() => set({ priority: value.priority === priority.key ? "all" : priority.key })}
           />
         ))}
 

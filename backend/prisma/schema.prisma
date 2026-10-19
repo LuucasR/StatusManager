@@ -90,6 +90,13 @@ enum NotificationType {
   MAP_REJECTED
 }
 
+/// How urgent one checklist item is. Nullable on the item: most lines have none.
+enum ChecklistPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 /// How much an announcement matters. CRITICAL ones have to be read by the
 /// whole team, and the app tracks until everyone has.
 enum AnnouncementPriority {
@@ -391,6 +398,8 @@ model TaskChecklistItem {
   /// Deliberately NOT unique on (taskId, position): reordering would then need
   /// a two-phase update to avoid colliding with the index halfway through.
   position   Int
+  /// How urgent the item is; null = no priority set.
+  priority   ChecklistPriority?
   createdAt  DateTime  @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)

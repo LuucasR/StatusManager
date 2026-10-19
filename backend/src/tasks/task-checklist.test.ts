@@ -51,7 +51,7 @@ describe("diffChecklist", () => {
       { id: 3, text: "c" },
     ]);
 
-    assert.deepEqual(diff.creates, [{ text: "brand new", position: 1, assigneeIds: [] }]);
+    assert.deepEqual(diff.creates, [{ text: "brand new", position: 1, assigneeIds: [], priority: null }]);
     assert.deepEqual(diff.deletedIds, []);
   });
 
@@ -129,5 +129,22 @@ describe("diffChecklist", () => {
       [[], []]
     );
     assert.deepEqual(diff.assigneeIds, []);
+  });
+
+  it("leaves the priority alone when the client does not send one", () => {
+    // Clients built before priorities existed must not wipe them on every save.
+    const diff = diffChecklist(current, [
+      { id: 1, text: "a", priority: "HIGH" },
+      { id: 2, text: "b", priority: null },
+      { id: 3, text: "c" },
+      { text: "d", priority: "LOW" },
+    ]);
+
+    assert.deepEqual(
+      diff.updates.map((item) => item.priority),
+      ["HIGH", null, undefined]
+    );
+    assert.equal("priority" in diff.updates[2]!, false);
+    assert.equal(diff.creates[0]?.priority, "LOW");
   });
 });

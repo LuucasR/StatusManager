@@ -25,6 +25,8 @@ export const TASK_EVENT_TYPES = [
   "ITEM_DELETED",
   "ITEM_ASSIGNED",
   "ITEM_UNASSIGNED",
+  // detail: the new priority, or null when it was cleared.
+  "ITEM_PRIORITY",
   "ITEM_DONE",
   "ITEM_UNDONE",
 ] as const;
@@ -85,7 +87,12 @@ export function taskEditEvents(input: {
     startsAt: Date;
     endsAt: Date;
     state: TaskState;
-    checklist: { id: number; text: string; assignees: { employeeId: number }[] }[];
+    checklist: {
+      id: number;
+      text: string;
+      priority?: string | null;
+      assignees: { employeeId: number }[];
+    }[];
   };
   next: {
     title?: string;
@@ -129,6 +136,7 @@ export function taskEditEvents(input: {
     }
     for (const item of checklistDiff.creates) {
       events.push({ type: "ITEM_CREATED", itemText: item.text });
+      if (item.priority) events.push({ type: "ITEM_PRIORITY", itemText: item.text, detail: item.priority });
       for (const targetId of item.assigneeIds) {
         events.push({ type: "ITEM_ASSIGNED", itemText: item.text, targetId });
       }
@@ -138,6 +146,9 @@ export function taskEditEvents(input: {
       if (!old) continue;
       if (old.text !== item.text) {
         events.push({ type: "ITEM_RENAMED", itemText: item.text, detail: old.text });
+      }
+      if (item.priority !== undefined && item.priority !== (old.priority ?? null)) {
+        events.push({ type: "ITEM_PRIORITY", itemText: item.text, detail: item.priority });
       }
       const was = old.assignees.map((link) => link.employeeId);
       // Somebody leaving the task leaves its items too, and that is already
