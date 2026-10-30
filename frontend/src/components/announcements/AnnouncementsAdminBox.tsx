@@ -1,4 +1,11 @@
-import { EditRounded, ExpandMoreRounded, SearchRounded } from "@mui/icons-material";
+import {
+  DeleteOutlineRounded,
+  EditRounded,
+  ExpandMoreRounded,
+  SearchRounded,
+  VisibilityOffRounded,
+  VisibilityRounded,
+} from "@mui/icons-material";
 import {
   Accordion,
   AccordionDetails,
@@ -20,15 +27,21 @@ import { t, tf } from "../../i18n";
 import { LOCALE } from "../../locale";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
 import { PRIORITY_META } from "./priority";
-import { listAdminAnnouncements, type AdminAnnouncement } from "./announcementsApi";
+import {
+  deleteAnnouncement,
+  listAdminAnnouncements,
+  updateAnnouncement,
+  type AdminAnnouncement,
+} from "./announcementsApi";
 
 const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString(LOCALE, { dateStyle: "medium", timeStyle: "short" });
 
 /**
- * The admins' box: every announcement ever published - expired ones too, which
- * have left everybody else's list - with who saw it and who has not, and a
- * search over title, message and author.
+ * The admins' box: every announcement ever published - expired and deactivated
+ * ones too, which have left everybody else's list - with who saw it and who has
+ * not, and a search over title, message and author. Here is where one is
+ * deactivated, brought back or deleted for good.
  */
 export default function AnnouncementsAdminBox({ onEdit }: { onEdit: (item: AdminAnnouncement) => void }) {
   const [query, setQuery] = useState("");
@@ -56,6 +69,25 @@ export default function AnnouncementsAdminBox({ onEdit }: { onEdit: (item: Admin
   }, [load]);
   useSocketEvent("announcements:changed", () => void load());
   useOnReconnect(() => void load());
+
+  async function toggleActive(item: AdminAnnouncement) {
+    try {
+      await updateAnnouncement(item.id, { active: !item.active });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function remove(item: AdminAnnouncement) {
+    if (!window.confirm(tf("announcements.confirmDelete", { title: item.title }))) return;
+    try {
+      await deleteAnnouncement(item.id);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   return (
     <Paper className="status-card" elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 6 }}>
@@ -99,6 +131,8 @@ export default function AnnouncementsAdminBox({ onEdit }: { onEdit: (item: Admin
           items.map((item) => {
             const total = item.seen.length + item.pending.length;
             const meta = PRIORITY_META[item.priority];
+            const live = item.active && !item.expired;
+            const toggleLabel = item.active ? t("announcementsAdmin.deactivate") : t("announcementsAdmin.activate");
             return (
               <Accordion key={item.id} disableGutters elevation={0} sx={{ border: "1px solid var(--border)", mb: 1, "&:before": { display: "none" } }}>
                 <AccordionSummary expandIcon={<ExpandMoreRounded />}>
@@ -109,9 +143,15 @@ export default function AnnouncementsAdminBox({ onEdit }: { onEdit: (item: Admin
                     </Typography>
                     <Chip
                       size="small"
-                      color={item.expired ? "default" : "success"}
-                      variant={item.expired ? "outlined" : "filled"}
-                      label={item.expired ? t("announcementsAdmin.expired") : t("announcementsAdmin.active")}
+                      color={live ? "success" : "default"}
+                      variant={live ? "filled" : "outlined"}
+                      label={
+                        !item.active
+                          ? t("announcementsAdmin.deactivated")
+                          : item.expired
+                            ? t("announcementsAdmin.expired")
+                            : t("announcementsAdmin.active")
+                      }
                     />
                     <Chip
                       size="small"
@@ -135,6 +175,16 @@ export default function AnnouncementsAdminBox({ onEdit }: { onEdit: (item: Admin
                     <Tooltip title={t("common.edit")}>
                       <IconButton size="small" onClick={() => onEdit(item)}>
                         <EditRounded fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={toggleLabel}>
+                      <IconButton size="small" onClick={() => void toggleActive(item)} aria-label={toggleLabel}>
+                        {item.active ? <VisibilityOffRounded fontSize="small" /> : <VisibilityRounded fontSize="small" />}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("announcements.delete")}>
+                      <IconButton size="small" onClick={() => void remove(item)} aria-label={t("announcements.delete")}>
+                        <DeleteOutlineRounded fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   </Stack>

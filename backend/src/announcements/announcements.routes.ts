@@ -43,8 +43,9 @@ function validationError(res: Response, error: z.ZodError) {
   });
 }
 
-/** Not expired yet: no date, or one still ahead. */
+/** Not deactivated and not expired yet: no date, or one still ahead. */
 const liveWhere = (): Prisma.AnnouncementWhereInput => ({
+  active: true,
   OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
 });
 
@@ -57,7 +58,7 @@ async function activeTeamIds() {
 router.get("/", async (req, res) => {
   const me = req.auth!.employeeId;
   const [rows, teamIds] = await Promise.all([
-    // Expired ones leave the team's list; the admins' box still has them.
+    // Expired and deactivated ones leave the team's list; the admins' box still has them.
     prisma.announcement.findMany({
       where: liveWhere(),
       orderBy: { createdAt: "desc" },
@@ -92,8 +93,9 @@ router.get("/", async (req, res) => {
 });
 
 /**
- * The admins' box: every announcement ever published, expired ones included,
- * with who saw it and who has not. `q` searches title, message and author.
+ * The admins' box: every announcement ever published, expired and deactivated
+ * ones included, with who saw it and who has not. `q` searches title, message
+ * and author.
  *
  * IMPORTANT: registered BEFORE "/:id/..." routes, same reason as /tasks/archived.
  */
@@ -236,7 +238,10 @@ router.patch("/:id", requireStaff, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(404).json(ANNOUNCEMENT_NOT_FOUND);
 
-  const parsed = announcementSchema.partial().safeParse(req.body);
+  const parsed = announcementSchema
+    .partial()
+    .extend({ active: z.boolean().optional() })
+    .safeParse(req.body);
   if (!parsed.success) return validationError(res, parsed.error);
 
   const exists = await prisma.announcement.findUnique({ where: { id }, select: { id: true } });

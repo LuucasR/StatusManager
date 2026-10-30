@@ -12,6 +12,8 @@ export type Announcement = {
   pinned: boolean;
   /** Leaves the team's list once past; null = never. */
   expiresAt: string | null;
+  /** False = deactivated: out of the team's list, kept in the admins' box. */
+  active: boolean;
   authorId: number | null;
   authorName: string;
   createdAt: string;
@@ -49,10 +51,10 @@ export const listAnnouncementReaders = (id: number) =>
 export const createAnnouncement = (payload: AnnouncementPayload) =>
   api<Announcement>("/announcements", { method: "POST", body: JSON.stringify(payload) });
 
-export const updateAnnouncement = (id: number, payload: Partial<AnnouncementPayload>) =>
+export const updateAnnouncement = (id: number, payload: Partial<AnnouncementPayload> & { active?: boolean }) =>
   api<Announcement>(`/announcements/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 
-/** One row of the admins' box: every announcement, expired ones too. */
+/** One row of the admins' box: every announcement, expired and deactivated ones too. */
 export type AdminAnnouncement = Omit<Announcement, "readAt" | "readCount" | "teamCount" | "readByAll"> & {
   expired: boolean;
   seen: { employee: AnnouncementReader["employee"]; readAt: string }[];

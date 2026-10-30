@@ -668,6 +668,8 @@ model Announcement {
   pinned     Boolean              @default(false)
   /// Optional. Once past, it leaves the team's list; the admins' box keeps it.
   expiresAt  DateTime?
+  /// False = deactivated by an admin: out of the team's list, kept in the admins' box.
+  active     Boolean              @default(true)
   /// SetNull + name snapshot, like Message.authorName.
   authorId   Int?
   authorName String
