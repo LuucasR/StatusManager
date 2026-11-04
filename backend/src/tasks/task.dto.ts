@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { taskArchivesAt } from "./task-state";
-import { PROGRESS_SEGMENTS_SELECT, inProgressSince, progressMs } from "./task-timing";
+import { PROGRESS_SEGMENTS_SELECT, inProgressSince, workedProgress } from "./task-timing";
+import type { WorkCalendar } from "../workday/work-calendar";
 
 const EMPLOYEE_SUMMARY = {
   select: { id: true, employeeNumber: true, name: true },
@@ -29,6 +30,7 @@ export const TASK_INCLUDE = {
       doneByName: true,
       doneBy: EMPLOYEE_SUMMARY,
       priority: true,
+      label: true,
       assignees: {
         select: { employee: EMPLOYEE_SUMMARY },
         orderBy: { addedAt: "asc" },
@@ -88,7 +90,7 @@ type TaskWithInclude = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
 type TaskWithDetail = Prisma.TaskGetPayload<{ include: typeof TASK_DETAIL_INCLUDE }>;
 
 /** Flattens participants so the frontend does not have to walk `p.employee.name`. */
-export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
+export function toTaskDto(task: TaskWithInclude | TaskWithDetail, calendar: WorkCalendar) {
   return {
     id: task.id,
     projectId: task.projectId,
@@ -115,6 +117,7 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
       done: item.done,
       doneAt: item.doneAt,
       priority: item.priority,
+      label: item.label,
       assignees: item.assignees.map((link) => link.employee),
       // LEGACY: the first assignee, for clients built before an item could have
       // several people (the Android app ships its bundle).
@@ -128,10 +131,12 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail) {
           : null),
     })),
     autoCompleteOnChecklist: task.autoCompleteOnChecklist,
-    // Real time spent in IN_PROGRESS (startsAt/endsAt are only the deadline).
-    // workedMs covers the CLOSED stretches only; the open one runs from
-    // inProgressSince, so the client can tick it live against its own clock.
-    workedMs: progressMs(task.progressSegments.filter((segment) => segment.endedAt != null)),
+    // Real time spent in IN_PROGRESS (startsAt/endsAt are only the deadline),
+    // counting the working hours only (task-timing.ts). workedMs covers the
+    // CLOSED stretches; openWorkedMs the open one up to measuredAt, and the
+    // client ticks on from there only while clockRunning. Clients built before
+    // this (the Android app ships its bundle) still add now - inProgressSince.
+    ...workedProgress(task.progressSegments, calendar),
     inProgressSince: inProgressSince(task.progressSegments),
     // Always computed, even when pinned: the frontend needs it to tell
     // "pinned and current" from "pinned and already past the cutoff", and it

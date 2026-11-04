@@ -2,6 +2,7 @@ import type { ActivityStatus } from "@prisma/client";
 import { LOCALE } from "../locale";
 import { STATUS_META } from "../activities/activity-status";
 import { segmentMs, workedByDay, workedByTask, workedMs } from "../activities/activity-summary";
+import type { WorkCalendar } from "../workday/work-calendar";
 import {
   PAGE,
   REPORT_COLORS,
@@ -46,6 +47,8 @@ type ReportOptions = {
   to?: Date;
   /** Timezone the per-day split is computed in. */
   timeZone: string;
+  /** Working hours: only the part of each segment inside them is counted. */
+  calendar: WorkCalendar;
   generatedAt?: Date;
 };
 
@@ -67,9 +70,10 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   const generatedAt = options.generatedAt ?? new Date();
   const { width: pageWidth, margin, contentWidth } = PAGE;
 
-  const { from, to, timeZone } = options;
-  // Open segments are counted up to generation time, clipped to the range.
-  const durationMs = (row: ReportActivity) => segmentMs(row, from, to, generatedAt);
+  const { from, to, timeZone, calendar } = options;
+  // Open segments are counted up to generation time, clipped to the range and
+  // to the working hours.
+  const durationMs = (row: ReportActivity) => segmentMs(row, from, to, generatedAt, calendar);
 
   const employees = new Map<number, { employee: ReportActivity["employee"]; rows: ReportActivity[] }>();
   for (const row of options.rows) {
@@ -78,7 +82,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
     employees.set(row.employee.employeeNumber, entry);
   }
   const totalDuration = options.rows.reduce((total, row) => total + durationMs(row), 0);
-  const totalWorked = workedMs(options.rows, from, to, generatedAt);
+  const totalWorked = workedMs(options.rows, from, to, generatedAt, calendar);
 
   const chrome = createReportChrome(doc, {
     title: options.title,
@@ -138,7 +142,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
 
   chrome.drawSectionTitle(
     "Hours worked",
-    "Only time spent in the Working status counts, split by day and by the task declared while working. Breaks, lunch, meetings and away time are logged but not counted as worked."
+    "Only time spent in the Working status inside the working hours counts, split by day and by the task declared while working. Breaks, lunch, meetings and away time are logged but not counted as worked."
   );
   drawWorkedHeader();
   if (options.rows.length === 0) {
@@ -147,16 +151,16 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   for (const { employee, rows } of [...employees.values()].sort((a, b) => a.employee.name.localeCompare(b.employee.name))) {
     drawWorkedRow(
       `${truncate(employee.name, 40)}  #${employee.employeeNumber}`,
-      workedMs(rows, from, to, generatedAt),
+      workedMs(rows, from, to, generatedAt, calendar),
       true
     );
-    const days = workedByDay(rows, from, to, timeZone, generatedAt);
+    const days = workedByDay(rows, from, to, timeZone, generatedAt, calendar);
     if (days.length > 0) {
       drawWorkedGroup("BY DAY");
       for (const { day, ms } of days) drawWorkedRow(formatDay(day), ms, false);
     }
     // What those hours were spent on: the task declared while Working.
-    const tasks = workedByTask(rows, from, to, generatedAt);
+    const tasks = workedByTask(rows, from, to, generatedAt, calendar);
     if (tasks.length > 0) {
       drawWorkedGroup("BY TASK");
       for (const task of tasks) {
@@ -173,7 +177,7 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
 
   chrome.drawSectionTitle(
     "Activity detail",
-    "Open statuses are counted up to the moment the report was generated, clipped to the report period. Disconnected periods are not included."
+    "Durations only count the working hours: a status left open overnight or over a weekend adds nothing for those hours. Open statuses are counted up to the moment the report was generated, clipped to the report period. Disconnected periods are not included."
   );
   drawTableHeader();
 

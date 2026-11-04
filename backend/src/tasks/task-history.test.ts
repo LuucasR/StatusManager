@@ -115,4 +115,30 @@ describe("taskEditEvents", () => {
       { type: "ITEM_PRIORITY", itemText: "clean the menu", detail: null },
     ]);
   });
+
+  it("tells a label change, and stays quiet when the client did not send one", () => {
+    const withLabel = {
+      ...current,
+      checklist: [
+        { ...current.checklist[0]!, label: "UI" },
+        { ...current.checklist[1]!, label: "Cinematic" },
+      ],
+    };
+    const events = taskEditEvents({
+      current: withLabel,
+      next: {},
+      added: [],
+      removed: [],
+      checklistDiff: diffChecklist(withLabel.checklist, [
+        { id: 1, text: "clean the menu", assigneeIds: [10], label: "Cinematic" },
+        { id: 2, text: "clean the assets", assigneeIds: [11] },
+        { text: "clean the npcs", label: "Cinematic" },
+      ]),
+    });
+    assert.deepEqual(events, [
+      { type: "ITEM_CREATED", itemText: "clean the npcs" },
+      { type: "ITEM_LABEL", itemText: "clean the npcs", detail: "Cinematic" },
+      { type: "ITEM_LABEL", itemText: "clean the menu", detail: "Cinematic" },
+    ]);
+  });
 });

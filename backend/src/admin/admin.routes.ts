@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { requireAdmin, requireAuth, requireStaff } from "../auth/auth.middleware";
 import { renderActivityReport } from "../reports/activity-report";
+import { loadWorkCalendar } from "../workday/work-calendar";
 import {
   cancelConfirmation,
   disconnectEmployee,
@@ -748,6 +749,7 @@ router.get("/report.pdf", requireStaff, async (req, res) => {
     from,
     to,
     timeZone: config.timezone,
+    calendar: await loadWorkCalendar(),
     rows,
   });
 });

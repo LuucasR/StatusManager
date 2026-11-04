@@ -30,6 +30,8 @@ import {
   Typography,
 } from "@mui/material";
 import { PriorityPicker } from "./ChecklistPriority";
+import { LabelPicker } from "./ChecklistLabel";
+import { labelColor, labelKey, labelsOf, regroupByLabel } from "./checklistLabels";
 import { participantColor, type ChecklistPriority, type TaskParticipant } from "./types";
 import { t, tf } from "../../i18n";
 
@@ -50,6 +52,8 @@ export type ChecklistDraft = {
   assigneeIds: number[];
   /** null = no priority. */
   priority: ChecklistPriority | null;
+  /** null = no label. Items sharing one are kept together. */
+  label: string | null;
 };
 
 type Props = {
@@ -75,10 +79,17 @@ export default function ChecklistEditor({ value, onChange, participants, disable
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const add = () => onChange([...value, { key: nextKey(value), text: "", assigneeIds: [], priority: null }]);
+  const add = () =>
+    onChange([...value, { key: nextKey(value), text: "", assigneeIds: [], priority: null, label: null }]);
 
-  const patch = (key: number, changes: Partial<ChecklistDraft>) =>
-    onChange(value.map((draft) => (draft.key === key ? { ...draft, ...changes } : draft)));
+  // A new label moves the row into its group straight away: what is on screen
+  // is the order that is saved and the grouping the detail shows.
+  const patch = (key: number, changes: Partial<ChecklistDraft>) => {
+    const next = value.map((draft) => (draft.key === key ? { ...draft, ...changes } : draft));
+    onChange("label" in changes ? regroupByLabel(next) : next);
+  };
+
+  const labels = labelsOf(value);
 
   const remove = (key: number) => onChange(value.filter((draft) => draft.key !== key));
 
@@ -89,7 +100,9 @@ export default function ChecklistEditor({ value, onChange, participants, disable
     const from = value.findIndex((draft) => draft.key === active.id);
     const to = value.findIndex((draft) => draft.key === over.id);
     if (from < 0 || to < 0) return;
-    onChange(arrayMove(value, from, to));
+    // Regrouped after the move: a labelled row dragged out of its group goes
+    // back to it, the order inside the group is what a drag changes.
+    onChange(regroupByLabel(arrayMove(value, from, to)));
   }
 
   return (
@@ -107,6 +120,12 @@ export default function ChecklistEditor({ value, onChange, participants, disable
             {value.map((draft, index) => (
               <SortableRow
                 key={draft.key}
+                // The label's name over the first row of each group.
+                groupStart={
+                  labelKey(draft.label) !== null &&
+                  labelKey(draft.label) !== labelKey(value[index - 1]?.label)
+                }
+                labels={labels}
                 draft={draft}
                 index={index}
                 isLast={index === value.length - 1}
@@ -136,6 +155,8 @@ export default function ChecklistEditor({ value, onChange, participants, disable
 
 type RowProps = {
   draft: ChecklistDraft;
+  groupStart: boolean;
+  labels: string[];
   index: number;
   isLast: boolean;
   participants: TaskParticipant[];
@@ -147,6 +168,8 @@ type RowProps = {
 
 function SortableRow({
   draft,
+  groupStart,
+  labels,
   index,
   isLast,
   participants,
@@ -160,20 +183,30 @@ function SortableRow({
 
   const nameOf = (id: number) => participants.find((p) => p.id === id)?.name ?? "?";
 
+  const color = draft.label ? labelColor(draft.label) : null;
+
   return (
-    <Stack
+    <Box
       ref={setNodeRef}
-      direction="row"
-      spacing={0.5}
       sx={{
-        alignItems: "center",
         position: "relative",
         zIndex: isDragging ? 1 : "auto",
         opacity: isDragging ? 0.85 : 1,
         bgcolor: isDragging ? "background.paper" : "transparent",
+        // A coloured edge down the rows of a label, so the group reads as one.
+        ...(color ? { borderLeft: `3px solid ${color}`, pl: 0.5 } : {}),
       }}
       style={{ transform: CSS.Translate.toString(transform), transition }}
     >
+      {groupStart && draft.label && (
+        <Typography
+          variant="caption"
+          sx={{ display: "block", fontWeight: 800, color: color ?? undefined, pl: 0.5, pt: 0.5, mb: 0.75 }}
+        >
+          {draft.label}
+        </Typography>
+      )}
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
       {/* The handle is the only part that drags: listeners on the whole row
           would steal the pointer from the text field and the select. */}
       <IconButton
@@ -209,6 +242,13 @@ function SortableRow({
         value={draft.priority}
         disabled={disabled}
         onChange={(priority) => onPatch({ priority })}
+      />
+
+      <LabelPicker
+        value={draft.label}
+        options={labels}
+        disabled={disabled}
+        onChange={(label) => onPatch({ label })}
       />
 
       <TextField
@@ -290,5 +330,6 @@ function SortableRow({
         <CloseRounded fontSize="small" />
       </IconButton>
     </Stack>
+    </Box>
   );
 }

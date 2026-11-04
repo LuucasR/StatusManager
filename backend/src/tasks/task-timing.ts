@@ -1,4 +1,5 @@
 import type { Prisma, TaskState } from "@prisma/client";
+import type { WorkCalendar } from "../workday/work-calendar";
 
 /**
  * Real time a task spent in IN_PROGRESS.
@@ -20,6 +21,43 @@ export function progressMs(segments: ProgressSegment[], now: Date = new Date()) 
       total + Math.max(0, (segment.endedAt ?? now).getTime() - segment.startedAt.getTime()),
     0
   );
+}
+
+/**
+ * The task's real time measured against the working hours, which is what the
+ * board and the reports show.
+ *
+ * A task stays In progress overnight whenever somebody on it is still marked
+ * Working at the close, and the raw sum then booked every night and weekend
+ * hour - tasks reached 244 h in a 37 h week. Only the part of each stretch
+ * inside the calendar's hours counts.
+ *
+ * `workedMs` is the closed stretches, `openWorkedMs` the open one up to `now`,
+ * and `clockRunning` says whether the open one is accruing right now, so the
+ * client knows whether to tick it live.
+ */
+export function workedProgress(
+  segments: ProgressSegment[],
+  calendar: WorkCalendar,
+  now: Date = new Date()
+) {
+  let workedMs = 0;
+  let openWorkedMs = 0;
+  for (const segment of segments) {
+    const start = segment.startedAt.getTime();
+    if (segment.endedAt) {
+      workedMs += calendar.overlapMs(start, segment.endedAt.getTime());
+    } else {
+      openWorkedMs += calendar.overlapMs(start, now.getTime());
+    }
+  }
+  const open = inProgressSince(segments) != null;
+  return {
+    workedMs,
+    openWorkedMs,
+    clockRunning: open && calendar.isWorkingAt(now.getTime()),
+    measuredAt: now,
+  };
 }
 
 /** Start of the open segment, or null when the task is not in progress. */

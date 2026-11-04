@@ -1,6 +1,7 @@
 import type { ActivityStatus, TaskState } from "@prisma/client";
 import { addDays, zonedMidnight } from "../patch-notes/patch-week";
 import { zonedNow } from "../scheduler/workday";
+import type { WorkCalendar } from "../workday/work-calendar";
 
 type Participant = { id: number; employeeNumber: number; name: string };
 
@@ -58,17 +59,33 @@ export type TaskBucket = {
  * open since the day before yesterday would add up to now instead of to the end
  * of the requested range. And clipping the start against `from` is what makes a
  * segment coming from before the range contribute only its share.
+ *
+ * With a `calendar`, only the part inside working hours counts: a status left
+ * open overnight or over a weekend must not book those hours (work-calendar.ts).
  */
 export function segmentMs(
   row: Pick<SummaryRow, "startedAt" | "endedAt">,
   from: Date | undefined,
   to: Date | undefined,
-  now: Date
+  now: Date,
+  calendar?: WorkCalendar
 ) {
+  const [start, end] = clippedRange(row, from, to, now);
+  if (end <= start) return 0;
+  return calendar ? calendar.overlapMs(start, end) : end - start;
+}
+
+/** [start, end) of the segment once clipped to the range; open ones run to `now`. */
+function clippedRange(
+  row: Pick<SummaryRow, "startedAt" | "endedAt">,
+  from: Date | undefined,
+  to: Date | undefined,
+  now: Date
+): [number, number] {
   const start = Math.max(row.startedAt.getTime(), from ? from.getTime() : -Infinity);
   const rawEnd = row.endedAt ? row.endedAt.getTime() : now.getTime();
   const end = Math.min(rawEnd, to ? to.getTime() : Infinity);
-  return Math.max(0, end - start);
+  return [start, end];
 }
 
 /**
@@ -80,10 +97,11 @@ export function workedMs(
   rows: Pick<SummaryRow, "status" | "startedAt" | "endedAt">[],
   from: Date | undefined,
   to: Date | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  calendar?: WorkCalendar
 ) {
   return rows.reduce(
-    (total, row) => (row.status === "WORKING" ? total + segmentMs(row, from, to, now) : total),
+    (total, row) => (row.status === "WORKING" ? total + segmentMs(row, from, to, now, calendar) : total),
     0
   );
 }
@@ -97,16 +115,19 @@ export function workedByDay(
   from: Date | undefined,
   to: Date | undefined,
   timeZone: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  calendar?: WorkCalendar
 ): { day: string; ms: number }[] {
   const days = new Map<string, number>();
   for (const row of rows) {
     if (row.status !== "WORKING") continue;
-    const start = Math.max(row.startedAt.getTime(), from ? from.getTime() : -Infinity);
-    const end = Math.min(
-      row.endedAt ? row.endedAt.getTime() : now.getTime(),
-      to ? to.getTime() : Infinity
-    );
+    const [start, end] = clippedRange(row, from, to, now);
+    if (calendar) {
+      for (const piece of calendar.pieces(start, end)) {
+        days.set(piece.day, (days.get(piece.day) ?? 0) + piece.ms);
+      }
+      continue;
+    }
     let cursor = start;
     while (cursor < end) {
       const day = zonedNow(timeZone, new Date(cursor)).day;
@@ -134,12 +155,13 @@ export function workedByTask(
   })[],
   from: Date | undefined,
   to: Date | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  calendar?: WorkCalendar
 ): { key: string; taskId: number | null; title: string | null; ms: number }[] {
   const tasks = new Map<string, { key: string; taskId: number | null; title: string | null; ms: number }>();
   for (const row of rows) {
     if (row.status !== "WORKING") continue;
-    const ms = segmentMs(row, from, to, now);
+    const ms = segmentMs(row, from, to, now, calendar);
     if (ms <= 0) continue;
     const taskId = row.taskId ?? null;
     const title = row.taskTitle ?? null;
@@ -169,7 +191,8 @@ export function summarize(
   rows: SummaryRow[],
   from: Date | undefined,
   to: Date | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  calendar?: WorkCalendar
 ): ActivitySummary {
   const statuses = new Map<ActivityStatus, StatusBucket>();
   const tasks = new Map<string, TaskBucket>();
@@ -177,7 +200,7 @@ export function summarize(
   let worked = 0;
 
   for (const row of rows) {
-    const ms = segmentMs(row, from, to, now);
+    const ms = segmentMs(row, from, to, now, calendar);
     // A 0 ms segment (or one outside the range despite the overlap filter) adds
     // no time, and should not inflate the segment counter either.
     if (ms <= 0) continue;
@@ -267,13 +290,14 @@ export function teamTaskTimes(
   rows: TeamTimeRow[],
   from: Date | undefined,
   to: Date | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  calendar?: WorkCalendar
 ): TeamTaskTime[] {
   const tasks = new Map<string, TeamTaskTime & { people: Map<number, { id: number; name: string; ms: number }> }>();
 
   for (const row of rows) {
     if (row.taskId == null && !row.taskTitle) continue;
-    const ms = segmentMs(row, from, to, now);
+    const ms = segmentMs(row, from, to, now, calendar);
     if (ms <= 0) continue;
 
     const key = row.taskId != null ? `id:${row.taskId}` : `title:${row.taskTitle}`;

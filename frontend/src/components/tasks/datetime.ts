@@ -92,11 +92,23 @@ export function formatMsDuration(ms: number) {
 
 /**
  * Real time a task has spent In progress, ticking every 30 s while it is still
- * there: closed stretches plus the open one measured against this clock.
+ * there.
+ *
+ * Current backends measure it against the working hours (nights and weekends
+ * do not count) and say whether the clock is running right now: the live part
+ * is only what elapsed since they measured, and only while it runs. Older ones
+ * send just the closed stretches, and the open one is measured here as before.
  */
-export function useTaskWorkedMs(task: { workedMs?: number; inProgressSince?: string | null }) {
+export function useTaskWorkedMs(task: {
+  workedMs?: number;
+  inProgressSince?: string | null;
+  openWorkedMs?: number;
+  clockRunning?: boolean;
+  measuredAt?: string;
+}) {
   const [now, setNow] = useState(() => Date.now());
-  const since = task.inProgressSince;
+  const measured = task.openWorkedMs !== undefined;
+  const since = measured ? (task.clockRunning ? task.measuredAt : undefined) : task.inProgressSince;
 
   useEffect(() => {
     if (!since) return;
@@ -105,6 +117,6 @@ export function useTaskWorkedMs(task: { workedMs?: number; inProgressSince?: str
     return () => window.clearInterval(timer);
   }, [since]);
 
-  const open = since ? Math.max(0, now - new Date(since).getTime()) : 0;
-  return (task.workedMs ?? 0) + open;
+  const live = since ? Math.max(0, now - new Date(since).getTime()) : 0;
+  return (task.workedMs ?? 0) + (task.openWorkedMs ?? 0) + live;
 }

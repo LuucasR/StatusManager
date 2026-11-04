@@ -48,6 +48,8 @@ import MessageThread from "../chat/MessageThread";
 import { useConversation } from "../chat/useConversation";
 import ChecklistFilterBar from "./ChecklistFilterBar";
 import { PriorityChip } from "./ChecklistPriority";
+import { LabelGroupBox } from "./ChecklistLabel";
+import { groupChecklist, labelKey, regroupByLabel } from "./checklistLabels";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist, hasChecklistFilters } from "./checklistFilter";
 import TaskFacts from "./TaskFacts";
 import TaskHistory from "./TaskHistory";
@@ -287,51 +289,8 @@ export default function TaskDetailDialog({
                         .map((assignee) => [assignee.id, assignee])
                     ).values(),
                   ].sort((a, b) => a.name.localeCompare(b.name));
-                  return (
-                    <Box>
-                      <Typography variant="overline" color="text.secondary">
-                        {tf("taskDetail.checklist", { done, total })}
-                      </Typography>
-
-                      <LinearProgress
-                        variant="determinate"
-                        value={(done / total) * 100}
-                        sx={{ height: 6, borderRadius: 3, my: 1 }}
-                      />
-
-                      <ChecklistFilterBar
-                        value={filters}
-                        onChange={setFilters}
-                        members={members}
-                        shown={visible.length}
-                        total={total}
-                      />
-
-                      {visible.length === 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                          {t("checklistFilter.empty")}
-                        </Typography>
-                      )}
-
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={({ active, over }: DragEndEvent) => {
-                          if (!over || active.id === over.id) return;
-                          const ids = task.checklist.map((item) => item.id);
-                          const from = ids.indexOf(Number(active.id));
-                          const to = ids.indexOf(Number(over.id));
-                          if (from < 0 || to < 0) return;
-                          onReorderChecklist(task, arrayMove(ids, from, to));
-                        }}
-                      >
-                        <SortableContext
-                          items={visible.map((item) => item.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          <Stack>
-                            {visible.map((item) => (
-                              <SortableChecklistRow key={item.id} id={item.id} enabled={reorderable}>
+                  const renderItem = (item: TaskChecklistItem) => (
+                    <SortableChecklistRow key={item.id} id={item.id} enabled={reorderable}>
                                 <FormControlLabel
                                   control={
                                     <Checkbox
@@ -397,8 +356,71 @@ export default function TaskDetailDialog({
                                     </Box>
                                   }
                                 />
-                              </SortableChecklistRow>
-                            ))}
+                    </SortableChecklistRow>
+                  );
+                  return (
+                    <Box>
+                      <Typography variant="overline" color="text.secondary">
+                        {tf("taskDetail.checklist", { done, total })}
+                      </Typography>
+
+                      <LinearProgress
+                        variant="determinate"
+                        value={(done / total) * 100}
+                        sx={{ height: 6, borderRadius: 3, my: 1 }}
+                      />
+
+                      <ChecklistFilterBar
+                        value={filters}
+                        onChange={setFilters}
+                        members={members}
+                        shown={visible.length}
+                        total={total}
+                      />
+
+                      {visible.length === 0 && (
+                        <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                          {t("checklistFilter.empty")}
+                        </Typography>
+                      )}
+
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={({ active, over }: DragEndEvent) => {
+                          if (!over || active.id === over.id) return;
+                          // The order on screen, groups gathered: that is what
+                          // the drag moved within, and what gets saved.
+                          const shown = regroupByLabel(task.checklist);
+                          const ids = shown.map((item) => item.id);
+                          const from = ids.indexOf(Number(active.id));
+                          const to = ids.indexOf(Number(over.id));
+                          if (from < 0 || to < 0) return;
+                          // Inside its own box only: dropping an item among
+                          // another label's would not change its label.
+                          if (labelKey(shown[from]!.label) !== labelKey(shown[to]!.label)) return;
+                          onReorderChecklist(task, arrayMove(ids, from, to));
+                        }}
+                      >
+                        <SortableContext
+                          items={regroupByLabel(visible).map((item) => item.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <Stack>
+                            {groupChecklist(visible).map((block) =>
+                              block.kind === "item" ? (
+                                renderItem(block.item)
+                              ) : (
+                                <LabelGroupBox
+                                  key={`label:${block.key}`}
+                                  label={block.label}
+                                  done={block.items.filter((item) => item.done).length}
+                                  total={block.items.length}
+                                >
+                                  {block.items.map(renderItem)}
+                                </LabelGroupBox>
+                              )
+                            )}
                           </Stack>
                         </SortableContext>
                       </DndContext>

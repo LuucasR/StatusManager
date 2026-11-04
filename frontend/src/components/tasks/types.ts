@@ -38,6 +38,8 @@ export type TaskChecklistItem = {
   doneAt: string | null;
   /** null = none. Optional: a backend older than priorities does not send it. */
   priority?: ChecklistPriority | null;
+  /** Free-text group ("Cinematic"); items sharing one are boxed together. null = none. */
+  label?: string | null;
   /** Who is in charge; several people or nobody ([]). Always task participants. */
   assignees: TaskParticipant[];
   /**
@@ -81,10 +83,17 @@ export type Task = {
   /** When it leaves the board: archiveAt, or endsAt + 14 days. The backend owns the constant. */
   archivesAt: string;
   /**
-   * Real time the task spent In progress, CLOSED stretches only. startsAt/endsAt
-   * are just the deadline. Optional: older backends do not send it.
+   * Real time the task spent In progress, CLOSED stretches only, counting the
+   * working hours. startsAt/endsAt are just the deadline. Optional: older
+   * backends do not send it.
    */
   workedMs?: number;
+  /** The open stretch, working hours only, up to measuredAt. Absent on older backends. */
+  openWorkedMs?: number;
+  /** Whether the open stretch is accruing right now (in progress AND inside working hours). */
+  clockRunning?: boolean;
+  /** When the backend measured openWorkedMs. */
+  measuredAt?: string;
   /** Start of the current In progress stretch, or null when it is not in progress. */
   inProgressSince?: string | null;
   /** The task broken into steps, in the order the author wrote them. */

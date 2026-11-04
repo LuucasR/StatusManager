@@ -54,6 +54,7 @@ export function filterChecklist(items: TaskChecklistItem[], filters: ChecklistFi
     if (!query) return true;
     return (
       fold(item.text).includes(query) ||
+      (item.label ? fold(item.label).includes(query) : false) ||
       item.assignees.some((assignee) => fold(assignee.name).includes(query))
     );
   });

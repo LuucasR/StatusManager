@@ -4,6 +4,7 @@ import { Prisma, TaskState } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import prisma from "../prisma/client";
 import { renderTaskReport } from "../reports/task-report";
+import { loadWorkCalendar } from "../workday/work-calendar";
 import { requireAdmin, requireAuth, requireTaskManagement } from "../auth/auth.middleware";
 import { canManageTasks, isAdmin, isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
@@ -189,7 +190,8 @@ router.get("/", async (req, res) => {
     take: 500,
   });
 
-  res.json(tasks.map(toTaskDto));
+  const calendar = await loadWorkCalendar();
+  res.json(tasks.map((task) => toTaskDto(task, calendar)));
 });
 
 /**
@@ -299,6 +301,7 @@ router.get("/report.pdf", async (req, res) => {
     `inline; filename="task-report-${new Date().toISOString().slice(0, 10)}.pdf"`
   );
 
+  const calendar = await loadWorkCalendar();
   const doc = new PDFDocument({ margin: 0, size: "A4" });
   doc.pipe(res);
 
@@ -306,7 +309,7 @@ router.get("/report.pdf", async (req, res) => {
     title: "Task report",
     subtitle,
     periodLabel,
-    rows: tasks.map(toTaskDto),
+    rows: tasks.map((task) => toTaskDto(task, calendar)),
   });
 });
 
@@ -350,7 +353,8 @@ router.get("/archived", requireAdmin, async (req, res) => {
     take: 500,
   });
 
-  res.json(tasks.map(toTaskDto));
+  const calendar = await loadWorkCalendar();
+  res.json(tasks.map((task) => toTaskDto(task, calendar)));
 });
 
 // No archive filter on purpose: this is the recovery path. The report gives you
@@ -372,7 +376,7 @@ router.get("/:id", async (req, res) => {
     return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
   }
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -438,6 +442,7 @@ router.post("/", async (req, res) => {
             text: item.text,
             position: index,
             priority: item.priority ?? null,
+            label: item.label ?? null,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },
@@ -453,6 +458,9 @@ router.post("/", async (req, res) => {
         { type: "ITEM_CREATED", itemText: item.text },
         ...(item.priority
           ? [{ type: "ITEM_PRIORITY", itemText: item.text, detail: item.priority } as TaskEventInput]
+          : []),
+        ...(item.label
+          ? [{ type: "ITEM_LABEL", itemText: item.text, detail: item.label } as TaskEventInput]
           : []),
         ...item.assigneeIds.map((targetId): TaskEventInput => ({
           type: "ITEM_ASSIGNED",
@@ -491,7 +499,7 @@ router.post("/", async (req, res) => {
     });
   }
 
-  res.status(201).json(toTaskDto(task));
+  res.status(201).json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 const rejectTaskSchema = z.object({
@@ -562,7 +570,7 @@ router.post("/:id/approve", requireAdmin, async (req, res) => {
     });
   }
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 router.post("/:id/reject", requireAdmin, async (req, res) => {
@@ -613,7 +621,7 @@ router.post("/:id/reject", requireAdmin, async (req, res) => {
     });
   }
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 router.patch("/:id", requireTaskManagement, async (req, res) => {
@@ -649,6 +657,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
           text: true,
           position: true,
           priority: true,
+          label: true,
           assignees: { select: { employeeId: true } },
         },
       },
@@ -800,8 +809,8 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       for (const item of checklistDiff.updates) {
         await tx.taskChecklistItem.update({
           where: { id: item.id },
-          // priority undefined = the client did not send one: Prisma leaves it.
-          data: { text: item.text, position: item.position, priority: item.priority },
+          // priority/label undefined = the client did not send one: Prisma leaves it.
+          data: { text: item.text, position: item.position, priority: item.priority, label: item.label },
         });
 
         // The assignee set is only touched when it actually changed, so the
@@ -829,6 +838,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
             text: item.text,
             position: item.position,
             priority: item.priority,
+            label: item.label,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },
@@ -887,7 +897,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     });
   }
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 router.patch("/:id/state", async (req, res) => {
@@ -948,7 +958,7 @@ router.patch("/:id/state", async (req, res) => {
     taskId: id,
   });
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -1006,7 +1016,7 @@ router.post("/:id/restore", requireAdmin, async (req, res) => {
     taskId: id,
   });
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -1051,7 +1061,7 @@ router.patch("/:id/pin", async (req, res) => {
   });
 
   emitTaskChanged({ type: "pinned", taskId: id, pinned: task.pinned });
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -1088,7 +1098,7 @@ router.patch("/:id/color", requireAdmin, async (req, res) => {
   });
 
   emitTaskChanged({ type: "updated", taskId: id });
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -1133,7 +1143,7 @@ router.put("/:id/checklist/order", requireTaskManagement, async (req, res) => {
   const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
 
   emitTaskChanged({ type: "checklist", taskId: id });
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**
@@ -1224,7 +1234,7 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
     });
   }
 
-  res.json(toTaskDto(task));
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 /**

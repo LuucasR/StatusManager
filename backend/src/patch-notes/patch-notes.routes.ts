@@ -8,6 +8,7 @@ import { isStaff } from "../auth/roles";
 import { getWorkdayConfig } from "../scheduler/workday";
 import { overlappingWhere } from "../activities/activity-status";
 import { teamTaskTimes } from "../activities/activity-summary";
+import { loadWorkCalendar } from "../workday/work-calendar";
 import { emitPatchNotesChanged } from "../realtime";
 import { renderPatchNotesReport } from "../reports/patch-notes-report";
 import { addDays, currentWeekStart, isWeekStart, weekRange } from "./patch-week";
@@ -134,7 +135,7 @@ function canWrite(req: Request, status: PatchWeekStatus) {
  * more, so it is left out.
  */
 async function weekTaskTimes({ projectId, weekStart }: WeekKey, employeeId?: number) {
-  const config = await getWorkdayConfig();
+  const [config, calendar] = await Promise.all([getWorkdayConfig(), loadWorkCalendar()]);
   const { from, to } = weekRange(weekStart, config.timezone);
   const rows = await prisma.activityHistory.findMany({
     where: {
@@ -153,7 +154,9 @@ async function weekTaskTimes({ projectId, weekStart }: WeekKey, employeeId?: num
       task: { select: { title: true, state: true } },
     },
   });
-  return teamTaskTimes(rows, from, to);
+  // Only the working hours count: a Working status left open overnight must
+  // not book the night against the task.
+  return teamTaskTimes(rows, from, to, new Date(), calendar);
 }
 
 const entrySchema = z.object({

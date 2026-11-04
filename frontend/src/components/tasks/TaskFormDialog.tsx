@@ -13,6 +13,7 @@ import {
   TextField,
 } from "@mui/material";
 import { useEffect, useState } from "react";
+import { regroupByLabel } from "./checklistLabels";
 import ChecklistEditor, { type ChecklistDraft } from "./ChecklistEditor";
 import ParticipantSelect from "./ParticipantSelect";
 import { fromLocalInputValue, toLocalInputValue } from "./datetime";
@@ -37,14 +38,22 @@ type Props = {
  * what tells the backend to keep its tick instead of recreating the row.
  */
 function toDrafts(
-  items: { id: number; text: string; priority?: ChecklistPriority | null; assignees: { id: number }[] }[]
+  items: {
+    id: number;
+    text: string;
+    priority?: ChecklistPriority | null;
+    label?: string | null;
+    assignees: { id: number }[];
+  }[]
 ): ChecklistDraft[] {
-  return items.map((item) => ({
+  // Shown grouped by label from the start, the same order the detail shows.
+  return regroupByLabel(items).map((item) => ({
     key: item.id,
     id: item.id,
     text: item.text,
     assigneeIds: item.assignees.map((assignee) => assignee.id),
     priority: item.priority ?? null,
+    label: item.label ?? null,
   }));
 }
 
@@ -163,13 +172,16 @@ export default function TaskFormDialog({
 
     // A row that was added and never filled in is not an error, it is one row
     // too many. The backend would reject the empty string, so it is dropped here.
-    const items = checklist
+    // Saved grouped: the items of a label are contiguous, so every client -
+    // including ones that do not know labels - reads them together.
+    const items = regroupByLabel(checklist)
       .filter((draft) => draft.text.trim())
       .map((draft) => ({
         id: draft.id,
         text: draft.text.trim(),
         assigneeIds: draft.assigneeIds,
         priority: draft.priority,
+        label: draft.label,
       }));
 
     setSaving(true);

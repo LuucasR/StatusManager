@@ -51,7 +51,9 @@ describe("diffChecklist", () => {
       { id: 3, text: "c" },
     ]);
 
-    assert.deepEqual(diff.creates, [{ text: "brand new", position: 1, assigneeIds: [], priority: null }]);
+    assert.deepEqual(diff.creates, [
+      { text: "brand new", position: 1, assigneeIds: [], priority: null, label: null },
+    ]);
     assert.deepEqual(diff.deletedIds, []);
   });
 
@@ -146,5 +148,21 @@ describe("diffChecklist", () => {
     );
     assert.equal("priority" in diff.updates[2]!, false);
     assert.equal(diff.creates[0]?.priority, "LOW");
+  });
+
+  it("leaves the label alone when the client does not send one", () => {
+    const diff = diffChecklist(current, [
+      { id: 1, text: "a", label: "Cinematic" },
+      { id: 2, text: "b", label: null },
+      { id: 3, text: "c" },
+      { text: "d", label: "UI" },
+    ]);
+
+    assert.deepEqual(
+      diff.updates.map((item) => item.label),
+      ["Cinematic", null, undefined]
+    );
+    assert.equal("label" in diff.updates[2]!, false);
+    assert.equal(diff.creates[0]?.label, "UI");
   });
 });

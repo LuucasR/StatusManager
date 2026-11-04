@@ -400,6 +400,9 @@ model TaskChecklistItem {
   position   Int
   /// How urgent the item is; null = no priority set.
   priority   ChecklistPriority?
+  /// Free-text group, e.g. "Cinematic"; null = none. Items sharing a label
+  /// (compared without case or accents) are shown together in one box.
+  label      String?
   createdAt  DateTime  @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)

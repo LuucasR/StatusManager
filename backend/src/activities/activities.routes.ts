@@ -20,6 +20,7 @@ import {
 } from "./activity-task";
 import { summarize } from "./activity-summary";
 import { LOCALE } from "../locale";
+import { loadWorkCalendar } from "../workday/work-calendar";
 
 const router = Router();
 router.use(requireAuth);
@@ -168,7 +169,7 @@ router.get("/summary", async (req, res) => {
   res.json({
     from: from ?? null,
     to: to ?? null,
-    ...summarize(rows, from, to),
+    ...summarize(rows, from, to, new Date(), await loadWorkCalendar()),
   });
 });
 
@@ -197,8 +198,9 @@ router.get("/report.pdf", async (req, res) => {
     ? `${from ? from.toLocaleDateString(LOCALE) : "Start"} to ${to ? to.toLocaleDateString(LOCALE) : "now"}`
     : "Full history";
 
-  const config = await getWorkdayConfig();
+  const [config, calendar] = await Promise.all([getWorkdayConfig(), loadWorkCalendar()]);
   renderActivityReport(doc, {
+    calendar,
     title: "My activity log",
     subtitle: `Employee #${employee.employeeNumber} - ${employee.name}`,
     periodLabel,

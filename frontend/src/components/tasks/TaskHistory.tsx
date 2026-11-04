@@ -56,6 +56,10 @@ function describe(event: TaskEvent) {
             priority: checklistPriorityLabel(event.detail as ChecklistPriority),
           })
         : tf("taskHistory.ITEM_PRIORITY.cleared", vars);
+    case "ITEM_LABEL":
+      return event.detail
+        ? tf("taskHistory.ITEM_LABEL", { ...vars, label: event.detail })
+        : tf("taskHistory.ITEM_LABEL.cleared", vars);
     case "PARTICIPANT_REMOVED":
       if (event.detail === "DEACTIVATED") {
         return tf("taskHistory.PARTICIPANT_REMOVED.deactivated", vars);

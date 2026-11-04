@@ -33,6 +33,15 @@ const checklist = z
       // clients built before priorities existed (the Android app ships its
       // bundle) never send it, and saving from them must not wipe it.
       priority: z.nativeEnum(ChecklistPriority).nullable().optional(),
+      // Optional group of the item. Same absent-means-keep rule as the
+      // priority; "" or blank clears it, like null.
+      label: z
+        .string()
+        .trim()
+        .max(40)
+        .nullable()
+        .optional()
+        .transform((value) => (value === undefined ? undefined : value || null)),
       // LEGACY single assignee, still accepted from clients built before an item
       // could have several people (the Android app ships its bundle). Only read
       // when assigneeIds is absent.

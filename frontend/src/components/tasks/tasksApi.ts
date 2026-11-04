@@ -14,7 +14,13 @@ export type TaskPayload = {
    * entry carrying an `id` is one that already exists and keeps its tick; one
    * without is new.
    */
-  checklist: { id?: number; text: string; assigneeIds: number[]; priority: ChecklistPriority | null }[];
+  checklist: {
+    id?: number;
+    text: string;
+    assigneeIds: number[];
+    priority: ChecklistPriority | null;
+    label: string | null;
+  }[];
   autoCompleteOnChecklist: boolean;
   /** Admin only, left out otherwise. null = 14 days after the end. */
   archiveAt?: string | null;

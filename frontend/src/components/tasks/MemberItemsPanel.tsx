@@ -1,6 +1,8 @@
 import { CheckCircleRounded, FlagRounded, RadioButtonUncheckedRounded } from "@mui/icons-material";
 import { Box, ButtonBase, Paper, Stack, Typography } from "@mui/material";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist } from "./checklistFilter";
+import { LabelChip } from "./ChecklistLabel";
+import { regroupByLabel } from "./checklistLabels";
 import type { TaskFilters } from "./taskFilter";
 import {
   CHECKLIST_PRIORITY_COLOR,
@@ -34,7 +36,7 @@ export default function MemberItemsPanel({ tasks, filters, members, onOpen }: Pr
   };
   const groups = [...tasks]
     .sort(compareBoardOrder)
-    .map((task) => ({ task, items: filterChecklist(task.checklist, itemFilters) }))
+    .map((task) => ({ task, items: regroupByLabel(filterChecklist(task.checklist, itemFilters)) }))
     .filter((group) => group.items.length > 0);
   const names = filters.members
     .map((id) => members.find((member) => member.id === id)?.name)
@@ -91,11 +93,21 @@ export default function MemberItemsPanel({ tasks, filters, members, onOpen }: Pr
                     >
                       {item.text}
                     </Typography>
+                    {item.label && (
+                      <Box sx={{ ml: "auto", flex: "none" }}>
+                        <LabelChip label={item.label} />
+                      </Box>
+                    )}
                     {item.priority && (
                       <FlagRounded
                         fontSize="small"
                         titleAccess={checklistPriorityLabel(item.priority)}
-                        sx={{ color: CHECKLIST_PRIORITY_COLOR[item.priority], mt: "1px", ml: "auto", flex: "none" }}
+                        sx={{
+                          color: CHECKLIST_PRIORITY_COLOR[item.priority],
+                          mt: "1px",
+                          ml: item.label ? 0 : "auto",
+                          flex: "none",
+                        }}
                       />
                     )}
                   </Stack>

@@ -11,6 +11,8 @@ export type ChecklistInput = {
   assigneeIds?: number[];
   /** null = none; undefined = keep the current one (new items: none). */
   priority?: ChecklistPriority | null;
+  /** null = none; undefined = keep the current one (new items: none). */
+  label?: string | null;
 };
 
 export type ChecklistDiff = {
@@ -24,9 +26,17 @@ export type ChecklistDiff = {
     assigneeIds: number[];
     /** undefined = not sent, leave the stored one alone. */
     priority?: ChecklistPriority | null;
+    /** undefined = not sent, leave the stored one alone. */
+    label?: string | null;
   }[];
   /** Rows to insert, already carrying their position. */
-  creates: { text: string; position: number; assigneeIds: number[]; priority: ChecklistPriority | null }[];
+  creates: {
+    text: string;
+    position: number;
+    assigneeIds: number[];
+    priority: ChecklistPriority | null;
+    label: string | null;
+  }[];
   /** Every assignee the payload asks for. The route checks them against the
    *  task's participants, which is a rule no database constraint can express. */
   assigneeIds: number[];
@@ -67,7 +77,13 @@ export function diffChecklist(
     const assigneeIds = [...new Set(item.assigneeIds ?? [])];
 
     if (item.id === undefined) {
-      creates.push({ text: item.text, position, assigneeIds, priority: item.priority ?? null });
+      creates.push({
+        text: item.text,
+        position,
+        assigneeIds,
+        priority: item.priority ?? null,
+        label: item.label ?? null,
+      });
     } else {
       kept.add(item.id);
       updates.push({
@@ -77,6 +93,7 @@ export function diffChecklist(
         assigneeIds,
         // Only when sent: absent means the client knows nothing about priorities.
         ...(item.priority !== undefined ? { priority: item.priority } : {}),
+        ...(item.label !== undefined ? { label: item.label } : {}),
       });
     }
   });
