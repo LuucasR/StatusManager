@@ -18,6 +18,7 @@ import TaskBoard from "../components/tasks/TaskBoard";
 import TaskDetailDialog from "../components/tasks/TaskDetailDialog";
 import TaskFormDialog from "../components/tasks/TaskFormDialog";
 import TaskReportDialog from "../components/tasks/TaskReportDialog";
+import DraftTasks from "../components/tasks/DraftTasks";
 import PendingApprovals from "../components/tasks/PendingApprovals";
 import ArchivedTasksDialog from "../components/tasks/ArchivedTasksDialog";
 import TaskFilterBar from "../components/tasks/TaskFilterBar";
@@ -28,6 +29,7 @@ import {
   hasTaskFilters,
 } from "../components/tasks/taskFilter";
 import {
+  activateTask,
   approveTask,
   createTask,
   deleteTask,
@@ -47,6 +49,7 @@ import {
   canMoveTask,
   daysUntilArchive,
   isApprovedTask,
+  isDraftTask,
   type Task,
   type TaskChecklistItem,
   type TaskColor,
@@ -351,7 +354,8 @@ export default function TasksPage({ projectId }: { projectId: number }) {
     if (taskId) await updateTask(taskId, payload);
     else {
       const created = await createTask({ ...payload, projectId });
-      if (!isApprovedTask(created)) setNotice(t("approval.sentNotice"));
+      if (isDraftTask(created)) setNotice(t("draft.savedNotice"));
+      else if (!isApprovedTask(created)) setNotice(t("approval.sentNotice"));
     }
     await load();
   }
@@ -359,6 +363,16 @@ export default function TasksPage({ projectId }: { projectId: number }) {
   async function handleApprove(task: Task) {
     try {
       await approveTask(task.id);
+      await load();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  async function handleActivate(task: Task) {
+    try {
+      await activateTask(task.id);
+      setNotice(tf("draft.activatedNotice", { title: task.title }));
       await load();
     } catch (err) {
       handleError(err);
@@ -483,8 +497,19 @@ export default function TasksPage({ projectId }: { projectId: number }) {
               {t("taskFilter.empty")}
             </Typography>
           )}
+          {/* The backend only ever sends drafts to admins. */}
+          <DraftTasks
+            tasks={visibleTasks.filter(isDraftTask)}
+            onOpen={(task) => void openDetailById(task.id)}
+            onEdit={(task) => {
+              setEditing(task);
+              setFormOpen(true);
+            }}
+            onActivate={handleActivate}
+            onDelete={handleDelete}
+          />
           <PendingApprovals
-            tasks={visibleTasks.filter((task) => !isApprovedTask(task))}
+            tasks={visibleTasks.filter((task) => !isApprovedTask(task) && !isDraftTask(task))}
             isAdmin={isAdmin}
             meId={me?.id}
             onOpen={(task) => void openDetailById(task.id)}
@@ -528,6 +553,7 @@ export default function TasksPage({ projectId }: { projectId: number }) {
         employees={employees}
         needsApproval={!isAdmin}
         canSetArchiveDate={isAdmin}
+        canDraft={isAdmin}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
       />

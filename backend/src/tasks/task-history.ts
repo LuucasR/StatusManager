@@ -11,6 +11,8 @@ export const TASK_EVENT_TYPES = [
   "CREATED",
   "APPROVED",
   "REJECTED",
+  // A draft put on the board.
+  "ACTIVATED",
   "EDITED",
   "STATE_CHANGED",
   "AUTO_COMPLETED",

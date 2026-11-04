@@ -25,6 +25,8 @@ export type TaskPayload = {
   autoCompleteOnChecklist: boolean;
   /** Admin only, left out otherwise. null = 14 days after the end. */
   archiveAt?: string | null;
+  /** Create only, admin only: save it as a draft instead of publishing it. */
+  draft?: boolean;
 };
 
 /** One project's board, or every project's tasks (the task pickers) without it. */
@@ -79,6 +81,9 @@ export const approveTask = (id: number) =>
   api<Task>(`/tasks/${id}/approve`, { method: "POST" });
 
 /** Admin only. The reason is optional and shown to whoever created it. */
+/** Puts a draft on the board: clock, chat and the participants' notification. */
+export const activateTask = (id: number) => api<Task>(`/tasks/${id}/activate`, { method: "POST" });
+
 export const rejectTask = (id: number, reason: string) =>
   api<Task>(`/tasks/${id}/reject`, {
     method: "POST",

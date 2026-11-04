@@ -114,6 +114,18 @@ const TASK_NOT_APPROVED = {
 };
 
 /**
+ * A draft is an admin's task not published yet: off the board like a pending
+ * one, but only admins see it - to everybody else it does not exist, hence the
+ * 404 rather than a 403 - and nobody is told anything until it is activated.
+ */
+const DRAFT_NOT_ALLOWED = {
+  code: "DRAFT_NOT_ALLOWED",
+  message: "Only an admin can save a task as a draft",
+};
+const TASK_NOT_DRAFT = { code: "TASK_NOT_DRAFT", message: "This task is not a draft" };
+const TASK_NOT_FOUND = { code: "TASK_NOT_FOUND", message: "Task not found" };
+
+/**
  * When a task leaves the board is an admin's call, like its colour flag: the
  * people working it would otherwise be able to keep it on the board forever.
  */
@@ -122,10 +134,22 @@ const ARCHIVE_DATE_NOT_ALLOWED = {
   message: "Only an admin can set the archive date",
 };
 
-/** Who sees tasks that are not approved: admins, and the creator their own. */
+/**
+ * Who sees tasks that are not approved: admins, and the creator their own
+ * pending or rejected ones. Drafts are admins only, whoever created them: an
+ * admin who lost the role does not keep seeing theirs.
+ */
 function approvalVisibleWhere(auth: AuthPayload): Prisma.TaskWhereInput {
   if (isAdmin(auth.role)) return {};
-  return { OR: [{ approval: "APPROVED" }, { createdById: auth.employeeId }] };
+  return {
+    OR: [{ approval: "APPROVED" }, { createdById: auth.employeeId, approval: { not: "DRAFT" } }],
+  };
+}
+
+/** Same rule as approvalVisibleWhere, for one task already loaded. */
+function canSeeTask(auth: AuthPayload, task: { approval: string; createdById: number | null }) {
+  if (task.approval === "APPROVED" || isAdmin(auth.role)) return true;
+  return task.approval !== "DRAFT" && task.createdById === auth.employeeId;
 }
 
 async function isApproved(taskId: number) {
@@ -368,13 +392,7 @@ router.get("/:id", async (req, res) => {
     include: TASK_DETAIL_INCLUDE,
   });
   if (!task) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
-  if (
-    task.approval !== "APPROVED" &&
-    !isAdmin(req.auth!.role) &&
-    task.createdById !== req.auth!.employeeId
-  ) {
-    return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
-  }
+  if (!canSeeTask(req.auth!, task)) return res.status(404).json(TASK_NOT_FOUND);
 
   res.json(toTaskDto(task, await loadWorkCalendar()));
 });
@@ -417,6 +435,9 @@ router.post("/", async (req, res) => {
 
   const needsApproval = !isAdmin(req.auth!.role);
   if (parsed.data.archiveAt && needsApproval) return res.status(403).json(ARCHIVE_DATE_NOT_ALLOWED);
+  if (parsed.data.draft && needsApproval) return res.status(403).json(DRAFT_NOT_ALLOWED);
+  const draft = parsed.data.draft;
+  const approval = draft ? "DRAFT" : needsApproval ? "PENDING" : "APPROVED";
 
   // A transaction because the conversation needs the task id for its key.
   const task = await prisma.$transaction(async (tx) => {
@@ -429,7 +450,7 @@ router.post("/", async (req, res) => {
         startsAt: parsed.data.startsAt,
         endsAt: parsed.data.endsAt,
         createdById: req.auth!.employeeId,
-        approval: needsApproval ? "PENDING" : "APPROVED",
+        approval,
         autoCompleteOnChecklist: parsed.data.autoCompleteOnChecklist,
         archiveAt: parsed.data.archiveAt ?? null,
         participants: {
@@ -473,7 +494,8 @@ router.post("/", async (req, res) => {
         })),
       ]),
     ]);
-    if (!needsApproval) {
+    // A pending task or a draft gets its clock and chat when it goes live.
+    if (approval === "APPROVED") {
       // Created straight into IN_PROGRESS: the clock starts now.
       await syncTaskProgress(tx, created.id, null, created.state);
       await ensureTaskConversation(tx, created, participantIds);
@@ -483,7 +505,9 @@ router.post("/", async (req, res) => {
   });
 
   emitTaskChanged({ type: "created", taskId: task.id });
-  if (needsApproval) {
+  if (draft) {
+    // Nobody is told about a draft: the participants hear of it on activation.
+  } else if (needsApproval) {
     await notify({
       recipientIds: await adminIds(),
       actorId: req.auth!.employeeId,
@@ -504,6 +528,57 @@ router.post("/", async (req, res) => {
   }
 
   res.status(201).json(toTaskDto(task, await loadWorkCalendar()));
+});
+
+/**
+ * Puts a draft on the board. Does what creating it live would have done:
+ * starts the clock if it is in progress, opens its chat and tells the
+ * participants - the first they hear of it.
+ */
+router.post("/:id/activate", requireAdmin, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ code: "INVALID_ID", message: "Invalid identifier" });
+
+  const current = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      state: true,
+      approval: true,
+      participants: { select: { employeeId: true } },
+    },
+  });
+  if (!current) return res.status(404).json(TASK_NOT_FOUND);
+  if (current.approval !== "DRAFT") return res.status(409).json(TASK_NOT_DRAFT);
+
+  const participantIds = current.participants.map((link) => link.employeeId);
+  const task = await prisma.$transaction(async (tx) => {
+    // Conditional on still being a draft: two admins activating at once must
+    // not open two clocks.
+    const { count } = await tx.task.updateMany({
+      where: { id, approval: "DRAFT" },
+      data: { approval: "APPROVED", boardPosition: null },
+    });
+    if (count === 0) return null;
+    await recordTaskEvents(tx, id, req.auth!.employeeId, [{ type: "ACTIVATED" }]);
+    await syncTaskProgress(tx, id, null, current.state);
+    await ensureTaskConversation(tx, current, participantIds);
+    return tx.task.findUniqueOrThrow({ where: { id }, include: TASK_INCLUDE });
+  });
+  if (!task) return res.status(409).json(TASK_NOT_DRAFT);
+
+  emitTaskChanged({ type: "updated", taskId: id });
+  await notify({
+    recipientIds: participantIds,
+    actorId: req.auth!.employeeId,
+    type: "TASK_ADDED",
+    title: task.title,
+    body: `You were added to task "${task.title}"`,
+    taskId: id,
+  });
+
+  res.json(toTaskDto(task, await loadWorkCalendar()));
 });
 
 const rejectTaskSchema = z.object({
@@ -535,6 +610,10 @@ router.post("/:id/approve", requireAdmin, async (req, res) => {
     return res
       .status(409)
       .json({ code: "TASK_ALREADY_REVIEWED", message: "This task was already reviewed" });
+  }
+  // A draft goes live through /activate: it was never sent for review.
+  if (current.approval === "DRAFT") {
+    return res.status(409).json({ code: "TASK_IS_DRAFT", message: "This task is a draft: activate it instead" });
   }
 
   const participantIds = current.participants.map((link) => link.employeeId);
@@ -670,7 +749,11 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     },
   });
   if (!current) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
-  if (current.approval !== "APPROVED") return res.status(409).json(TASK_NOT_APPROVED);
+  // A draft is edited freely by admins - that is what it is for - and does not
+  // exist for anybody else.
+  const isDraft = current.approval === "DRAFT";
+  if (isDraft && !isAdmin(req.auth!.role)) return res.status(404).json(TASK_NOT_FOUND);
+  if (!isDraft && current.approval !== "APPROVED") return res.status(409).json(TASK_NOT_APPROVED);
 
   const startsAt = parsed.data.startsAt ?? current.startsAt;
   const endsAt = parsed.data.endsAt ?? current.endsAt;
@@ -768,7 +851,8 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
         ...(stateChanged ? { boardPosition: null } : {}),
       },
     });
-    if (stateChanged) await syncTaskProgress(tx, id, current.state, parsed.data.state!);
+    // A draft has no clock yet: activating it starts one in whatever state it is.
+    if (stateChanged && !isDraft) await syncTaskProgress(tx, id, current.state, parsed.data.state!);
 
     if (removed.length) {
       await tx.taskParticipant.deleteMany({
@@ -868,7 +952,9 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
     // it, and having the rule pull it straight back to Done would make that
     // control look broken.
     const autoCompleted =
-      !parsed.data.state && (nextChecklist || parsed.data.autoCompleteOnChecklist !== undefined)
+      !isDraft &&
+      !parsed.data.state &&
+      (nextChecklist || parsed.data.autoCompleteOnChecklist !== undefined)
         ? await applyChecklistAutoComplete(tx, id)
         : false;
     if (autoCompleted) await recordTaskEvents(tx, id, null, [{ type: "AUTO_COMPLETED" }]);
@@ -881,6 +967,9 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
   });
 
   emitTaskChanged({ type: "updated", taskId: id });
+
+  // Editing a draft tells nobody anything: activation is the moment they hear.
+  if (isDraft) return res.json(toTaskDto(task, await loadWorkCalendar()));
 
   const actorId = req.auth!.employeeId;
   await notify({
@@ -1263,6 +1352,7 @@ router.delete("/:id", async (req, res) => {
     select: { id: true, approval: true, createdById: true },
   });
   if (!exists) return res.status(404).json({ code: "TASK_NOT_FOUND", message: "Task not found" });
+  if (!canSeeTask(req.auth!, exists)) return res.status(404).json(TASK_NOT_FOUND);
 
   const ownUnapproved =
     exists.approval !== "APPROVED" && exists.createdById === req.auth!.employeeId;

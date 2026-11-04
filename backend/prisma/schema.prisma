@@ -107,10 +107,15 @@ enum AnnouncementPriority {
 
 /// Whether a task is live on the board. Tasks created by anyone but an ADMIN
 /// start PENDING and stay off the board until an admin decides.
+///
+/// DRAFT is an admin's task saved without publishing it: off the board like a
+/// PENDING one, but seen by admins only and turned live by activating it. Only
+/// Task uses it; SiteMap shares the enum and never sets it.
 enum TaskApproval {
   APPROVED
   PENDING
   REJECTED
+  DRAFT
 }
 
 /// Automatic warnings start PENDING and only count once an admin grants them.

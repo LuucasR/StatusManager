@@ -78,6 +78,9 @@ export const createTaskSchema = z
     autoCompleteOnChecklist: z.boolean().optional().default(false),
     // ADMIN only, enforced in the route. null/absent = 14 days after endsAt.
     archiveAt: dateInput.nullable().optional(),
+    // ADMIN only, enforced in the route: save it as a draft, off the board and
+    // seen by admins only, until an admin activates it.
+    draft: z.boolean().optional().default(false),
   })
   .superRefine((value, context) => {
     if (value.endsAt <= value.startsAt) {

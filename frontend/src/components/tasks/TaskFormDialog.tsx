@@ -10,6 +10,7 @@ import {
   FormHelperText,
   Stack,
   Switch,
+  Typography,
   TextField,
 } from "@mui/material";
 import { useEffect, useState } from "react";
@@ -31,6 +32,8 @@ type Props = {
   needsApproval?: boolean;
   /** Admins only: when the task leaves the board. */
   canSetArchiveDate?: boolean;
+  /** Admins only: save a new task as a draft. */
+  canDraft?: boolean;
 };
 
 /**
@@ -80,6 +83,7 @@ export default function TaskFormDialog({
   onSubmit,
   needsApproval = false,
   canSetArchiveDate = false,
+  canDraft = false,
 }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -90,6 +94,8 @@ export default function TaskFormDialog({
   const [participants, setParticipants] = useState<TaskParticipant[]>([]);
   const [checklist, setChecklist] = useState<ChecklistDraft[]>([]);
   const [autoComplete, setAutoComplete] = useState(false);
+  // New tasks only: an existing draft is activated from the drafts panel.
+  const [draft, setDraft] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -155,6 +161,7 @@ export default function TaskFormDialog({
       setChecklist([]);
       setAutoComplete(false);
     }
+    setDraft(false);
   }, [open, task, employees]);
 
   async function submit() {
@@ -204,6 +211,8 @@ export default function TaskFormDialog({
           ...(canSetArchiveDate
             ? { archiveAt: archiveAt ? fromLocalInputValue(archiveAt) : null }
             : {}),
+          // Create only: the backend refuses it from a non-admin.
+          ...(canDraft && !task ? { draft } : {}),
         },
         task?.id
       );
@@ -223,6 +232,18 @@ export default function TaskFormDialog({
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
           {needsApproval && !task && <Alert severity="info">{t("approval.formHint")}</Alert>}
+          {task?.approval === "DRAFT" && <Alert severity="info">{t("draft.editHint")}</Alert>}
+          {canDraft && !task && (
+            <Box>
+              <FormControlLabel
+                control={<Switch checked={draft} onChange={(event) => setDraft(event.target.checked)} />}
+                label={t("draft.switch")}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                {t("draft.switchHint")}
+              </Typography>
+            </Box>
+          )}
 
           <TextField
             label={t("taskForm.title")}

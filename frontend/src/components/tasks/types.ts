@@ -52,10 +52,14 @@ export type TaskChecklistItem = {
   doneBy: TaskParticipant | null;
 };
 
-export type TaskApproval = "APPROVED" | "PENDING" | "REJECTED";
+/** DRAFT: an admin's task saved without publishing it; admins only see it. */
+export type TaskApproval = "APPROVED" | "PENDING" | "REJECTED" | "DRAFT";
 
 /** On the board: approved, or sent by a backend that predates approvals. */
 export const isApprovedTask = (task: Task) => (task.approval ?? "APPROVED") === "APPROVED";
+
+/** An admin's unpublished task: off the board, nobody notified, admins only. */
+export const isDraftTask = (task: Task) => task.approval === "DRAFT";
 
 export type Task = {
   id: number;

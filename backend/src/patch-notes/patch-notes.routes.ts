@@ -174,9 +174,12 @@ async function linkedTask(taskId: number | null | undefined, projectId: number) 
   if (taskId == null) return { taskId: null, taskTitle: null };
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, title: true, projectId: true },
+    select: { id: true, title: true, projectId: true, approval: true },
   });
-  return task && task.projectId === projectId ? { taskId: task.id, taskTitle: task.title } : undefined;
+  // A draft does not exist for the team yet.
+  return task && task.projectId === projectId && task.approval !== "DRAFT"
+    ? { taskId: task.id, taskTitle: task.title }
+    : undefined;
 }
 
 /** Same keying as TeamTaskTime.key: by id, or by title once the task is gone. */
