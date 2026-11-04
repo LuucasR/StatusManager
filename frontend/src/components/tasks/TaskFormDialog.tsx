@@ -225,7 +225,15 @@ export default function TaskFormDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      // Wide: the checklist rows carry the text, priority, label, description
+      // and people, and at 600px the text field was squeezed to a few words.
+      maxWidth="lg"
+      slotProps={{ paper: { sx: { width: "95vw", maxHeight: "92vh" } } }}
+    >
       <DialogTitle>{task ? t("taskForm.edit") : t("taskForm.create")}</DialogTitle>
 
       <DialogContent>
@@ -317,7 +325,7 @@ export default function TaskFormDialog({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant="contained" onClick={submit} disabled={saving}>
           {saving ? t("common.saving") : task ? t("taskForm.save") : t("taskForm.submit")}
         </Button>

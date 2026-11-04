@@ -194,8 +194,8 @@ export default function TaskDetailDialog({
       open={open}
       onClose={onClose}
       fullWidth
-      maxWidth="md"
-      slotProps={{ paper: { sx: { overflow: "hidden" } } }}
+      maxWidth="xl"
+      slotProps={{ paper: { sx: { overflow: "hidden", width: "95vw", maxHeight: "92vh" } } }}
     >
       {loading || !task ? (
         <DialogContent>
