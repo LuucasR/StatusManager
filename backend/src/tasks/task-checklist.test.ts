@@ -52,7 +52,7 @@ describe("diffChecklist", () => {
     ]);
 
     assert.deepEqual(diff.creates, [
-      { text: "brand new", position: 1, assigneeIds: [], priority: null, label: null },
+      { text: "brand new", position: 1, assigneeIds: [], priority: null, label: null, description: null },
     ]);
     assert.deepEqual(diff.deletedIds, []);
   });
@@ -164,5 +164,21 @@ describe("diffChecklist", () => {
     );
     assert.equal("label" in diff.updates[2]!, false);
     assert.equal(diff.creates[0]?.label, "UI");
+  });
+
+  it("leaves the description alone when the client does not send one", () => {
+    const diff = diffChecklist(current, [
+      { id: 1, text: "a", description: "Long explanation" },
+      { id: 2, text: "b", description: null },
+      { id: 3, text: "c" },
+      { text: "d", description: "New one" },
+    ]);
+
+    assert.deepEqual(
+      diff.updates.map((item) => item.description),
+      ["Long explanation", null, undefined]
+    );
+    assert.equal("description" in diff.updates[2]!, false);
+    assert.equal(diff.creates[0]?.description, "New one");
   });
 });

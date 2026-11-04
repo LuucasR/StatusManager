@@ -289,6 +289,12 @@ export const en = {
   "checklistLabel.hint": "Items with the same label are shown together in one box.",
   "checklistLabel.remove": "Remove label",
   "checklistLabel.apply": "Apply",
+  "checklistDescription.add": "Add a description",
+  "checklistDescription.edit": "Edit the description",
+  "checklistDescription.field": "Description",
+  "checklistDescription.placeholder": "What exactly has to be done, links, references...",
+  "checklistDescription.remove": "Remove description",
+  "checklistDescription.empty": "This item has no description.",
   "taskForm.autoComplete": "Move the task to Done when every item is ticked",
   "taskForm.autoCompleteHint":
     "Off by default: a checklist is not always the whole of the task. Needs at least one item.",
@@ -478,6 +484,8 @@ export const en = {
   "taskHistory.ITEM_PRIORITY.cleared": "{actor} removed the priority of \"{item}\"",
   "taskHistory.ITEM_LABEL": "{actor} labelled \"{item}\" as {label}",
   "taskHistory.ITEM_LABEL.cleared": "{actor} removed the label of \"{item}\"",
+  "taskHistory.ITEM_DESCRIPTION": "{actor} wrote the description of \"{item}\"",
+  "taskHistory.ITEM_DESCRIPTION.cleared": "{actor} removed the description of \"{item}\"",
   "taskDetail.privateThread":
     "The conversation is private to the participants. You can manage the task, but to follow the thread you have to add yourself as a participant.",
   "summary.subtitle":
@@ -1334,6 +1342,12 @@ const es: Record<TranslationKey, string> = {
   "checklistLabel.hint": "Los ítems con la misma etiqueta se muestran juntos en una caja.",
   "checklistLabel.remove": "Quitar etiqueta",
   "checklistLabel.apply": "Aplicar",
+  "checklistDescription.add": "Agregar una descripción",
+  "checklistDescription.edit": "Editar la descripción",
+  "checklistDescription.field": "Descripción",
+  "checklistDescription.placeholder": "Qué hay que hacer exactamente, links, referencias...",
+  "checklistDescription.remove": "Quitar descripción",
+  "checklistDescription.empty": "Este ítem no tiene descripción.",
   "taskForm.autoComplete": "Pasar la tarea a Hecho cuando se tilden todos los ítems",
   "taskForm.autoCompleteHint":
     "Apagado por defecto: una lista no siempre es toda la tarea. Necesita al menos un ítem.",
@@ -1517,6 +1531,8 @@ const es: Record<TranslationKey, string> = {
   "taskHistory.ITEM_PRIORITY.cleared": "{actor} le quitó la prioridad a \"{item}\"",
   "taskHistory.ITEM_LABEL": "{actor} le puso la etiqueta {label} a \"{item}\"",
   "taskHistory.ITEM_LABEL.cleared": "{actor} le quitó la etiqueta a \"{item}\"",
+  "taskHistory.ITEM_DESCRIPTION": "{actor} escribió la descripción de \"{item}\"",
+  "taskHistory.ITEM_DESCRIPTION.cleared": "{actor} le quitó la descripción a \"{item}\"",
   "taskDetail.privateThread":
     "La conversación es privada de los participantes. Podés gestionar la tarea, pero para seguir el hilo tenés que agregarte como integrante.",
   "summary.subtitle":

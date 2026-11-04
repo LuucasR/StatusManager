@@ -29,6 +29,8 @@ export const TASK_EVENT_TYPES = [
   "ITEM_PRIORITY",
   // detail: the new label, or null when it was cleared.
   "ITEM_LABEL",
+  // detail: "set" or "cleared" - the text itself can be long, it stays on the item.
+  "ITEM_DESCRIPTION",
   "ITEM_DONE",
   "ITEM_UNDONE",
 ] as const;
@@ -94,6 +96,7 @@ export function taskEditEvents(input: {
       text: string;
       priority?: string | null;
       label?: string | null;
+      description?: string | null;
       assignees: { employeeId: number }[];
     }[];
   };
@@ -141,6 +144,7 @@ export function taskEditEvents(input: {
       events.push({ type: "ITEM_CREATED", itemText: item.text });
       if (item.priority) events.push({ type: "ITEM_PRIORITY", itemText: item.text, detail: item.priority });
       if (item.label) events.push({ type: "ITEM_LABEL", itemText: item.text, detail: item.label });
+      if (item.description) events.push({ type: "ITEM_DESCRIPTION", itemText: item.text, detail: "set" });
       for (const targetId of item.assigneeIds) {
         events.push({ type: "ITEM_ASSIGNED", itemText: item.text, targetId });
       }
@@ -156,6 +160,13 @@ export function taskEditEvents(input: {
       }
       if (item.label !== undefined && item.label !== (old.label ?? null)) {
         events.push({ type: "ITEM_LABEL", itemText: item.text, detail: item.label });
+      }
+      if (item.description !== undefined && item.description !== (old.description ?? null)) {
+        events.push({
+          type: "ITEM_DESCRIPTION",
+          itemText: item.text,
+          detail: item.description ? "set" : "cleared",
+        });
       }
       const was = old.assignees.map((link) => link.employeeId);
       // Somebody leaving the task leaves its items too, and that is already

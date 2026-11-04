@@ -42,6 +42,14 @@ const checklist = z
         .nullable()
         .optional()
         .transform((value) => (value === undefined ? undefined : value || null)),
+      // Longer explanation, shown in a popup. Same absent-means-keep rule.
+      description: z
+        .string()
+        .trim()
+        .max(2000)
+        .nullable()
+        .optional()
+        .transform((value) => (value === undefined ? undefined : value || null)),
       // LEGACY single assignee, still accepted from clients built before an item
       // could have several people (the Android app ships its bundle). Only read
       // when assigneeIds is absent.

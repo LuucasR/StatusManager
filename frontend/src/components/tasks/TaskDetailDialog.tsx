@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   DragIndicatorRounded,
   FlagRounded,
+  NotesRounded,
   PushPinOutlined,
   PushPinRounded,
 } from "@mui/icons-material";
@@ -27,6 +28,7 @@ import {
   Avatar,
   Box,
   Button,
+  ButtonBase,
   Checkbox,
   Chip,
   CircularProgress,
@@ -35,7 +37,6 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  FormControlLabel,
   IconButton,
   LinearProgress,
   Stack,
@@ -49,6 +50,7 @@ import { useConversation } from "../chat/useConversation";
 import ChecklistFilterBar from "./ChecklistFilterBar";
 import { PriorityChip } from "./ChecklistPriority";
 import { LabelGroupBox } from "./ChecklistLabel";
+import { ChecklistItemDialog } from "./ChecklistDescription";
 import { groupChecklist, labelKey, regroupByLabel } from "./checklistLabels";
 import { EMPTY_CHECKLIST_FILTERS, filterChecklist, hasChecklistFilters } from "./checklistFilter";
 import TaskFacts from "./TaskFacts";
@@ -168,8 +170,14 @@ export default function TaskDetailDialog({
   // Starts clean for every task opened; survives the reloads of the same one
   // (ticking an item, a socket refresh).
   const [filters, setFilters] = useState(EMPTY_CHECKLIST_FILTERS);
+  // The item whose popup is open. An id, not the item, so the popup follows
+  // the live task (somebody ticking it while it is open).
+  const [openItemId, setOpenItemId] = useState<number | null>(null);
   const taskId = task?.id;
-  useEffect(() => setFilters(EMPTY_CHECKLIST_FILTERS), [taskId]);
+  useEffect(() => {
+    setFilters(EMPTY_CHECKLIST_FILTERS);
+    setOpenItemId(null);
+  }, [taskId]);
 
   const blockedReason = !task
     ? null
@@ -291,71 +299,89 @@ export default function TaskDetailDialog({
                   ].sort((a, b) => a.name.localeCompare(b.name));
                   const renderItem = (item: TaskChecklistItem) => (
                     <SortableChecklistRow key={item.id} id={item.id} enabled={reorderable}>
-                                <FormControlLabel
-                                  control={
-                                    <Checkbox
-                                      checked={item.done}
-                                      disabled={!canCheck}
-                                      onChange={(event) =>
-                                        onToggleChecklistItem(task, item, event.target.checked)
-                                      }
-                                    />
-                                  }
-                                  // The label is two lines high, so the box has to sit
-                                  // at the top of it rather than centre on the pair.
-                                  sx={{ alignItems: "flex-start", mb: 0.5 }}
-                                  label={
-                                    <Box sx={{ pt: 1 }}>
-                                      <Typography
-                                        sx={{
-                                          textDecoration: item.done ? "line-through" : "none",
-                                          color: item.done ? "text.secondary" : "text.primary",
-                                        }}
-                                      >
-                                        {item.text}
-                                      </Typography>
+                      <Stack direction="row" sx={{ alignItems: "flex-start", mb: 0.5, flex: 1, minWidth: 0 }}>
+                        <Checkbox
+                          checked={item.done}
+                          disabled={!canCheck}
+                          slotProps={{ input: { "aria-label": item.text } }}
+                          onChange={(event) => onToggleChecklistItem(task, item, event.target.checked)}
+                        />
+                        {/* The text opens the item's popup; only the box ticks it,
+                            so reading a description cannot tick it by accident. */}
+                        <ButtonBase
+                          component="div"
+                          onClick={() => setOpenItemId(item.id)}
+                          sx={{
+                            display: "block",
+                            flex: 1,
+                            minWidth: 0,
+                            textAlign: "left",
+                            borderRadius: 1,
+                            pt: 1,
+                            pb: 0.5,
+                            px: 0.75,
+                            "&:hover": { bgcolor: "action.hover" },
+                          }}
+                        >
+                          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                            <Typography
+                              sx={{
+                                textDecoration: item.done ? "line-through" : "none",
+                                color: item.done ? "text.secondary" : "text.primary",
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {item.text}
+                            </Typography>
+                            {item.description && (
+                              <NotesRounded
+                                fontSize="small"
+                                titleAccess={t("checklistDescription.field")}
+                                sx={{ color: "text.secondary", flex: "none" }}
+                              />
+                            )}
+                          </Stack>
 
-                                      <Stack
-                                        direction="row"
-                                        spacing={1}
-                                        sx={{ alignItems: "center", flexWrap: "wrap" }}
-                                        useFlexGap
-                                      >
-                                        <PriorityChip priority={item.priority} />
-                                        {item.assignees.map((assignee) => (
-                                          <Chip
-                                            key={assignee.id}
-                                            size="small"
-                                            avatar={
-                                              <Avatar
-                                                sx={{
-                                                  bgcolor: participantColor(assignee.id),
-                                                  color: "#fff !important",
-                                                }}
-                                              >
-                                                {assignee.name.slice(0, 1).toUpperCase()}
-                                              </Avatar>
-                                            }
-                                            label={tf("taskDetail.checklistAssigned", {
-                                              name: assignee.name,
-                                            })}
-                                          />
-                                        ))}
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: "center", flexWrap: "wrap" }}
+                            useFlexGap
+                          >
+                            <PriorityChip priority={item.priority} />
+                            {item.assignees.map((assignee) => (
+                              <Chip
+                                key={assignee.id}
+                                size="small"
+                                avatar={
+                                  <Avatar
+                                    sx={{
+                                      bgcolor: participantColor(assignee.id),
+                                      color: "#fff !important",
+                                    }}
+                                  >
+                                    {assignee.name.slice(0, 1).toUpperCase()}
+                                  </Avatar>
+                                }
+                                label={tf("taskDetail.checklistAssigned", {
+                                  name: assignee.name,
+                                })}
+                              />
+                            ))}
 
-                                        {/* Only once it is done: doneBy is cleared
-                                            when an item is unticked. */}
-                                        {item.done && item.doneBy && (
-                                          <Typography variant="caption" color="text.secondary">
-                                            {tf("taskDetail.checklistDoneBy", {
-                                              name: item.doneBy.name,
-                                            })}
-                                            {item.doneAt && ` · ${formatCommentDate(item.doneAt)}`}
-                                          </Typography>
-                                        )}
-                                      </Stack>
-                                    </Box>
-                                  }
-                                />
+                            {/* Only once it is done: doneBy is cleared
+                                when an item is unticked. */}
+                            {item.done && item.doneBy && (
+                              <Typography variant="caption" color="text.secondary">
+                                {tf("taskDetail.checklistDoneBy", {
+                                  name: item.doneBy.name,
+                                })}
+                                {item.doneAt && ` · ${formatCommentDate(item.doneAt)}`}
+                              </Typography>
+                            )}
+                          </Stack>
+                        </ButtonBase>
+                      </Stack>
                     </SortableChecklistRow>
                   );
                   return (
@@ -433,6 +459,11 @@ export default function TaskDetailDialog({
                     </Box>
                   );
                 })()}
+
+              <ChecklistItemDialog
+                item={task.checklist.find((item) => item.id === openItemId) ?? null}
+                onClose={() => setOpenItemId(null)}
+              />
 
               <TaskHistory task={task} />
 

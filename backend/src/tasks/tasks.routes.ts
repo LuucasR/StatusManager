@@ -443,6 +443,7 @@ router.post("/", async (req, res) => {
             position: index,
             priority: item.priority ?? null,
             label: item.label ?? null,
+            description: item.description ?? null,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },
@@ -461,6 +462,9 @@ router.post("/", async (req, res) => {
           : []),
         ...(item.label
           ? [{ type: "ITEM_LABEL", itemText: item.text, detail: item.label } as TaskEventInput]
+          : []),
+        ...(item.description
+          ? [{ type: "ITEM_DESCRIPTION", itemText: item.text, detail: "set" } as TaskEventInput]
           : []),
         ...item.assigneeIds.map((targetId): TaskEventInput => ({
           type: "ITEM_ASSIGNED",
@@ -658,6 +662,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
           position: true,
           priority: true,
           label: true,
+          description: true,
           assignees: { select: { employeeId: true } },
         },
       },
@@ -809,8 +814,15 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
       for (const item of checklistDiff.updates) {
         await tx.taskChecklistItem.update({
           where: { id: item.id },
-          // priority/label undefined = the client did not send one: Prisma leaves it.
-          data: { text: item.text, position: item.position, priority: item.priority, label: item.label },
+          // priority/label/description undefined = the client did not send one:
+          // Prisma leaves it.
+          data: {
+            text: item.text,
+            position: item.position,
+            priority: item.priority,
+            label: item.label,
+            description: item.description,
+          },
         });
 
         // The assignee set is only touched when it actually changed, so the
@@ -839,6 +851,7 @@ router.patch("/:id", requireTaskManagement, async (req, res) => {
             position: item.position,
             priority: item.priority,
             label: item.label,
+            description: item.description,
             assignees: {
               create: item.assigneeIds.map((employeeId) => ({ employeeId })),
             },

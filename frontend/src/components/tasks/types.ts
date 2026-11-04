@@ -40,6 +40,8 @@ export type TaskChecklistItem = {
   priority?: ChecklistPriority | null;
   /** Free-text group ("Cinematic"); items sharing one are boxed together. null = none. */
   label?: string | null;
+  /** Longer explanation, shown in a popup when the item is clicked. null = none. */
+  description?: string | null;
   /** Who is in charge; several people or nobody ([]). Always task participants. */
   assignees: TaskParticipant[];
   /**

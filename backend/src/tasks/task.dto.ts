@@ -31,6 +31,7 @@ export const TASK_INCLUDE = {
       doneBy: EMPLOYEE_SUMMARY,
       priority: true,
       label: true,
+      description: true,
       assignees: {
         select: { employee: EMPLOYEE_SUMMARY },
         orderBy: { addedAt: "asc" },
@@ -118,6 +119,7 @@ export function toTaskDto(task: TaskWithInclude | TaskWithDetail, calendar: Work
       doneAt: item.doneAt,
       priority: item.priority,
       label: item.label,
+      description: item.description,
       assignees: item.assignees.map((link) => link.employee),
       // LEGACY: the first assignee, for clients built before an item could have
       // several people (the Android app ships its bundle).

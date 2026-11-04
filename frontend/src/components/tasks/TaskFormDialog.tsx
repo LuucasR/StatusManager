@@ -43,6 +43,7 @@ function toDrafts(
     text: string;
     priority?: ChecklistPriority | null;
     label?: string | null;
+    description?: string | null;
     assignees: { id: number }[];
   }[]
 ): ChecklistDraft[] {
@@ -54,6 +55,7 @@ function toDrafts(
     assigneeIds: item.assignees.map((assignee) => assignee.id),
     priority: item.priority ?? null,
     label: item.label ?? null,
+    description: item.description ?? null,
   }));
 }
 
@@ -182,6 +184,7 @@ export default function TaskFormDialog({
         assigneeIds: draft.assigneeIds,
         priority: draft.priority,
         label: draft.label,
+        description: draft.description,
       }));
 
     setSaving(true);

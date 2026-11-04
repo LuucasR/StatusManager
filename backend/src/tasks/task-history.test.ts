@@ -141,4 +141,28 @@ describe("taskEditEvents", () => {
       { type: "ITEM_LABEL", itemText: "clean the menu", detail: "Cinematic" },
     ]);
   });
+
+  it("tells a description being set or cleared, without copying the text", () => {
+    const withDescription = {
+      ...current,
+      checklist: [
+        { ...current.checklist[0]!, description: "old" },
+        { ...current.checklist[1]!, description: null },
+      ],
+    };
+    const events = taskEditEvents({
+      current: withDescription,
+      next: {},
+      added: [],
+      removed: [],
+      checklistDiff: diffChecklist(withDescription.checklist, [
+        { id: 1, text: "clean the menu", assigneeIds: [10], description: null },
+        { id: 2, text: "clean the assets", assigneeIds: [11], description: "how to do it" },
+      ]),
+    });
+    assert.deepEqual(events, [
+      { type: "ITEM_DESCRIPTION", itemText: "clean the menu", detail: "cleared" },
+      { type: "ITEM_DESCRIPTION", itemText: "clean the assets", detail: "set" },
+    ]);
+  });
 });

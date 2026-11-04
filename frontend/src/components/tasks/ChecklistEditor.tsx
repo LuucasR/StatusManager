@@ -31,6 +31,7 @@ import {
 } from "@mui/material";
 import { PriorityPicker } from "./ChecklistPriority";
 import { LabelPicker } from "./ChecklistLabel";
+import { DescriptionPicker } from "./ChecklistDescription";
 import { labelColor, labelKey, labelsOf, regroupByLabel } from "./checklistLabels";
 import { participantColor, type ChecklistPriority, type TaskParticipant } from "./types";
 import { t, tf } from "../../i18n";
@@ -54,6 +55,8 @@ export type ChecklistDraft = {
   priority: ChecklistPriority | null;
   /** null = no label. Items sharing one are kept together. */
   label: string | null;
+  /** null = no description. */
+  description: string | null;
 };
 
 type Props = {
@@ -80,7 +83,7 @@ export default function ChecklistEditor({ value, onChange, participants, disable
   );
 
   const add = () =>
-    onChange([...value, { key: nextKey(value), text: "", assigneeIds: [], priority: null, label: null }]);
+    onChange([...value, { key: nextKey(value), text: "", assigneeIds: [], priority: null, label: null, description: null }]);
 
   // A new label moves the row into its group straight away: what is on screen
   // is the order that is saved and the grouping the detail shows.
@@ -249,6 +252,12 @@ function SortableRow({
         options={labels}
         disabled={disabled}
         onChange={(label) => onPatch({ label })}
+      />
+
+      <DescriptionPicker
+        value={draft.description}
+        disabled={disabled}
+        onChange={(description) => onPatch({ description })}
       />
 
       <TextField

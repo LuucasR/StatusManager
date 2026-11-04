@@ -20,6 +20,7 @@ export type TaskPayload = {
     assigneeIds: number[];
     priority: ChecklistPriority | null;
     label: string | null;
+    description: string | null;
   }[];
   autoCompleteOnChecklist: boolean;
   /** Admin only, left out otherwise. null = 14 days after the end. */

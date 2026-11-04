@@ -56,6 +56,10 @@ function describe(event: TaskEvent) {
             priority: checklistPriorityLabel(event.detail as ChecklistPriority),
           })
         : tf("taskHistory.ITEM_PRIORITY.cleared", vars);
+    case "ITEM_DESCRIPTION":
+      return event.detail === "cleared"
+        ? tf("taskHistory.ITEM_DESCRIPTION.cleared", vars)
+        : tf("taskHistory.ITEM_DESCRIPTION", vars);
     case "ITEM_LABEL":
       return event.detail
         ? tf("taskHistory.ITEM_LABEL", { ...vars, label: event.detail })
