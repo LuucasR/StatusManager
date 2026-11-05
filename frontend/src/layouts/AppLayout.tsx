@@ -35,6 +35,7 @@ import NotificationBell from "../components/notifications/NotificationBell";
 import ChatProvider from "../components/chat/ChatProvider";
 import ChatLauncher from "../components/chat/ChatLauncher";
 import ActivityConfirmationDialog from "../components/activities/ActivityConfirmationDialog";
+import ItemDoneDialog from "../components/activities/ItemDoneDialog";
 import { isAdminRole, type Role } from "../components/roles";
 import ShellWatchers, { type NavBadges } from "../components/announcements/ShellWatchers";
 import AppSettings from "../components/AppSettings";
@@ -318,6 +319,9 @@ export default function AppLayout() {
       {/* Here and not on the dashboard: the check has to be answerable from
           whatever page the person is on, or it disconnects them unasked. */}
       <ActivityConfirmationDialog me={me} />
+
+      {/* Same reasoning: the item can be ticked off from any page. */}
+      <ItemDoneDialog me={me} />
     </Box>
     </ChatProvider>
     </ProjectsProvider>

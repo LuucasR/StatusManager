@@ -20,7 +20,12 @@ import { changeStatusSchema } from "../activities/activity-validation";
 import { hashPassword } from "../auth/auth.password";
 import { approvePasswordReset } from "../auth/auth.service";
 import { overlappingWhere, visibleHistoryWhere } from "../activities/activity-status";
-import { WorkingTaskError, resolveWorkingTask } from "../activities/activity-task";
+import {
+  OPEN_SEGMENT_SELECT,
+  WorkingTaskError,
+  openSegmentFields,
+  resolveWorkingTask,
+} from "../activities/activity-task";
 import { z } from "zod";
 import { Prisma, Role } from "@prisma/client";
 import { LOCALE } from "../locale";
@@ -79,10 +84,7 @@ router.get("/employees", requireStaff, async (_req, res) => {
           endedAt: null,
         },
         take: 1,
-        select: {
-          detail: true,
-          taskTitle: true,
-        },
+        select: OPEN_SEGMENT_SELECT,
       },
     },
     orderBy: {
@@ -105,10 +107,7 @@ router.get("/employees", requireStaff, async (_req, res) => {
         accountStatus: accountStatus(employee),
         deactivatedAt: employee.deactivatedAt,
         createdAt: employee.createdAt,
-        // Same as GET /activities/team: the task now has its own line on the
-        // card, so folding it into `detail` would print it twice.
-        detail: open?.detail ?? "",
-        taskTitle: open?.taskTitle ?? null,
+        ...openSegmentFields(open),
       };
     })
   );
@@ -549,6 +548,7 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
       status: parsed.data.status,
       detail: parsed.data.detail,
       taskId: parsed.data.taskId,
+      checklistItemId: parsed.data.checklistItemId,
       enforce: false,
       now,
     });
@@ -573,6 +573,8 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
         startedAt: now,
         taskId: task.taskId,
         taskTitle: task.taskTitle,
+        checklistItemId: task.checklistItemId,
+        checklistItemText: task.checklistItemText,
       },
     });
 

@@ -25,6 +25,8 @@ export const changeStatusSchema = z
       }),
     detail: z.string().trim().max(500).optional().default(""),
     taskId: z.number().int().positive().nullable().optional(),
+    /** Checklist item of `taskId` being worked on. Only valid together with a task. */
+    checklistItemId: z.number().int().positive().nullable().optional(),
   })
   .superRefine((value, context) => {
     if (statusesRequiringDetail.has(value.status) && value.detail.length < 3) {
@@ -41,6 +43,14 @@ export const changeStatusSchema = z
         code: "custom",
         path: ["taskId"],
         message: "A task can only be declared when switching to Working",
+      });
+    }
+
+    if (value.checklistItemId != null && value.taskId == null) {
+      context.addIssue({
+        code: "custom",
+        path: ["checklistItemId"],
+        message: "A checklist item can only be declared together with its task",
       });
     }
   });

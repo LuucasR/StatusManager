@@ -252,6 +252,9 @@ export const en = {
   "taskSelect.empty":
     "You have no tasks assigned on the board. Say what you are working on in the comment.",
   "taskSelect.help": "Only your unfinished tasks that are still on the board.",
+  "itemSelect.label": "Checklist item",
+  "itemSelect.mine": "Yours",
+  "itemSelect.help": "The part of the task you are working on. When you finish it, switch to the next one.",
   "taskDetail.cannotComment": "Only participants can write in this task.",
   "taskDetail.unpin": "Unpin",
   "taskDetail.pin": "Pin — never archived after 14 days",
@@ -367,6 +370,9 @@ export const en = {
   "summary.noTasks": "You did not declare any task in this period.",
   "summary.segments.one": "{count} segment",
   "summary.segments.many": "{count} segments",
+  "summary.taskTotal": "Task total",
+  "summary.byItem": "Time per item",
+  "summary.noItem": "No item declared",
   "summary.untitledTask": "Untitled task",
   "summary.deleted": "Deleted",
   "summary.asOfNote":
@@ -420,6 +426,9 @@ export const en = {
     "That task is not one of yours, is already done, or has left the board",
   "error.TASK_OR_COMMENT_REQUIRED":
     "Pick the task you are going to work on, or write a comment of at least 3 characters if it is other work",
+  "error.CHECKLIST_ITEM_NOT_ASSIGNABLE":
+    "That item is not on this task's checklist or is already done",
+  "error.CHECKLIST_ITEM_REQUIRED": "Pick the checklist item you are going to work on",
 
   // --- Relative days
   "date.today": "Today",
@@ -599,6 +608,16 @@ export const en = {
   // --- Employee notes
   "dashboard.taskDeletedSuffix": "{title} (deleted)",
   "dashboard.workingOn": "On: {task}",
+  "dashboard.workingOnItem": "Item: {item}",
+  "dashboard.itemFinished": "finished",
+  "dashboard.itemDoneAlert": "You finished “{item}”. Pick the item you are moving on to.",
+  "dashboard.pickNextItem": "Pick next item",
+  "itemDone.title": "Item finished",
+  "itemDone.body": "“{item}” is done. Which item of “{task}” are you moving on to?",
+  "itemDone.noneLeft": "There are no pending items left in “{task}”. Change your task or your status.",
+  "itemDone.later": "Later",
+  "itemDone.changeTask": "Change task or status",
+  "itemDone.switch": "Switch item",
 
   // --- Conversation state chips
   "chat.deleted": "Deleted",
@@ -1321,6 +1340,9 @@ const es: Record<TranslationKey, string> = {
   "taskSelect.empty":
     "No tenés tareas asignadas en la pizarra. Contá en el comentario en qué trabajás.",
   "taskSelect.help": "Solo tus tareas sin terminar que siguen en la pizarra.",
+  "itemSelect.label": "Item del checklist",
+  "itemSelect.mine": "Tuyo",
+  "itemSelect.help": "La parte de la tarea en la que trabajás. Cuando la termines, pasá a la siguiente.",
   "taskDetail.cannotComment":
     "Solo los participantes pueden escribir en esta tarea.",
   "taskDetail.unpin": "Dejar de fijar",
@@ -1434,6 +1456,9 @@ const es: Record<TranslationKey, string> = {
   "summary.noTasks": "No declaraste ninguna tarea en este período.",
   "summary.segments.one": "{count} tramo",
   "summary.segments.many": "{count} tramos",
+  "summary.taskTotal": "Total de la tarea",
+  "summary.byItem": "Tiempo por item",
+  "summary.noItem": "Sin item declarado",
   "summary.untitledTask": "Tarea sin título",
   "summary.deleted": "Eliminada",
   "summary.asOfNote":
@@ -1485,6 +1510,9 @@ const es: Record<TranslationKey, string> = {
     "Esa tarea no está entre las tuyas, ya está terminada o salió de la pizarra",
   "error.TASK_OR_COMMENT_REQUIRED":
     "Elegí la tarea en la que vas a trabajar, o escribí un comentario de al menos 3 caracteres si es otro trabajo",
+  "error.CHECKLIST_ITEM_NOT_ASSIGNABLE":
+    "Ese item no está en el checklist de la tarea o ya está terminado",
+  "error.CHECKLIST_ITEM_REQUIRED": "Elegí el item del checklist en el que vas a trabajar",
 
   "date.today": "Hoy",
   "date.yesterday": "Ayer",
@@ -1661,6 +1689,16 @@ const es: Record<TranslationKey, string> = {
 
   "dashboard.taskDeletedSuffix": "{title} (eliminada)",
   "dashboard.workingOn": "En: {task}",
+  "dashboard.workingOnItem": "Item: {item}",
+  "dashboard.itemFinished": "terminado",
+  "dashboard.itemDoneAlert": "Terminaste “{item}”. Elegí el item al que pasás.",
+  "dashboard.pickNextItem": "Elegir siguiente item",
+  "itemDone.title": "Item terminado",
+  "itemDone.body": "“{item}” está terminado. ¿A qué item de “{task}” pasás?",
+  "itemDone.noneLeft": "No quedan items pendientes en “{task}”. Cambiá de tarea o de estado.",
+  "itemDone.later": "Más tarde",
+  "itemDone.changeTask": "Cambiar tarea o estado",
+  "itemDone.switch": "Cambiar de item",
 
   "chat.deleted": "Eliminada",
   "chat.closed": "Cerrada",

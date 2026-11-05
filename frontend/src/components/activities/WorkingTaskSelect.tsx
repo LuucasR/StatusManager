@@ -10,8 +10,20 @@ import {
   Typography,
 } from "@mui/material";
 import { formatRange } from "../tasks/datetime";
-import { STATE_META, type TaskState } from "../tasks/types";
+import { STATE_META, type ChecklistPriority, type TaskState } from "../tasks/types";
+import { LabelChip } from "../tasks/ChecklistLabel";
+import { PriorityChip } from "../tasks/ChecklistPriority";
 import { t } from "../../i18n";
+
+/** A checklist item still pending, offered when declaring work on its task. */
+export type AssignableItem = {
+  id: number;
+  text: string;
+  label: string | null;
+  priority: ChecklistPriority | null;
+  /** The caller is one of the people in charge of it. */
+  mine: boolean;
+};
 
 export type AssignableTask = {
   id: number;
@@ -19,6 +31,8 @@ export type AssignableTask = {
   state: TaskState;
   startsAt: string;
   endsAt: string;
+  /** Pending checklist items, in checklist order. Empty = nothing to pick. */
+  items: AssignableItem[];
 };
 
 /** <Select> value for working on something that is not on the board. */
@@ -88,6 +102,49 @@ export default function WorkingTaskSelect({ tasks, loading, value, onChange }: P
           <Box>{t("taskSelect.help")}</Box>
         )}
       </FormHelperText>
+    </FormControl>
+  );
+}
+
+type ItemProps = {
+  items: AssignableItem[];
+  value: number | null;
+  onChange: (itemId: number) => void;
+};
+
+/**
+ * Picker for the checklist item of the chosen task. Mandatory whenever the task
+ * still has pending items (the backend enforces it too): the per-item time
+ * breakdown in the summary is built from this choice. The caller's own items
+ * come first; anyone on the task can still pick any of them.
+ */
+export function WorkingItemSelect({ items, value, onChange }: ItemProps) {
+  const ordered = [...items.filter((item) => item.mine), ...items.filter((item) => !item.mine)];
+  const selected = value !== null && items.some((item) => item.id === value) ? String(value) : "";
+
+  return (
+    <FormControl fullWidth required>
+      <InputLabel>{t("itemSelect.label")}</InputLabel>
+      <Select
+        value={selected}
+        label={t("itemSelect.label")}
+        onChange={(e) => onChange(Number(e.target.value))}
+        renderValue={(id) => items.find((item) => String(item.id) === id)?.text ?? ""}
+      >
+        {ordered.map((item) => (
+          <MenuItem key={item.id} value={String(item.id)} sx={{ whiteSpace: "normal" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5, py: 0.25 }}>
+              <Typography sx={{ fontWeight: item.mine ? 700 : 400 }}>{item.text}</Typography>
+              {item.mine && (
+                <Chip size="small" color="primary" label={t("itemSelect.mine")} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+              )}
+              <LabelChip label={item.label} />
+              <PriorityChip priority={item.priority} />
+            </Stack>
+          </MenuItem>
+        ))}
+      </Select>
+      <FormHelperText>{t("itemSelect.help")}</FormHelperText>
     </FormControl>
   );
 }

@@ -14,8 +14,10 @@ import { renderActivityReport } from "../reports/activity-report";
 import { changeStatusSchema } from "./activity-validation";
 import { overlappingWhere, visibleHistoryWhere } from "./activity-status";
 import {
+  OPEN_SEGMENT_SELECT,
   WorkingTaskError,
   listAssignableTasks,
+  openSegmentFields,
   resolveWorkingTask,
 } from "./activity-task";
 import { summarize } from "./activity-summary";
@@ -51,9 +53,22 @@ const HISTORY_TASK_INCLUDE = {
 router.get("/me", async (req, res) => {
   const employee = await prisma.employee.findUnique({
     where: { id: req.auth!.employeeId },
-    select: { id: true, employeeNumber: true, name: true, email: true, role: true, currentStatus: true, statusSince: true },
+    select: {
+      id: true,
+      employeeNumber: true,
+      name: true,
+      email: true,
+      role: true,
+      currentStatus: true,
+      statusSince: true,
+      activities: { where: { endedAt: null }, take: 1, select: OPEN_SEGMENT_SELECT },
+    },
   });
-  res.json(employee);
+  if (!employee) return res.json(employee);
+  const { activities, ...rest } = employee;
+  // What the open segment declared, so the status dialog can start from it and
+  // switching to the next item is one pick instead of three.
+  res.json({ ...rest, ...openSegmentFields(activities[0]) });
 });
 
 router.get("/team", async (_req, res) => {
@@ -69,7 +84,7 @@ router.get("/team", async (_req, res) => {
       activities: {
         where: { endedAt: null },
         take: 1,
-        select: { detail: true, taskTitle: true },
+        select: OPEN_SEGMENT_SELECT,
       },
     },
     orderBy: { name: "asc" },
@@ -86,10 +101,7 @@ router.get("/team", async (_req, res) => {
         currentStatus: employee.currentStatus,
         statusSince: employee.statusSince,
         active: true,
-        // No longer falls back to the task title: the card shows the declared
-        // task on its own line now, so folding it in here printed it twice.
-        detail: open?.detail ?? "",
-        taskTitle: open?.taskTitle ?? null,
+        ...openSegmentFields(open),
       };
     })
   );
@@ -326,6 +338,7 @@ router.post("/status", async (req, res) => {
       status: parsed.data.status,
       detail: parsed.data.detail,
       taskId: parsed.data.taskId,
+      checklistItemId: parsed.data.checklistItemId,
       enforce: true,
       now,
     });
@@ -349,6 +362,8 @@ router.post("/status", async (req, res) => {
         startedAt: now,
         taskId: task.taskId,
         taskTitle: task.taskTitle,
+        checklistItemId: task.checklistItemId,
+        checklistItemText: task.checklistItemText,
       },
     });
     const employee = await tx.employee.update({

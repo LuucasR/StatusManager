@@ -19,6 +19,9 @@ export type ReportActivity = {
   /** Snapshot of the declared task's title, if there was one. */
   taskTitle?: string | null;
   taskId?: number | null;
+  /** Snapshot of the checklist item declared with the task, if any. */
+  checklistItemText?: string | null;
+  checklistItemId?: number | null;
   startedAt: Date;
   endedAt: Date | null;
   employee: {
@@ -33,8 +36,11 @@ export type ReportActivity = {
  * would be empty for exactly the status that matters most in the report.
  */
 function detailText(row: ReportActivity) {
-  if (row.detail && row.taskTitle) return `${row.taskTitle} - ${row.detail}`;
-  return row.detail || row.taskTitle || "";
+  const work = row.taskTitle && row.checklistItemText
+    ? `${row.taskTitle} > ${row.checklistItemText}`
+    : row.taskTitle;
+  if (row.detail && work) return `${work} - ${row.detail}`;
+  return row.detail || work || "";
 }
 
 type ReportOptions = {
@@ -118,18 +124,23 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
   const drawWorkedHeader = () => {
     doc.roundedRect(margin, chrome.y, contentWidth, 24, 5).fill(COLORS.ink);
     doc.fillColor(COLORS.white).font("Helvetica-Bold").fontSize(7.5);
-    doc.text("EMPLOYEE / DAY / TASK", margin + 10, chrome.y + 8, { width: 300 });
+    doc.text("EMPLOYEE / DAY / TASK / ITEM", margin + 10, chrome.y + 8, { width: 300 });
     doc.text("HOURS WORKED", margin + 360, chrome.y + 8, { width: 140, align: "right" });
     chrome.y += 30;
   };
-  const drawWorkedRow = (label: string, ms: number, bold: boolean) => {
-    const rowHeight = bold ? 24 : 18;
+  /** `sub`: a checklist item under its task, one step further in and lighter. */
+  const drawWorkedRow = (label: string, ms: number, bold: boolean, sub = false) => {
+    const rowHeight = bold ? 24 : sub ? 15 : 18;
     chrome.ensureRoom(rowHeight, drawWorkedHeader);
     if (bold) doc.roundedRect(margin, chrome.y, contentWidth, rowHeight - 4, 5).fill(COLORS.surface);
-    doc.fillColor(bold ? COLORS.ink : COLORS.muted).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
-    doc.text(label, margin + (bold ? 10 : 30), chrome.y + 5, { width: 320, lineBreak: false, ellipsis: true });
-    doc.fillColor(bold ? COLORS.primary : COLORS.ink).font("Helvetica-Bold").fontSize(8.5);
-    doc.text(formatDuration(ms), margin + 360, chrome.y + 5, { width: 140, align: "right" });
+    const indent = bold ? 10 : sub ? 46 : 30;
+    const size = sub ? 7.5 : 8.5;
+    doc.fillColor(bold ? COLORS.ink : COLORS.muted).font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(size);
+    doc.text(label, margin + indent, chrome.y + (sub ? 3 : 5), { width: 340 - indent, lineBreak: false, ellipsis: true });
+    doc.fillColor(bold ? COLORS.primary : sub ? COLORS.muted : COLORS.ink)
+      .font(sub ? "Helvetica" : "Helvetica-Bold")
+      .fontSize(size);
+    doc.text(formatDuration(ms), margin + 360, chrome.y + (sub ? 3 : 5), { width: 140, align: "right" });
     chrome.y += rowHeight;
   };
   /** Small caps label that opens the "by day" / "by task" block of an employee. */
@@ -168,6 +179,16 @@ export function renderActivityReport(doc: any, options: ReportOptions) {
           ? `${task.taskId != null ? `#${task.taskId} ` : ""}${truncate(task.title, 60)}${task.taskId == null ? " (deleted)" : ""}`
           : "No task declared";
         drawWorkedRow(label, task.ms, false);
+        // Per checklist item, only when at least one item was declared: a task
+        // worked without items would just repeat its own total as "No item".
+        if (task.items.some((item) => item.text)) {
+          for (const item of task.items) {
+            const itemLabel = item.text
+              ? `- ${truncate(item.text, 70)}${item.itemId == null ? " (deleted)" : ""}`
+              : "- No item declared";
+            drawWorkedRow(itemLabel, item.ms, false, true);
+          }
+        }
       }
     }
     chrome.y += 6;

@@ -8,7 +8,7 @@ import { loadWorkCalendar } from "../workday/work-calendar";
 import { requireAdmin, requireAuth, requireTaskManagement } from "../auth/auth.middleware";
 import { canManageTasks, isAdmin, isStaff } from "../auth/roles";
 import type { AuthPayload } from "../auth/auth.token";
-import { emitTaskChanged } from "../realtime";
+import { emitStatusChanged, emitTaskChanged, emitToEmployees } from "../realtime";
 import { TASK_DETAIL_INCLUDE, TASK_INCLUDE, toTaskDto } from "./task.dto";
 import {
   archivedTasksQuerySchema,
@@ -1321,6 +1321,26 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
   });
 
   emitTaskChanged({ type: "checklist", taskId: id });
+
+  // Whoever is Working on this very item: their card has to show it finished,
+  // and they are asked which item they move on to. Their segment is NOT closed
+  // here - same rule as a task moving to Done, the time is theirs to end.
+  if (parsed.data.done !== item.done) {
+    const working = await prisma.activityHistory.findMany({
+      where: { checklistItemId: itemId, endedAt: null, status: "WORKING" },
+      select: { employeeId: true },
+    });
+    if (working.length > 0) {
+      emitStatusChanged({ type: "checklist-item", itemId });
+      if (parsed.data.done) {
+        emitToEmployees(
+          working.map((row) => row.employeeId),
+          "activity:item-done",
+          { taskId: id, itemId, itemText: item.text }
+        );
+      }
+    }
+  }
 
   if (autoCompleted) {
     // The same notification every other route into DONE sends: from the reader's

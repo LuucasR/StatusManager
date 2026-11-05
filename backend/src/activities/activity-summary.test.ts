@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { teamTaskTimes, workedByDay, workedByTask, workedMs, type TeamTimeRow } from "./activity-summary";
+import {
+  summarize,
+  teamTaskTimes,
+  workedByDay,
+  workedByTask,
+  workedMs,
+  type SummaryRow,
+  type TeamTimeRow,
+} from "./activity-summary";
 
 const HOUR = 3_600_000;
 
@@ -130,5 +138,67 @@ describe("workedByTask", () => {
         { title: null, ms: 1 * HOUR },
       ]
     );
+  });
+});
+
+describe("per checklist item", () => {
+  const working = (
+    startedAt: string,
+    endedAt: string,
+    taskId: number | null,
+    taskTitle: string | null,
+    checklistItemId: number | null,
+    checklistItemText: string | null
+  ) => ({
+    status: "WORKING" as const,
+    detail: "",
+    startedAt: new Date(startedAt),
+    endedAt: new Date(endedAt),
+    taskId,
+    taskTitle,
+    checklistItemId,
+    checklistItemText,
+    task: null,
+  });
+
+  const rows: SummaryRow[] = [
+    working("2026-09-28T12:00:00Z", "2026-09-28T13:00:00Z", 7, "Login", 70, "Form"),
+    working("2026-09-28T13:00:00Z", "2026-09-28T15:00:00Z", 7, "Login", 71, "Validation"),
+    working("2026-09-28T15:00:00Z", "2026-09-28T15:30:00Z", 7, "Login", null, null),
+    working("2026-09-28T15:30:00Z", "2026-09-28T16:00:00Z", 7, "Login", 70, "Form"),
+    working("2026-09-28T16:00:00Z", "2026-09-28T16:15:00Z", 7, "Login", null, "Removed item"),
+    working("2026-09-28T16:15:00Z", "2026-09-28T17:00:00Z", null, null, null, null),
+  ];
+
+  it("splits each task's time per item, most first, no-item last, adding up to the task", () => {
+    const login = summarize(rows, undefined, undefined).byTask.find((task) => task.taskId === 7)!;
+    assert.equal(login.totalMs, 4.25 * HOUR);
+    assert.deepEqual(
+      login.byItem.map(({ text, totalMs, segments, deleted }) => ({ text, totalMs, segments, deleted })),
+      [
+        { text: "Validation", totalMs: 2 * HOUR, segments: 1, deleted: false },
+        { text: "Form", totalMs: 1.5 * HOUR, segments: 2, deleted: false },
+        { text: "Removed item", totalMs: 0.25 * HOUR, segments: 1, deleted: true },
+        { text: null, totalMs: 0.5 * HOUR, segments: 1, deleted: false },
+      ]
+    );
+    assert.equal(
+      login.byItem.reduce((total, item) => total + item.totalMs, 0),
+      login.totalMs
+    );
+  });
+
+  it("gives the PDF the same split, and none for work without a task", () => {
+    const tasks = workedByTask(rows, undefined, undefined);
+    assert.deepEqual(
+      tasks.find((task) => task.taskId === 7)!.items.map(({ text, ms }) => ({ text, ms })),
+      [
+        { text: "Validation", ms: 2 * HOUR },
+        { text: "Form", ms: 1.5 * HOUR },
+        { text: "Removed item", ms: 0.25 * HOUR },
+        { text: null, ms: 0.5 * HOUR },
+      ]
+    );
+    assert.deepEqual(tasks.find((task) => task.key === "none")!.items, []);
   });
 });

@@ -244,9 +244,17 @@ model ActivityHistory {
   /// once the task no longer exists.
   taskTitle String?
 
+  /// Checklist item of that task being worked on. SetNull for the same reason
+  /// as taskId: editing the checklist must not erase booked time.
+  checklistItemId   Int?
+  checklistItem     TaskChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
+  /// Text snapshot of the item, so the per-item breakdown survives its deletion.
+  checklistItemText String?
+
   @@index([employeeId, startedAt])
   @@index([startedAt])
   @@index([taskId])
+  @@index([checklistItemId])
 }
 
 model Task {
@@ -416,6 +424,9 @@ model TaskChecklistItem {
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   assignees TaskChecklistAssignee[]
+
+  /// Working segments booked against this item.
+  activities ActivityHistory[]
 
   @@index([taskId, position])
   @@index([assigneeId])

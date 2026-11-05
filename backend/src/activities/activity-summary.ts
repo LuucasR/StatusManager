@@ -13,6 +13,8 @@ export type SummaryRow = {
   endedAt: Date | null;
   taskId: number | null;
   taskTitle: string | null;
+  checklistItemId?: number | null;
+  checklistItemText?: string | null;
   task: {
     id: number;
     title: string;
@@ -31,6 +33,37 @@ export type StatusBucket = {
   segments: number;
 };
 
+/** Time on one checklist item of a task. */
+export type ItemBucket = {
+  /** "item:<id>", "text:<snapshot>" once the item is gone, or "none". */
+  key: string;
+  itemId: number | null;
+  /** null = time on the task without an item declared. */
+  text: string | null;
+  /** The item was removed from the checklist: only the snapshot is left. */
+  deleted: boolean;
+  totalMs: number;
+  segments: number;
+};
+
+type ItemRef = { checklistItemId?: number | null; checklistItemText?: string | null };
+
+/** Same keying idea as tasks: by id, by snapshot once deleted, else "none". */
+function itemKey(row: ItemRef) {
+  if (row.checklistItemId != null) return `item:${row.checklistItemId}`;
+  if (row.checklistItemText) return `text:${row.checklistItemText}`;
+  return "none";
+}
+
+/** Most time first, with "no item" always last whatever its size. */
+function byTimeNoneLast<T extends { key: string }>(time: (bucket: T) => number) {
+  return (a: T, b: T) => {
+    if (a.key === "none") return 1;
+    if (b.key === "none") return -1;
+    return time(b) - time(a);
+  };
+}
+
 export type TaskBucket = {
   /** Stable within the period: usable as a React key. */
   key: string;
@@ -42,6 +75,8 @@ export type TaskBucket = {
   segments: number;
   /** Last segment of the period on this task, used to date the participants. */
   lastWorkedAt: Date;
+  /** The task's time split per checklist item; adds up to totalMs. */
+  byItem: ItemBucket[];
   task: {
     description: string;
     state: TaskState;
@@ -148,17 +183,27 @@ export function workedByDay(
  * to the worked total. A deleted task is keyed by its title snapshot, like
  * summarize does.
  */
+export type WorkedItem = { key: string; itemId: number | null; text: string | null; ms: number };
+export type WorkedTask = {
+  key: string;
+  taskId: number | null;
+  title: string | null;
+  ms: number;
+  /** Split per checklist item, same order rule as the tasks. Empty for "no task". */
+  items: WorkedItem[];
+};
+
 export function workedByTask(
   rows: (Pick<SummaryRow, "status" | "startedAt" | "endedAt"> & {
     taskId?: number | null;
     taskTitle?: string | null;
-  })[],
+  } & ItemRef)[],
   from: Date | undefined,
   to: Date | undefined,
   now: Date = new Date(),
   calendar?: WorkCalendar
-): { key: string; taskId: number | null; title: string | null; ms: number }[] {
-  const tasks = new Map<string, { key: string; taskId: number | null; title: string | null; ms: number }>();
+): WorkedTask[] {
+  const tasks = new Map<string, WorkedTask & { itemMap: Map<string, WorkedItem> }>();
   for (const row of rows) {
     if (row.status !== "WORKING") continue;
     const ms = segmentMs(row, from, to, now, calendar);
@@ -166,16 +211,27 @@ export function workedByTask(
     const taskId = row.taskId ?? null;
     const title = row.taskTitle ?? null;
     const key = taskId != null ? `id:${taskId}` : title ? `title:${title}` : "none";
-    const bucket = tasks.get(key) ?? { key, taskId, title, ms: 0 };
+    const bucket = tasks.get(key) ?? { key, taskId, title, ms: 0, items: [], itemMap: new Map() };
     bucket.ms += ms;
+    if (key !== "none") {
+      const ikey = itemKey(row);
+      const item = bucket.itemMap.get(ikey) ?? {
+        key: ikey,
+        itemId: row.checklistItemId ?? null,
+        text: row.checklistItemText ?? null,
+        ms: 0,
+      };
+      item.ms += ms;
+      bucket.itemMap.set(ikey, item);
+    }
     tasks.set(key, bucket);
   }
-  return [...tasks.values()].sort((a, b) => {
-    // "No task" always last, whatever its size.
-    if (a.key === "none") return 1;
-    if (b.key === "none") return -1;
-    return b.ms - a.ms;
-  });
+  return [...tasks.values()]
+    .map(({ itemMap, ...task }) => ({
+      ...task,
+      items: [...itemMap.values()].sort(byTimeNoneLast((item) => item.ms)),
+    }))
+    .sort(byTimeNoneLast((task) => task.ms));
 }
 
 export type ActivitySummary = {
@@ -231,6 +287,7 @@ export function summarize(
         totalMs: 0,
         segments: 0,
         lastWorkedAt: row.startedAt,
+        byItem: [],
         task: row.task
           ? {
               description: row.task.description,
@@ -247,7 +304,25 @@ export function summarize(
     bucket.segments += 1;
     if (row.startedAt > bucket.lastWorkedAt) bucket.lastWorkedAt = row.startedAt;
     tasks.set(key, bucket);
+
+    const ikey = itemKey(row);
+    let item = bucket.byItem.find((candidate) => candidate.key === ikey);
+    if (!item) {
+      item = {
+        key: ikey,
+        itemId: row.checklistItemId ?? null,
+        text: row.checklistItemText ?? null,
+        deleted: row.checklistItemId == null && !!row.checklistItemText,
+        totalMs: 0,
+        segments: 0,
+      };
+      bucket.byItem.push(item);
+    }
+    item.totalMs += ms;
+    item.segments += 1;
   }
+
+  for (const bucket of tasks.values()) bucket.byItem.sort(byTimeNoneLast((item) => item.totalMs));
 
   return {
     workedMs: worked,

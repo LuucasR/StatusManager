@@ -31,6 +31,16 @@ import { t, tf } from "../i18n";
 
 type StatusBucket = { status: Status; totalMs: number; segments: number };
 
+/** Time on one checklist item of a task. text null = no item declared. */
+type ItemBucket = {
+  key: string;
+  itemId: number | null;
+  text: string | null;
+  deleted: boolean;
+  totalMs: number;
+  segments: number;
+};
+
 type TaskBucket = {
   key: string;
   taskId: number | null;
@@ -39,6 +49,8 @@ type TaskBucket = {
   totalMs: number;
   segments: number;
   lastWorkedAt: string;
+  /** Adds up to totalMs. Absent from a server older than this field. */
+  byItem?: ItemBucket[];
   task: {
     description: string;
     state: TaskState;
@@ -223,13 +235,19 @@ export default function SummaryPage() {
                 {t("summary.noTasks")}
               </Typography>
             ) : (
-              summary.byTask.map((bucket) => (
+              summary.byTask.map((bucket) => {
+                // Only worth a breakdown once some item was declared: otherwise
+                // it would just repeat the task's total as "no item".
+                const items = (bucket.byItem ?? []).some((item) => item.text) ? bucket.byItem! : [];
+                const maxItemMs = items.reduce((max, item) => Math.max(max, item.totalMs), 0);
+                return (
                 <Accordion key={bucket.key} disableGutters elevation={0} className="table-card">
                   <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+                    <Stack sx={{ width: "100%", pr: 1 }} spacing={1.5}>
                     <Stack
                       direction="row"
                       spacing={2}
-                      sx={{ alignItems: "center", width: "100%", pr: 1 }}
+                      sx={{ alignItems: "center", width: "100%" }}
                     >
                       <Typography sx={{ fontWeight: 600, flex: 1 }}>
                         {bucket.title ?? t("summary.untitledTask")}
@@ -243,7 +261,60 @@ export default function SummaryPage() {
                         {segmentLabel(bucket.segments)}
                       </Typography>
 
-                      <Typography sx={{ fontWeight: 700 }}>{formatMs(bucket.totalMs)}</Typography>
+                      <Stack sx={{ alignItems: "flex-end" }}>
+                        <Typography sx={{ fontWeight: 700 }}>{formatMs(bucket.totalMs)}</Typography>
+                        {items.length > 0 && (
+                          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
+                            {t("summary.taskTotal")}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Stack>
+
+                    {items.length > 0 && (
+                      <Box sx={{ pl: 2, borderLeft: 2, borderColor: "divider" }}>
+                        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                          {t("summary.byItem")}
+                        </Typography>
+                        <Stack spacing={1} sx={{ mt: 0.5 }}>
+                          {items.map((item) => (
+                            <Box key={item.key}>
+                              <Stack
+                                direction="row"
+                                spacing={1.5}
+                                sx={{ alignItems: "baseline", justifyContent: "space-between" }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  color={item.text ? "text.primary" : "text.secondary"}
+                                  sx={{ flex: 1, fontStyle: item.text ? undefined : "italic" }}
+                                >
+                                  {item.text ?? t("summary.noItem")}
+                                  {item.deleted && ` (${t("summary.deleted").toLowerCase()})`}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {segmentLabel(item.segments)}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 80, textAlign: "right" }}>
+                                  {formatMs(item.totalMs)}
+                                </Typography>
+                              </Stack>
+                              <LinearProgress
+                                variant="determinate"
+                                value={maxItemMs ? (item.totalMs / maxItemMs) * 100 : 0}
+                                sx={{
+                                  mt: 0.5,
+                                  height: 5,
+                                  borderRadius: 3,
+                                  bgcolor: "var(--surface-2)",
+                                  "& .MuiLinearProgress-bar": { borderRadius: 3 },
+                                }}
+                              />
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
                     </Stack>
                   </AccordionSummary>
 
@@ -261,7 +332,8 @@ export default function SummaryPage() {
                     )}
                   </AccordionDetails>
                 </Accordion>
-              ))
+                );
+              })
             )}
           </Box>
         </Stack>
