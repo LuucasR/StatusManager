@@ -1327,7 +1327,7 @@ router.patch("/:id/checklist/:itemId", async (req, res) => {
   // here - same rule as a task moving to Done, the time is theirs to end.
   if (parsed.data.done !== item.done) {
     const working = await prisma.activityHistory.findMany({
-      where: { checklistItemId: itemId, endedAt: null, status: "WORKING" },
+      where: { checklistItems: { some: { checklistItemId: itemId } }, endedAt: null, status: "WORKING" },
       select: { employeeId: true },
     });
     if (working.length > 0) {

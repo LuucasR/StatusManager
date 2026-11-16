@@ -244,16 +244,34 @@ model ActivityHistory {
   /// once the task no longer exists.
   taskTitle String?
 
-  /// Checklist item of that task being worked on. SetNull for the same reason
-  /// as taskId: editing the checklist must not erase booked time.
-  checklistItemId   Int?
-  checklistItem     TaskChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
-  /// Text snapshot of the item, so the per-item breakdown survives its deletion.
-  checklistItemText String?
+  /// Checklist items of that task being worked on (1 to 3, in the order they
+  /// were picked). Empty for older segments, work without a task and tasks
+  /// without a checklist.
+  checklistItems ActivityChecklistItem[]
 
   @@index([employeeId, startedAt])
   @@index([startedAt])
   @@index([taskId])
+}
+
+/// One checklist item declared on a Working segment. A segment on several items
+/// at once splits its time evenly between them, so the per-item breakdown still
+/// adds up to the task's total.
+model ActivityChecklistItem {
+  id         Int             @id @default(autoincrement())
+  activityId Int
+  activity   ActivityHistory @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  /// SetNull for the same reason as ActivityHistory.taskId: editing the
+  /// checklist must not erase booked time.
+  checklistItemId Int?
+  checklistItem   TaskChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: SetNull)
+  /// Text snapshot of the item, so the per-item breakdown survives its deletion.
+  text            String
+  /// Order in which the items were picked.
+  position        Int
+
+  @@index([activityId])
   @@index([checklistItemId])
 }
 
@@ -426,7 +444,7 @@ model TaskChecklistItem {
   assignees TaskChecklistAssignee[]
 
   /// Working segments booked against this item.
-  activities ActivityHistory[]
+  activities ActivityChecklistItem[]
 
   @@index([taskId, position])
   @@index([assigneeId])

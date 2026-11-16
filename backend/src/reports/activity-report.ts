@@ -2,6 +2,7 @@ import type { ActivityStatus } from "@prisma/client";
 import { LOCALE } from "../locale";
 import { STATUS_META } from "../activities/activity-status";
 import { segmentMs, workedByDay, workedByTask, workedMs } from "../activities/activity-summary";
+import type { SegmentItem } from "../activities/activity-summary";
 import type { WorkCalendar } from "../workday/work-calendar";
 import {
   PAGE,
@@ -19,9 +20,8 @@ export type ReportActivity = {
   /** Snapshot of the declared task's title, if there was one. */
   taskTitle?: string | null;
   taskId?: number | null;
-  /** Snapshot of the checklist item declared with the task, if any. */
-  checklistItemText?: string | null;
-  checklistItemId?: number | null;
+  /** Checklist items declared with the task (snapshots), in the order picked. */
+  checklistItems?: SegmentItem[];
   startedAt: Date;
   endedAt: Date | null;
   employee: {
@@ -36,9 +36,8 @@ export type ReportActivity = {
  * would be empty for exactly the status that matters most in the report.
  */
 function detailText(row: ReportActivity) {
-  const work = row.taskTitle && row.checklistItemText
-    ? `${row.taskTitle} > ${row.checklistItemText}`
-    : row.taskTitle;
+  const items = (row.checklistItems ?? []).map((item) => item.text).join(", ");
+  const work = row.taskTitle && items ? `${row.taskTitle} > ${items}` : row.taskTitle;
   if (row.detail && work) return `${work} - ${row.detail}`;
   return row.detail || work || "";
 }

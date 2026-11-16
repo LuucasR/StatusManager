@@ -15,7 +15,9 @@ import { changeStatusSchema } from "./activity-validation";
 import { overlappingWhere, visibleHistoryWhere } from "./activity-status";
 import {
   OPEN_SEGMENT_SELECT,
+  SEGMENT_ITEMS_SELECT,
   WorkingTaskError,
+  checklistItemsCreate,
   listAssignableTasks,
   openSegmentFields,
   resolveWorkingTask,
@@ -125,7 +127,7 @@ router.get("/history", async (req, res) => {
       ...visibleHistoryWhere,
       ...overlappingWhere(from, to),
     },
-    include: { task: HISTORY_TASK_INCLUDE },
+    include: { task: HISTORY_TASK_INCLUDE, checklistItems: SEGMENT_ITEMS_SELECT },
     orderBy: { startedAt: "desc" },
     take: HISTORY_TAKE + 1,
   });
@@ -156,6 +158,7 @@ router.get("/summary", async (req, res) => {
       ...overlappingWhere(from, to),
     },
     include: {
+      checklistItems: SEGMENT_ITEMS_SELECT,
       // No archive filter on purpose: the summary is history, not the board. If
       // it filtered by visibleTasksWhere, anything older than 14 days past the
       // task's end would show up with no participants and no state.
@@ -199,6 +202,7 @@ router.get("/report.pdf", async (req, res) => {
       ...visibleHistoryWhere,
       ...overlappingWhere(from, to),
     },
+    include: { checklistItems: SEGMENT_ITEMS_SELECT },
     orderBy: { startedAt: "desc" },
   });
 
@@ -338,7 +342,7 @@ router.post("/status", async (req, res) => {
       status: parsed.data.status,
       detail: parsed.data.detail,
       taskId: parsed.data.taskId,
-      checklistItemId: parsed.data.checklistItemId,
+      checklistItemIds: parsed.data.checklistItemIds,
       enforce: true,
       now,
     });
@@ -362,8 +366,7 @@ router.post("/status", async (req, res) => {
         startedAt: now,
         taskId: task.taskId,
         taskTitle: task.taskTitle,
-        checklistItemId: task.checklistItemId,
-        checklistItemText: task.checklistItemText,
+        checklistItems: checklistItemsCreate(task),
       },
     });
     const employee = await tx.employee.update({

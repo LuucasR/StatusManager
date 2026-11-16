@@ -4,6 +4,9 @@ import { statusesAllowingTask, statusesRequiringDetail } from "./activity-status
 
 export { statusesRequiringDetail };
 
+/** How many checklist items one Working segment can declare. Same limit in the picker. */
+export const MAX_WORKING_ITEMS = 3;
+
 /**
  * Shared by POST /activities/status and POST /admin/employees/:id/status.
  *
@@ -25,8 +28,22 @@ export const changeStatusSchema = z
       }),
     detail: z.string().trim().max(500).optional().default(""),
     taskId: z.number().int().positive().nullable().optional(),
-    /** Checklist item of `taskId` being worked on. Only valid together with a task. */
-    checklistItemId: z.number().int().positive().nullable().optional(),
+    /**
+     * Checklist items of `taskId` being worked on, in the order picked. Only
+     * valid together with a task. Up to MAX_WORKING_ITEMS: some work really
+     * does advance two or three items at once, more than that is no longer
+     * saying which part of the task is being done.
+     */
+    checklistItemIds: z
+      .array(z.number().int().positive())
+      .max(MAX_WORKING_ITEMS, {
+        message: `At most ${MAX_WORKING_ITEMS} checklist items can be declared at once`,
+      })
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: "The same checklist item was declared twice",
+      })
+      .optional()
+      .default([]),
   })
   .superRefine((value, context) => {
     if (statusesRequiringDetail.has(value.status) && value.detail.length < 3) {
@@ -46,10 +63,10 @@ export const changeStatusSchema = z
       });
     }
 
-    if (value.checklistItemId != null && value.taskId == null) {
+    if (value.checklistItemIds.length > 0 && value.taskId == null) {
       context.addIssue({
         code: "custom",
-        path: ["checklistItemId"],
+        path: ["checklistItemIds"],
         message: "A checklist item can only be declared together with its task",
       });
     }

@@ -1,5 +1,6 @@
 import {
   Box,
+  Checkbox,
   Chip,
   FormControl,
   FormHelperText,
@@ -13,7 +14,7 @@ import { formatRange } from "../tasks/datetime";
 import { STATE_META, type ChecklistPriority, type TaskState } from "../tasks/types";
 import { LabelChip } from "../tasks/ChecklistLabel";
 import { PriorityChip } from "../tasks/ChecklistPriority";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 
 /** A checklist item still pending, offered when declaring work on its task. */
 export type AssignableItem = {
@@ -106,45 +107,73 @@ export default function WorkingTaskSelect({ tasks, loading, value, onChange }: P
   );
 }
 
+/** Same limit the backend enforces (MAX_WORKING_ITEMS). */
+export const MAX_WORKING_ITEMS = 3;
+
 type ItemProps = {
   items: AssignableItem[];
-  value: number | null;
-  onChange: (itemId: number) => void;
+  /** In the order they were picked; ids no longer pending are ignored. */
+  value: number[];
+  onChange: (itemIds: number[]) => void;
 };
 
 /**
- * Picker for the checklist item of the chosen task. Mandatory whenever the task
- * still has pending items (the backend enforces it too): the per-item time
- * breakdown in the summary is built from this choice. The caller's own items
- * come first; anyone on the task can still pick any of them.
+ * Picker for the checklist items of the chosen task: one to MAX_WORKING_ITEMS.
+ * Mandatory whenever the task still has pending items (the backend enforces it
+ * too): the per-item time breakdown in the summary is built from this choice,
+ * and time on several items is split evenly between them. The caller's own
+ * items come first; anyone on the task can still pick any of them.
  */
 export function WorkingItemSelect({ items, value, onChange }: ItemProps) {
   const ordered = [...items.filter((item) => item.mine), ...items.filter((item) => !item.mine)];
-  const selected = value !== null && items.some((item) => item.id === value) ? String(value) : "";
+  const selected = value.filter((id) => items.some((item) => item.id === id)).map(String);
+  const full = selected.length >= MAX_WORKING_ITEMS;
 
   return (
     <FormControl fullWidth required>
       <InputLabel>{t("itemSelect.label")}</InputLabel>
-      <Select
+      <Select<string[]>
+        multiple
         value={selected}
         label={t("itemSelect.label")}
-        onChange={(e) => onChange(Number(e.target.value))}
-        renderValue={(id) => items.find((item) => String(item.id) === id)?.text ?? ""}
+        onChange={(e) => {
+          const next = typeof e.target.value === "string" ? e.target.value.split(",") : e.target.value;
+          // MUI appends the new pick at the end, so the order picked is kept.
+          onChange(next.slice(0, MAX_WORKING_ITEMS).map(Number));
+        }}
+        renderValue={(ids) => (
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
+            {ids.map((id) => (
+              <Chip key={id} size="small" label={items.find((item) => String(item.id) === id)?.text ?? ""} />
+            ))}
+          </Stack>
+        )}
       >
-        {ordered.map((item) => (
-          <MenuItem key={item.id} value={String(item.id)} sx={{ whiteSpace: "normal" }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5, py: 0.25 }}>
-              <Typography sx={{ fontWeight: item.mine ? 700 : 400 }}>{item.text}</Typography>
-              {item.mine && (
-                <Chip size="small" color="primary" label={t("itemSelect.mine")} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
-              )}
-              <LabelChip label={item.label} />
-              <PriorityChip priority={item.priority} />
-            </Stack>
-          </MenuItem>
-        ))}
+        {ordered.map((item) => {
+          const checked = selected.includes(String(item.id));
+          return (
+            <MenuItem
+              key={item.id}
+              value={String(item.id)}
+              disabled={full && !checked}
+              sx={{ whiteSpace: "normal" }}
+            >
+              <Checkbox size="small" checked={checked} sx={{ p: 0.5, mr: 1 }} />
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5, py: 0.25 }}>
+                <Typography sx={{ fontWeight: item.mine ? 700 : 400 }}>{item.text}</Typography>
+                {item.mine && (
+                  <Chip size="small" color="primary" label={t("itemSelect.mine")} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+                )}
+                <LabelChip label={item.label} />
+                <PriorityChip priority={item.priority} />
+              </Stack>
+            </MenuItem>
+          );
+        })}
       </Select>
-      <FormHelperText>{t("itemSelect.help")}</FormHelperText>
+      <FormHelperText>
+        {tf("itemSelect.help", { max: MAX_WORKING_ITEMS })}
+      </FormHelperText>
     </FormControl>
   );
 }

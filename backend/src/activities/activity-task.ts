@@ -88,7 +88,8 @@ type ResolveInput = {
   status: ActivityStatus;
   detail: string;
   taskId?: number | null;
-  checklistItemId?: number | null;
+  /** Up to MAX_WORKING_ITEMS, already checked for shape by the zod schema. */
+  checklistItemIds?: number[];
   /**
    * true only in the self-service path. An admin fixes other people's statuses
    * and should not be blocked by someone else's task list.
@@ -97,25 +98,27 @@ type ResolveInput = {
   now?: Date;
 };
 
+/** One declared item, as it gets stored on the segment. */
+export type ResolvedItem = { checklistItemId: number; text: string };
+
 export type ResolvedWork = {
   taskId: number | null;
   taskTitle: string | null;
-  checklistItemId: number | null;
-  checklistItemText: string | null;
+  /** In the order they were picked. */
+  checklistItems: ResolvedItem[];
 };
 
 const NOTHING: ResolvedWork = {
   taskId: null,
   taskTitle: null,
-  checklistItemId: null,
-  checklistItemText: null,
+  checklistItems: [],
 };
 
 /**
- * Validates the declared task (and checklist item) and returns what gets
+ * Validates the declared task (and checklist items) and returns what gets
  * persisted on the segment.
  *
- * `taskTitle` and `checklistItemText` are deliberate snapshots: the FKs are
+ * `taskTitle` and each item's `text` are deliberate snapshots: the FKs are
  * SetNull, so deleting a task or an item cannot take with it the time somebody
  * booked against it, but without the text the summary would be left showing a
  * gap.
@@ -125,7 +128,7 @@ export async function resolveWorkingTask({
   status,
   detail,
   taskId,
-  checklistItemId,
+  checklistItemIds = [],
   enforce,
   now = new Date(),
 }: ResolveInput): Promise<ResolvedWork> {
@@ -149,15 +152,18 @@ export async function resolveWorkingTask({
 
     const resolved = { ...NOTHING, taskId: task.id, taskTitle: task.title };
 
-    if (checklistItemId != null) {
-      const item = task.checklist.find((candidate) => candidate.id === checklistItemId);
-      if (!item) {
-        throw new WorkingTaskError(
-          "CHECKLIST_ITEM_NOT_ASSIGNABLE",
-          "That item is not on this task's checklist or is already done"
-        );
-      }
-      return { ...resolved, checklistItemId: item.id, checklistItemText: item.text };
+    if (checklistItemIds.length > 0) {
+      const items = checklistItemIds.map((id) => {
+        const item = task.checklist.find((candidate) => candidate.id === id);
+        if (!item) {
+          throw new WorkingTaskError(
+            "CHECKLIST_ITEM_NOT_ASSIGNABLE",
+            "That item is not on this task's checklist or is already done"
+          );
+        }
+        return { checklistItemId: item.id, text: item.text };
+      });
+      return { ...resolved, checklistItems: items };
     }
 
     // A task with items still open says what part of it is being done: that is
@@ -192,23 +198,36 @@ export async function resolveWorkingTask({
   return NOTHING;
 }
 
+/** Nested create for the segment's items, keeping the order they were picked in. */
+export function checklistItemsCreate(work: ResolvedWork) {
+  if (work.checklistItems.length === 0) return undefined;
+  return {
+    create: work.checklistItems.map((item, position) => ({ ...item, position })),
+  };
+}
+
+/** The items stored on a segment, in the order they were picked. */
+export const SEGMENT_ITEMS_SELECT = {
+  select: { checklistItemId: true, text: true },
+  orderBy: { position: "asc" },
+} as const;
+
 /** What the cards show about the segment someone has open right now. */
 export const OPEN_SEGMENT_SELECT = {
   detail: true,
   taskId: true,
   taskTitle: true,
-  checklistItemId: true,
-  checklistItemText: true,
-  checklistItem: { select: { done: true } },
+  checklistItems: {
+    select: { checklistItemId: true, text: true, checklistItem: { select: { done: true } } },
+    orderBy: { position: "asc" },
+  },
 } as const;
 
 type OpenSegment = {
   detail: string;
   taskId: number | null;
   taskTitle: string | null;
-  checklistItemId: number | null;
-  checklistItemText: string | null;
-  checklistItem: { done: boolean } | null;
+  checklistItems: { checklistItemId: number | null; text: string; checklistItem: { done: boolean } | null }[];
 };
 
 export function openSegmentFields(open: OpenSegment | undefined) {
@@ -218,9 +237,11 @@ export function openSegmentFields(open: OpenSegment | undefined) {
     detail: open?.detail ?? "",
     taskId: open?.taskId ?? null,
     taskTitle: open?.taskTitle ?? null,
-    checklistItemId: open?.checklistItemId ?? null,
-    checklistItemText: open?.checklistItemText ?? null,
-    // Ticked while still being worked on: the card says so until they move on.
-    checklistItemDone: open?.checklistItem?.done ?? false,
+    checklistItems: (open?.checklistItems ?? []).map((item) => ({
+      id: item.checklistItemId,
+      text: item.text,
+      // Ticked while still being worked on: the card says so until they move on.
+      done: item.checklistItem?.done ?? false,
+    })),
   };
 }

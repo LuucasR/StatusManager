@@ -44,6 +44,7 @@ import WorkingTaskSelect, {
   WorkingItemSelect,
   type AssignableTask,
 } from "../components/activities/WorkingTaskSelect";
+import { pendingItemIds, type WorkingItem } from "../components/activities/working-items";
 import TaskFacts from "../components/tasks/TaskFacts";
 import { STATE_META, type Task, type TaskState } from "../components/tasks/types";
 import { paperVars } from "../components/notePaper";
@@ -72,11 +73,8 @@ type Employee = {
   /** Task declared with the open segment. Was already sent and thrown away. */
   taskTitle: string | null;
   taskId?: number | null;
-  /** Checklist item of that task being worked on, if one was declared. */
-  checklistItemId?: number | null;
-  checklistItemText?: string | null;
-  /** The item got ticked off while the segment is still open on it. */
-  checklistItemDone?: boolean;
+  /** Checklist items of that task being worked on (up to 3), if declared. */
+  checklistItems?: WorkingItem[];
   active?: boolean;
 };
 
@@ -89,7 +87,8 @@ type History = {
   /** null if the task was deleted; taskTitle survives regardless. */
   task: { id: number; title: string; state: TaskState } | null;
   taskTitle: string | null;
-  checklistItemText?: string | null;
+  /** Item snapshots declared with the task, in the order picked. */
+  checklistItems?: { text: string }[];
 };
 
 type HistoryResponse = { rows: History[]; truncated: boolean };
@@ -126,12 +125,12 @@ export default function DashboardPage() {
   const [status, setStatus] = useState<Status>("WORKING");
   const [detail, setDetail] = useState("");
   const [taskId, setTaskId] = useState<number | null>(null);
-  const [checklistItemId, setChecklistItemId] = useState<number | null>(null);
+  const [checklistItemIds, setChecklistItemIds] = useState<number[]>([]);
   // Read by the dialog's loading effect, which must not re-run on every pick.
   const taskIdRef = useRef(taskId);
   taskIdRef.current = taskId;
-  const checklistItemIdRef = useRef(checklistItemId);
-  checklistItemIdRef.current = checklistItemId;
+  const checklistItemIdsRef = useRef(checklistItemIds);
+  checklistItemIdsRef.current = checklistItemIds;
   const [assignableTasks, setAssignableTasks] = useState<AssignableTask[]>([]);
   const [assignableLoading, setAssignableLoading] = useState(false);
 
@@ -211,14 +210,14 @@ const pdf = usePdfPreview();
     if (!dialog || selectedEmployee) return;
     let cancelled = false;
     // Already Working on something: start from it, so moving on to the next
-    // item of the same task is a single pick. A finished item is not kept.
+    // item of the same task is a single pick. Finished items are not kept.
     const current = meRef.current;
     const preferTask = current?.currentStatus === "WORKING" ? current.taskId ?? null : null;
-    const preferItem = preferTask && !current?.checklistItemDone ? current?.checklistItemId ?? null : null;
+    const preferItems = preferTask ? pendingItemIds(current?.checklistItems) : [];
     if (preferTask) {
       setStatus("WORKING");
       setTaskId(preferTask);
-      setChecklistItemId(preferItem);
+      setChecklistItemIds(preferItems);
     }
     setAssignableLoading(true);
     api<AssignableTask[]>("/activities/assignable-tasks")
@@ -229,15 +228,18 @@ const pdf = usePdfPreview();
         // this the Select would show a value no longer among the options, and the
         // backend would reject it on save. Same for an item ticked off since.
         const wantedTask = preferTask ?? taskIdRef.current;
-        const wantedItem = preferTask ? preferItem : checklistItemIdRef.current;
+        const wantedItems = preferTask ? preferItems : checklistItemIdsRef.current;
         const task = tasks.find((candidate) => candidate.id === wantedTask);
         setTaskId(task ? task.id : null);
-        setChecklistItemId(
-          task && task.items.some((item) => item.id === wantedItem)
-            ? wantedItem
+        const stillPending = task
+          ? wantedItems.filter((id) => task.items.some((item) => item.id === id))
+          : [];
+        setChecklistItemIds(
+          stillPending.length > 0
+            ? stillPending
             : task?.items.length === 1
-              ? task.items[0]!.id
-              : null
+              ? [task.items[0]!.id]
+              : []
         );
       })
       .catch((e) => {
@@ -320,15 +322,20 @@ useOnReconnect(() => load());
 
   /** Mirrors the backend too: a task with pending items needs one of them picked. */
   const selectedTask = showTaskSelect ? assignableTasks.find((task) => task.id === taskId) : undefined;
+
+  /** Declared items ticked off while still being worked on: time to pick what is next. */
+  const finishedItems = (me?.checklistItems ?? []).filter((item) => item.done).map((item) => item.text);
   const itemRequired = !!selectedTask && selectedTask.items.length > 0;
-  const itemMissing =
-    itemRequired && !selectedTask.items.some((item) => item.id === checklistItemId);
+  const validItemIds = selectedTask
+    ? checklistItemIds.filter((id) => selectedTask.items.some((item) => item.id === id))
+    : [];
+  const itemMissing = itemRequired && validItemIds.length === 0;
 
   function pickTask(id: number | null) {
     setTaskId(id);
     const task = assignableTasks.find((candidate) => candidate.id === id);
     // A single pending item leaves nothing to choose.
-    setChecklistItemId(task?.items.length === 1 ? task.items[0]!.id : null);
+    setChecklistItemIds(task?.items.length === 1 ? [task.items[0]!.id] : []);
   }
 
   async function changeStatus() {
@@ -345,8 +352,8 @@ useOnReconnect(() => load());
           // Only sent for WORKING: the backend rejects taskId in any other
           // status, so sending the leftover from the select would be a 400.
           taskId: allowsTask.has(status) && !selectedEmployee ? taskId : null,
-          checklistItemId:
-            allowsTask.has(status) && !selectedEmployee && itemRequired ? checklistItemId : null,
+          checklistItemIds:
+            allowsTask.has(status) && !selectedEmployee && itemRequired ? validItemIds : [],
         }),
       });
 
@@ -354,7 +361,7 @@ useOnReconnect(() => load());
       setDialog(false);
       setDetail("");
       setTaskId(null);
-      setChecklistItemId(null);
+      setChecklistItemIds([]);
 
       await load();
     } catch (err) {
@@ -443,7 +450,7 @@ useOnReconnect(() => load());
         </Button>
       </Box>
 
-      {me?.currentStatus === "WORKING" && me.checklistItemDone && me.checklistItemText && (
+      {me?.currentStatus === "WORKING" && finishedItems.length > 0 && (
         <Alert
           severity="warning"
           sx={{ mb: 3 }}
@@ -453,7 +460,7 @@ useOnReconnect(() => load());
             </Button>
           }
         >
-          {tf("dashboard.itemDoneAlert", { item: me.checklistItemText })}
+          {tf("dashboard.itemDoneAlert", { item: finishedItems.join(", ") })}
         </Alert>
       )}
 
@@ -480,12 +487,12 @@ useOnReconnect(() => load());
               {tf("dashboard.workingOn", { task: me.taskTitle })}
             </Typography>
           )}
-          {me?.checklistItemText && (
-            <Typography variant="body2" color="text.secondary">
-              {tf("dashboard.workingOnItem", { item: me.checklistItemText })}
-              {me.checklistItemDone && ` (${t("dashboard.itemFinished")})`}
+          {me?.checklistItems?.map((item, index) => (
+            <Typography key={index} variant="body2" color="text.secondary">
+              {tf("dashboard.workingOnItem", { item: item.text })}
+              {item.done && ` (${t("dashboard.itemFinished")})`}
             </Typography>
-          )}
+          ))}
         </Paper>
 
         <Paper className="status-card accent" elevation={0}>
@@ -618,12 +625,12 @@ useOnReconnect(() => load());
       </Typography>
     )}
 
-    {employee.checklistItemText && (
-      <Typography variant="body2" className="emp-note-task" sx={{ opacity: 0.85 }}>
-        {tf("dashboard.workingOnItem", { item: employee.checklistItemText })}
-        {employee.checklistItemDone && ` (${t("dashboard.itemFinished")})`}
+    {employee.checklistItems?.map((item, index) => (
+      <Typography key={index} variant="body2" className="emp-note-task" sx={{ opacity: 0.85 }}>
+        {tf("dashboard.workingOnItem", { item: item.text })}
+        {item.done && ` (${t("dashboard.itemFinished")})`}
       </Typography>
-    )}
+    ))}
 
     <Typography className="mini-timer">
       {elapsed(employee.statusSince, now)}
@@ -754,15 +761,16 @@ useOnReconnect(() => load());
                       —
                     </Typography>
                   )}
-                  {item.checklistItemText && (
+                  {item.checklistItems?.map((declared, index) => (
                     <Typography
+                      key={index}
                       variant="caption"
                       color="text.secondary"
                       sx={{ display: "block", mt: 0.5, maxWidth: 220 }}
                     >
-                      {tf("dashboard.workingOnItem", { item: item.checklistItemText })}
+                      {tf("dashboard.workingOnItem", { item: declared.text })}
                     </Typography>
-                  )}
+                  ))}
                 </TableCell>
 
                 <TableCell>{item.detail || t("dashboard.noComment")}</TableCell>
@@ -836,8 +844,8 @@ useOnReconnect(() => load());
           {selectedTask && selectedTask.items.length > 0 && (
             <WorkingItemSelect
               items={selectedTask.items}
-              value={checklistItemId}
-              onChange={setChecklistItemId}
+              value={checklistItemIds}
+              onChange={setChecklistItemIds}
             />
           )}
 

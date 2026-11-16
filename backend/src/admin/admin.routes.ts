@@ -22,7 +22,9 @@ import { approvePasswordReset } from "../auth/auth.service";
 import { overlappingWhere, visibleHistoryWhere } from "../activities/activity-status";
 import {
   OPEN_SEGMENT_SELECT,
+  SEGMENT_ITEMS_SELECT,
   WorkingTaskError,
+  checklistItemsCreate,
   openSegmentFields,
   resolveWorkingTask,
 } from "../activities/activity-task";
@@ -205,6 +207,7 @@ router.get("/history", requireStaff, async (req, res) => {
           name: true,
         },
       },
+      checklistItems: SEGMENT_ITEMS_SELECT,
     },
     orderBy: {
       startedAt: "desc",
@@ -548,7 +551,7 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
       status: parsed.data.status,
       detail: parsed.data.detail,
       taskId: parsed.data.taskId,
-      checklistItemId: parsed.data.checklistItemId,
+      checklistItemIds: parsed.data.checklistItemIds,
       enforce: false,
       now,
     });
@@ -573,8 +576,7 @@ router.post("/employees/:id/status", requireAdmin, async (req, res) => {
         startedAt: now,
         taskId: task.taskId,
         taskTitle: task.taskTitle,
-        checklistItemId: task.checklistItemId,
-        checklistItemText: task.checklistItemText,
+        checklistItems: checklistItemsCreate(task),
       },
     });
 
@@ -701,6 +703,7 @@ router.get("/report.pdf", requireStaff, async (req, res) => {
           name: true,
         },
       },
+      checklistItems: SEGMENT_ITEMS_SELECT,
     },
     orderBy: {
       startedAt: "desc",

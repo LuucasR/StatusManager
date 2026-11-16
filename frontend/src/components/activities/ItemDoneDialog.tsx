@@ -14,27 +14,40 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { t, tf } from "../../i18n";
 import { useOnReconnect, useSocketEvent } from "../../realtime/useSocketEvent";
-import { WorkingItemSelect, type AssignableTask } from "./WorkingTaskSelect";
+import {
+  WorkingItemSelect,
+  type AssignableTask,
+} from "./WorkingTaskSelect";
+import { pendingItemIds, type WorkingItem } from "./working-items";
 
 type Me = {
   currentStatus: string;
   detail: string;
   taskId: number | null;
   taskTitle: string | null;
-  checklistItemId: number | null;
-  checklistItemText: string | null;
-  checklistItemDone: boolean;
+  checklistItems: WorkingItem[];
 };
 
-type Finished = { taskId: number; taskTitle: string; itemId: number; itemText: string };
+type Finished = {
+  taskId: number;
+  taskTitle: string;
+  /** The declared items that got ticked off. */
+  done: { id: number; text: string }[];
+  /** The declared items still pending: preselected, they are usually carried on. */
+  keep: number[];
+};
+
+const finishedKey = (finished: Finished | null) =>
+  finished ? finished.done.map((item) => item.id).join(",") : "";
 
 /**
- * "You finished this item - which one are you moving on to?"
+ * "You finished this item - which ones are you moving on to?"
  *
- * Opens when the checklist item somebody is Working on gets ticked off (by them
- * or by anyone else), so the time from then on is booked against the next item
- * instead of piling up on one that is already done. Their segment is never
- * switched behind their back: they pick, or say "later".
+ * Opens when a checklist item somebody is Working on gets ticked off (by them
+ * or by anyone else), so the time from then on is booked against the next
+ * items instead of piling up on one that is already done. The other items they
+ * declared stay selected. Their segment is never switched behind their back:
+ * they pick, or say "later".
  *
  * Lives in the layout, like the activity check, so it shows on whatever page
  * the item was ticked from. On mount and on reconnect it also asks the server,
@@ -47,7 +60,7 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
   const [task, setTask] = useState<AssignableTask | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [itemId, setItemId] = useState<number | null>(null);
+  const [itemIds, setItemIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   // Items the person already answered "later" to, so a reconnect does not nag.
   const dismissed = useRef(new Set<number>());
@@ -61,21 +74,23 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
     try {
       const current = await api<Me>("/activities/me");
       setDetail(current.detail ?? "");
+      const done = (current.checklistItems ?? []).flatMap((item) =>
+        item.done && item.id != null ? [{ id: item.id, text: item.text }] : []
+      );
       if (
         current.currentStatus === "WORKING" &&
-        current.checklistItemDone &&
         current.taskId &&
-        current.checklistItemId &&
-        !dismissed.current.has(current.checklistItemId)
+        done.some((item) => !dismissed.current.has(item.id))
       ) {
-        // Same item already on screen: keep it, or the picker would reset.
-        if (openRef.current?.itemId === current.checklistItemId) return;
-        setFinished({
+        const next: Finished = {
           taskId: current.taskId,
           taskTitle: current.taskTitle ?? "",
-          itemId: current.checklistItemId,
-          itemText: current.checklistItemText ?? "",
-        });
+          done,
+          keep: pendingItemIds(current.checklistItems),
+        };
+        // Same items already on screen: keep them, or the picker would reset.
+        if (finishedKey(openRef.current) === finishedKey(next)) return;
+        setFinished(next);
       } else if (openRef.current) {
         // Moved on some other way (the dashboard, another tab): nothing to ask.
         setFinished(null);
@@ -108,13 +123,16 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
     let cancelled = false;
     setLoading(true);
     setError("");
-    setItemId(null);
+    setItemIds([]);
     api<AssignableTask[]>("/activities/assignable-tasks")
       .then((tasks) => {
         if (cancelled) return;
         const found = tasks.find((candidate) => candidate.id === finished.taskId) ?? null;
         setTask(found);
-        if (found?.items.length === 1) setItemId(found.items[0]!.id);
+        const keep = found
+          ? finished.keep.filter((id) => found.items.some((item) => item.id === id))
+          : [];
+        setItemIds(keep.length > 0 ? keep : found?.items.length === 1 ? [found.items[0]!.id] : []);
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -128,13 +146,13 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
   }, [finished]);
 
   function close() {
-    if (finished) dismissed.current.add(finished.itemId);
+    finished?.done.forEach((item) => dismissed.current.add(item.id));
     setFinished(null);
     setTask(null);
   }
 
   async function switchItem() {
-    if (!finished || itemId === null) return;
+    if (!finished || itemIds.length === 0) return;
     setSaving(true);
     try {
       await api("/activities/status", {
@@ -143,7 +161,7 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
           status: "WORKING",
           detail,
           taskId: finished.taskId,
-          checklistItemId: itemId,
+          checklistItemIds: itemIds,
         }),
       });
       setFinished(null);
@@ -175,9 +193,12 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
           ) : (
             <>
               <Typography>
-                {tf("itemDone.body", { item: finished?.itemText ?? "", task: taskTitle })}
+                {tf("itemDone.body", {
+                  item: (finished?.done ?? []).map((item) => item.text).join(", "),
+                  task: taskTitle,
+                })}
               </Typography>
-              <WorkingItemSelect items={task!.items} value={itemId} onChange={setItemId} />
+              <WorkingItemSelect items={task!.items} value={itemIds} onChange={setItemIds} />
             </>
           )}
         </Stack>
@@ -193,7 +214,7 @@ export default function ItemDoneDialog({ me }: { me: { id: number } | null }) {
           {t("itemDone.changeTask")}
         </Button>
         {!noneLeft && (
-          <Button variant="contained" disabled={saving || loading || itemId === null} onClick={switchItem}>
+          <Button variant="contained" disabled={saving || loading || itemIds.length === 0} onClick={switchItem}>
             {t("itemDone.switch")}
           </Button>
         )}

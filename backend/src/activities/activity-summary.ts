@@ -13,8 +13,8 @@ export type SummaryRow = {
   endedAt: Date | null;
   taskId: number | null;
   taskTitle: string | null;
-  checklistItemId?: number | null;
-  checklistItemText?: string | null;
+  /** Items declared on the segment, in the order picked. Absent = none. */
+  checklistItems?: SegmentItem[];
   task: {
     id: number;
     title: string;
@@ -46,13 +46,34 @@ export type ItemBucket = {
   segments: number;
 };
 
-type ItemRef = { checklistItemId?: number | null; checklistItemText?: string | null };
+/** A checklist item declared on a segment: id null once the item was deleted. */
+export type SegmentItem = { checklistItemId: number | null; text: string };
 
-/** Same keying idea as tasks: by id, by snapshot once deleted, else "none". */
-function itemKey(row: ItemRef) {
-  if (row.checklistItemId != null) return `item:${row.checklistItemId}`;
-  if (row.checklistItemText) return `text:${row.checklistItemText}`;
-  return "none";
+type ItemRef = { checklistItems?: SegmentItem[] };
+
+/** Same keying idea as tasks: by id, by snapshot once deleted. */
+function itemKey(item: SegmentItem) {
+  if (item.checklistItemId != null) return `item:${item.checklistItemId}`;
+  return `text:${item.text}`;
+}
+
+type ItemShare = { key: string; itemId: number | null; text: string | null; ms: number };
+
+/**
+ * A segment's time per declared item. Work on several items at once is split
+ * evenly between them, so the per-item lines still add up to the task's total
+ * (the odd milliseconds go to the first item picked). No item = one "none" share.
+ */
+function itemShares(row: ItemRef, ms: number): ItemShare[] {
+  const items = row.checklistItems ?? [];
+  if (items.length === 0) return [{ key: "none", itemId: null, text: null, ms }];
+  const share = Math.floor(ms / items.length);
+  return items.map((item, index) => ({
+    key: itemKey(item),
+    itemId: item.checklistItemId,
+    text: item.text,
+    ms: share + (index === 0 ? ms - share * items.length : 0),
+  }));
 }
 
 /** Most time first, with "no item" always last whatever its size. */
@@ -214,15 +235,11 @@ export function workedByTask(
     const bucket = tasks.get(key) ?? { key, taskId, title, ms: 0, items: [], itemMap: new Map() };
     bucket.ms += ms;
     if (key !== "none") {
-      const ikey = itemKey(row);
-      const item = bucket.itemMap.get(ikey) ?? {
-        key: ikey,
-        itemId: row.checklistItemId ?? null,
-        text: row.checklistItemText ?? null,
-        ms: 0,
-      };
-      item.ms += ms;
-      bucket.itemMap.set(ikey, item);
+      for (const share of itemShares(row, ms)) {
+        const item = bucket.itemMap.get(share.key) ?? { ...share, ms: 0 };
+        item.ms += share.ms;
+        bucket.itemMap.set(share.key, item);
+      }
     }
     tasks.set(key, bucket);
   }
@@ -305,21 +322,24 @@ export function summarize(
     if (row.startedAt > bucket.lastWorkedAt) bucket.lastWorkedAt = row.startedAt;
     tasks.set(key, bucket);
 
-    const ikey = itemKey(row);
-    let item = bucket.byItem.find((candidate) => candidate.key === ikey);
-    if (!item) {
-      item = {
-        key: ikey,
-        itemId: row.checklistItemId ?? null,
-        text: row.checklistItemText ?? null,
-        deleted: row.checklistItemId == null && !!row.checklistItemText,
-        totalMs: 0,
-        segments: 0,
-      };
-      bucket.byItem.push(item);
+    // A segment on several items counts as one segment of each of them, with
+    // its time split between them.
+    for (const share of itemShares(row, ms)) {
+      let item = bucket.byItem.find((candidate) => candidate.key === share.key);
+      if (!item) {
+        item = {
+          key: share.key,
+          itemId: share.itemId,
+          text: share.text,
+          deleted: share.itemId == null && share.text != null,
+          totalMs: 0,
+          segments: 0,
+        };
+        bucket.byItem.push(item);
+      }
+      item.totalMs += share.ms;
+      item.segments += 1;
     }
-    item.totalMs += ms;
-    item.segments += 1;
   }
 
   for (const bucket of tasks.values()) bucket.byItem.sort(byTimeNoneLast((item) => item.totalMs));

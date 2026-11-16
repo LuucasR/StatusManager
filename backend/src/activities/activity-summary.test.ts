@@ -148,7 +148,8 @@ describe("per checklist item", () => {
     taskId: number | null,
     taskTitle: string | null,
     checklistItemId: number | null,
-    checklistItemText: string | null
+    checklistItemText: string | null,
+    more: { checklistItemId: number | null; text: string }[] = []
   ) => ({
     status: "WORKING" as const,
     detail: "",
@@ -156,8 +157,10 @@ describe("per checklist item", () => {
     endedAt: new Date(endedAt),
     taskId,
     taskTitle,
-    checklistItemId,
-    checklistItemText,
+    checklistItems: [
+      ...(checklistItemText ? [{ checklistItemId, text: checklistItemText }] : []),
+      ...more,
+    ],
     task: null,
   });
 
@@ -200,5 +203,43 @@ describe("per checklist item", () => {
       ]
     );
     assert.deepEqual(tasks.find((task) => task.key === "none")!.items, []);
+  });
+
+  it("splits a segment on several items evenly between them, still adding up to the task", () => {
+    const multi: SummaryRow[] = [
+      working("2026-09-28T12:00:00Z", "2026-09-28T15:00:00Z", 7, "Login", 70, "Form", [
+        { checklistItemId: 71, text: "Validation" },
+        { checklistItemId: 72, text: "Styles" },
+      ]),
+      working("2026-09-28T15:00:00Z", "2026-09-28T16:00:00Z", 7, "Login", 70, "Form"),
+      working("2026-09-28T16:00:00Z", "2026-09-28T16:00:00.005Z", 7, "Login", 70, "Form", [
+        { checklistItemId: 71, text: "Validation" },
+      ]),
+    ];
+
+    const login = summarize(multi, undefined, undefined).byTask.find((task) => task.taskId === 7)!;
+    assert.deepEqual(
+      login.byItem.map(({ text, totalMs, segments }) => ({ text, totalMs, segments })),
+      [
+        // 1 h + 1 h + 1 h, plus the odd millisecond of the last 5 ms segment.
+        { text: "Form", totalMs: 2 * HOUR + 3, segments: 3 },
+        { text: "Validation", totalMs: HOUR + 2, segments: 2 },
+        { text: "Styles", totalMs: HOUR, segments: 1 },
+      ]
+    );
+    assert.equal(
+      login.byItem.reduce((total, item) => total + item.totalMs, 0),
+      login.totalMs
+    );
+
+    const [task] = workedByTask(multi, undefined, undefined);
+    assert.deepEqual(
+      task!.items.map(({ text, ms }) => ({ text, ms })),
+      [
+        { text: "Form", ms: 2 * HOUR + 3 },
+        { text: "Validation", ms: HOUR + 2 },
+        { text: "Styles", ms: HOUR },
+      ]
+    );
   });
 });

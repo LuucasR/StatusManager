@@ -252,9 +252,10 @@ export const en = {
   "taskSelect.empty":
     "You have no tasks assigned on the board. Say what you are working on in the comment.",
   "taskSelect.help": "Only your unfinished tasks that are still on the board.",
-  "itemSelect.label": "Checklist item",
+  "itemSelect.label": "Checklist items",
   "itemSelect.mine": "Yours",
-  "itemSelect.help": "The part of the task you are working on. When you finish it, switch to the next one.",
+  "itemSelect.help":
+    "The parts of the task you are working on, up to {max}. If you pick several, the time is split evenly between them.",
   "taskDetail.cannotComment": "Only participants can write in this task.",
   "taskDetail.unpin": "Unpin",
   "taskDetail.pin": "Pin — never archived after 14 days",
@@ -610,14 +611,14 @@ export const en = {
   "dashboard.workingOn": "On: {task}",
   "dashboard.workingOnItem": "Item: {item}",
   "dashboard.itemFinished": "finished",
-  "dashboard.itemDoneAlert": "You finished “{item}”. Pick the item you are moving on to.",
+  "dashboard.itemDoneAlert": "You finished “{item}”. Pick the items you are moving on to.",
   "dashboard.pickNextItem": "Pick next item",
   "itemDone.title": "Item finished",
-  "itemDone.body": "“{item}” is done. Which item of “{task}” are you moving on to?",
+  "itemDone.body": "“{item}” is done. Which items of “{task}” are you working on now?",
   "itemDone.noneLeft": "There are no pending items left in “{task}”. Change your task or your status.",
   "itemDone.later": "Later",
   "itemDone.changeTask": "Change task or status",
-  "itemDone.switch": "Switch item",
+  "itemDone.switch": "Switch items",
 
   // --- Conversation state chips
   "chat.deleted": "Deleted",
@@ -1340,9 +1341,10 @@ const es: Record<TranslationKey, string> = {
   "taskSelect.empty":
     "No tenés tareas asignadas en la pizarra. Contá en el comentario en qué trabajás.",
   "taskSelect.help": "Solo tus tareas sin terminar que siguen en la pizarra.",
-  "itemSelect.label": "Item del checklist",
+  "itemSelect.label": "Items del checklist",
   "itemSelect.mine": "Tuyo",
-  "itemSelect.help": "La parte de la tarea en la que trabajás. Cuando la termines, pasá a la siguiente.",
+  "itemSelect.help":
+    "Las partes de la tarea en las que trabajás, hasta {max}. Si elegís varias, el tiempo se reparte en partes iguales.",
   "taskDetail.cannotComment":
     "Solo los participantes pueden escribir en esta tarea.",
   "taskDetail.unpin": "Dejar de fijar",
@@ -1691,14 +1693,14 @@ const es: Record<TranslationKey, string> = {
   "dashboard.workingOn": "En: {task}",
   "dashboard.workingOnItem": "Item: {item}",
   "dashboard.itemFinished": "terminado",
-  "dashboard.itemDoneAlert": "Terminaste “{item}”. Elegí el item al que pasás.",
+  "dashboard.itemDoneAlert": "Terminaste “{item}”. Elegí los items en los que seguís.",
   "dashboard.pickNextItem": "Elegir siguiente item",
   "itemDone.title": "Item terminado",
-  "itemDone.body": "“{item}” está terminado. ¿A qué item de “{task}” pasás?",
+  "itemDone.body": "“{item}” está terminado. ¿En qué items de “{task}” seguís trabajando?",
   "itemDone.noneLeft": "No quedan items pendientes en “{task}”. Cambiá de tarea o de estado.",
   "itemDone.later": "Más tarde",
   "itemDone.changeTask": "Cambiar tarea o estado",
-  "itemDone.switch": "Cambiar de item",
+  "itemDone.switch": "Cambiar items",
 
   "chat.deleted": "Eliminada",
   "chat.closed": "Cerrada",
