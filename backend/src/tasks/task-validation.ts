@@ -56,7 +56,7 @@ const checklist = z
       assigneeId: z.number().int().positive().nullable().optional(),
     })
   )
-  .max(50)
+  .max(100)
   .transform((items) =>
     items.map(({ assigneeId, assigneeIds, ...item }) => ({
       ...item,
@@ -163,7 +163,7 @@ export const setChecklistItemSchema = z.object({
  * Must be exactly the task's current items, checked in the route.
  */
 export const reorderChecklistSchema = z.object({
-  itemIds: z.array(z.number().int().positive()).max(50),
+  itemIds: z.array(z.number().int().positive()).max(100),
 });
 
 /**
